@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/deck_model.dart';
+import '../../../shared/widgets/app_top_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../usecase/portfolio_notifier.dart';
@@ -40,25 +41,38 @@ class _PortfolioPageState extends ConsumerState<PortfolioPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Portofolio'),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: context.appColors.primary,
-          unselectedLabelColor: context.mutedForeground,
-          indicatorColor: context.appColors.primary,
-          tabs: const [
-            Tab(text: 'Koleksi'),
-            Tab(text: 'Deck'),
-            Tab(text: 'Inventori'),
-          ],
-        ),
-      ),
       body: SafeArea(
-        top: false,
-        child: TabBarView(
-          controller: _tabController,
-          children: const [_CollectionTab(), _DeckTab(), _InventoryTab()],
+        child: Column(
+          children: [
+            const AppTopBar(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Portofolio',
+                  style: AppTypography.h2(context.appColors.onSurface),
+                ),
+              ),
+            ),
+            TabBar(
+              controller: _tabController,
+              labelColor: context.appColors.primary,
+              unselectedLabelColor: context.mutedForeground,
+              indicatorColor: context.appColors.primary,
+              tabs: const [
+                Tab(text: 'Koleksi'),
+                Tab(text: 'Deck'),
+                Tab(text: 'Inventori'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: const [_CollectionTab(), _DeckTab(), _InventoryTab()],
+              ),
+            ),
+          ],
         ),
       ),
     );

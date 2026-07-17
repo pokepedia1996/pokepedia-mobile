@@ -18,8 +18,9 @@ class BottomNavItem {
 }
 
 /// Ports `components/layout/mobile-bottom-nav.tsx` — the floating pill nav
-/// bar with the six buyer-facing tabs (Beranda/Ekspansi/Pencarian/Koleksi/
-/// Market/Akun).
+/// bar with the five buyer-facing tabs (Beranda/Ekspansi/Koleksi/Market/
+/// Akun). Pencarian was dropped in favor of the tap-to-search field in
+/// [AppTopBar], shown on Beranda/Ekspansi/Koleksi.
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,
@@ -30,12 +31,11 @@ class AppBottomNav extends StatelessWidget {
   static const items = [
     BottomNavItem(label: 'Beranda', icon: Icons.home_outlined),
     BottomNavItem(label: 'Ekspansi', icon: Icons.circle, usePokeball: true),
-    BottomNavItem(label: 'Pencarian', icon: Icons.search),
+    BottomNavItem(label: 'Market', icon: Icons.storefront_outlined),
     BottomNavItem(
       label: 'Koleksi',
       icon: Icons.account_balance_wallet_outlined,
     ),
-    BottomNavItem(label: 'Market', icon: Icons.storefront_outlined),
     BottomNavItem(label: 'Akun', icon: Icons.person_outline),
   ];
 
@@ -52,9 +52,9 @@ class AppBottomNav extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor.withValues(
-            alpha: 0.92,
-          ),
+          color: Theme.of(
+            context,
+          ).scaffoldBackgroundColor.withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(AppRadius.full),
           border: Border.all(color: context.borderColor),
           boxShadow: [

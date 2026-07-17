@@ -40,10 +40,10 @@ import 'routes.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Six-branch shell route mirroring `MobileBottomNav`'s buyer tabs
-/// (Beranda/Ekspansi/Pencarian/Koleksi/Market/Akun), plus the rest of the
-/// buyer-facing surface (auth, cart, orders, chat, proposals, wallet,
-/// notifications, settings, users, decks/lists, static content) as
+/// Five-branch shell route mirroring `MobileBottomNav`'s buyer tabs
+/// (Beranda/Ekspansi/Koleksi/Market/Akun), plus the rest of the
+/// buyer-facing surface (search, auth, cart, orders, chat, proposals,
+/// wallet, notifications, settings, users, decks/lists, static content) as
 /// full-screen routes pushed above the shell — mirroring how these routes
 /// hide `MobileBottomNav` on the web (`HIDDEN_PREFIXES` / `/orders/*`).
 final appRouter = GoRouter(
@@ -86,14 +86,6 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: Routes.search,
-              builder: (_, __) => const AdvancedSearchPage(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
               path: Routes.portfolio,
               builder: (_, __) => const PortfolioPage(),
             ),
@@ -124,6 +116,12 @@ final appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+
+    // Search (opened from AppTopBar's tap-to-search field).
+    GoRoute(
+      path: Routes.search,
+      builder: (_, __) => const AdvancedSearchPage(),
     ),
 
     // Auth.

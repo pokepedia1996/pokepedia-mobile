@@ -5,10 +5,12 @@ class Routes {
   // Bottom-nav tabs.
   static const home = '/';
   static const expansions = '/expansions';
-  static const search = '/advanced-search';
   static const portfolio = '/portfolio/collection';
   static const market = '/market';
   static const account = '/account';
+
+  // Search (opened from AppTopBar, not a bottom-nav tab).
+  static const search = '/advanced-search';
 
   // Auth.
   static const login = '/login';

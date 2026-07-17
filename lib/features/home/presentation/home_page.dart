@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/app_top_bar.dart';
 import 'widgets/explore_expansions_section.dart';
 import 'widgets/hero_section.dart';
 import 'widgets/promo_sections.dart';
@@ -17,6 +18,7 @@ class HomePage extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: const [
+            AppTopBar(),
             HeroSection(),
             RecentlyViewedSection(),
             ExploreExpansionsSection(),
