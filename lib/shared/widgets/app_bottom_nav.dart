@@ -31,11 +31,12 @@ class AppBottomNav extends StatelessWidget {
   static const items = [
     BottomNavItem(label: 'Beranda', icon: Icons.home_outlined),
     BottomNavItem(label: 'Ekspansi', icon: Icons.circle, usePokeball: true),
-    BottomNavItem(label: 'Market', icon: Icons.storefront_outlined),
+    BottomNavItem(label: 'Pencarian', icon: Icons.search),
     BottomNavItem(
       label: 'Koleksi',
       icon: Icons.account_balance_wallet_outlined,
     ),
+    BottomNavItem(label: 'Market', icon: Icons.storefront_outlined),
     BottomNavItem(label: 'Akun', icon: Icons.person_outline),
   ];
 

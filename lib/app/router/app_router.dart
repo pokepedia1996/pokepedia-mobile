@@ -51,7 +51,8 @@ final appRouter = GoRouter(
   initialLocation: Routes.home,
   routes: [
     StatefulShellRoute.indexedStack(
-      builder: (context, state, shell) => AppShell(navigationShell: shell),
+      builder: (context, state, shell) =>
+          AppShell(navigationShell: shell, state: state),
       branches: [
         StatefulShellBranch(
           routes: [
@@ -80,6 +81,14 @@ final appRouter = GoRouter(
                   ],
                 ),
               ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: Routes.search,
+              builder: (_, __) => const AdvancedSearchPage(),
             ),
           ],
         ),
