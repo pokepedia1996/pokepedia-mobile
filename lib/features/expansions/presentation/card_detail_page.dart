@@ -84,7 +84,10 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(width: 130, child: CardArt(borderRadius: AppRadius.lg)),
+                    SizedBox(
+                      width: 130,
+                      child: CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.lg),
+                    ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(

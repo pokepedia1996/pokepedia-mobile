@@ -36,7 +36,7 @@ class CardGridItem extends StatelessWidget {
           children: [
             Stack(
               children: [
-                const CardArt(),
+                CardArt(imageUrl: card.imageUrl),
                 if (owned)
                   Positioned(
                     top: 6,

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,7 +74,7 @@ class ExpansionsPage extends ConsumerWidget {
                                 crossAxisCount: 2,
                                 mainAxisSpacing: 12,
                                 crossAxisSpacing: 12,
-                                childAspectRatio: 0.78,
+                                childAspectRatio: 0.84,
                               ),
                           itemBuilder: (context, i) {
                             final pack = group.packs[i];
@@ -88,7 +90,7 @@ class ExpansionsPage extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) =>
+                error: (err, __) =>
                     const Center(child: Text('Gagal memuat ekspansi')),
               ),
             ),

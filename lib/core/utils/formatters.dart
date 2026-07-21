@@ -22,3 +22,13 @@ String formatRelativeId(DateTime date, {DateTime? now}) {
   ];
   return '${date.day} ${months[date.month - 1]} ${date.year}';
 }
+
+const _monthNamesId = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+/// "Bergabung {Mon} {yyyy}" — used for a profile's join date.
+String formatJoinedId(DateTime date) {
+  return 'Bergabung ${_monthNamesId[date.month - 1]} ${date.year}';
+}

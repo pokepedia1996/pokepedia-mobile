@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/account/presentation/account_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
@@ -36,6 +37,7 @@ import '../../features/user/presentation/user_profile_page.dart';
 import '../../features/user/presentation/users_search_page.dart';
 import '../../features/wallet/presentation/wallet_page.dart';
 import '../app_shell.dart';
+import 'go_router_refresh_stream.dart';
 import 'routes.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -49,6 +51,16 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: Routes.home,
+  refreshListenable: GoRouterRefreshStream(
+    Supabase.instance.client.auth.onAuthStateChange,
+  ),
+  redirect: (context, state) {
+    final loggedIn = Supabase.instance.client.auth.currentSession != null;
+    final loggingIn =
+        state.matchedLocation == Routes.login || state.matchedLocation == Routes.signup;
+    if (loggedIn && loggingIn) return Routes.account;
+    return null;
+  },
   routes: [
     StatefulShellRoute.indexedStack(
       builder: (context, state, shell) =>

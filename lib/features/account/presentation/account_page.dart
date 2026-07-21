@@ -15,7 +15,7 @@ class AccountPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authProvider);
+    final user = ref.watch(authProvider).valueOrNull;
     final isGuest = user == null;
     final colors = context.appColors;
 
@@ -48,13 +48,13 @@ class AccountPage extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isGuest ? 'Tamu' : user.username,
+                          isGuest ? 'Tamu' : (user.username ?? user.email),
                           style: AppTypography.bodySemibold(colors.onSurface),
                         ),
                         GestureDetector(
-                          onTap: isGuest
+                          onTap: (isGuest || user.username == null)
                               ? null
-                              : () => context.push(Routes.userProfile(user.username)),
+                              : () => context.push(Routes.userProfile(user.username!)),
                           child: Text(
                             isGuest
                                 ? 'Masuk untuk koleksi & marketplace'
@@ -256,7 +256,7 @@ class AccountPage extends ConsumerWidget {
               backgroundColor: context.appColors.primary,
             ),
             onPressed: () {
-              ref.read(authProvider.notifier).logOut();
+              ref.read(authProvider.notifier).signOut();
               Navigator.of(context).pop();
             },
             child: const Text('Keluar'),

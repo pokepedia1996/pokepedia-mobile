@@ -20,6 +20,20 @@ extension ListingStatusX on ListingStatus {
         return 'Dibatalkan';
     }
   }
+
+  static ListingStatus fromRaw(String? raw) {
+    switch (raw) {
+      case 'matched':
+        return ListingStatus.matched;
+      case 'expired':
+        return ListingStatus.expired;
+      case 'cancelled':
+        return ListingStatus.cancelled;
+      case 'open':
+      default:
+        return ListingStatus.open;
+    }
+  }
 }
 
 /// A marketplace listing (ask = for sale / WTS, bid = wanted / WTB),
@@ -66,4 +80,36 @@ class ListingModel {
 
   /// `quantity - qty_locked`, i.e. what a buyer can actually purchase.
   int get available => quantity - qtyLocked;
+
+  /// Maps a `listings` row joined with its `cards` row and the seller's
+  /// store info (fetched separately since `listings.user_id` and
+  /// `seller_profiles.user_id` both reference `auth.users` rather than one
+  /// another directly, so PostgREST can't embed them in one query).
+  factory ListingModel.fromRow(
+    Map<String, dynamic> row, {
+    required CardModel card,
+    required String storeSlug,
+    required String storeName,
+    required bool isVerified,
+    required String cityName,
+  }) {
+    return ListingModel(
+      id: row['id'] as int,
+      slug: row['slug'] as String? ?? '',
+      side: (row['side'] as String?) == 'bid' ? ListingSide.bid : ListingSide.ask,
+      price: row['price'] as int? ?? 0,
+      condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
+      quantity: row['quantity'] as int? ?? 0,
+      qtyLocked: row['qty_locked'] as int? ?? 0,
+      card: card,
+      storeSlug: storeSlug,
+      storeName: storeName,
+      isVerified: isVerified,
+      cityName: cityName,
+      createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now(),
+      status: ListingStatusX.fromRaw(row['status'] as String?),
+      acceptsOffers: row['accepts_offers'] as bool? ?? false,
+      viewCount: (row['view_count'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

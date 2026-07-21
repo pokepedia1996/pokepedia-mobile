@@ -43,7 +43,7 @@ class ListingCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                const CardArt(),
+                CardArt(imageUrl: listing.card.imageUrl),
                 Positioned(
                   right: 6,
                   top: 6,

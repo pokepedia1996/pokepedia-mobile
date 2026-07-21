@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../repository/search_repository.dart';
 
-final searchRepositoryProvider = Provider((ref) => SearchRepository());
+final searchRepositoryProvider = Provider((ref) {
+  return SearchRepository(ref.read(supabaseClientProvider));
+});
 
 final searchFilterOptionsProvider = FutureProvider((ref) {
   return ref.read(searchRepositoryProvider).fetchFilterOptions();

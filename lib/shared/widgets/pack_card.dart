@@ -4,7 +4,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../models/pack_model.dart';
-import 'pokeball_icon.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Ports `components/pack/pack-card.tsx` — a grid tile for an expansion with
 /// its collected/total progress bar.
@@ -23,7 +23,7 @@ class PackCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12,12,12,0),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -33,26 +33,57 @@ class PackCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
-              aspectRatio: 2,
-              child: DecoratedBox(
+              aspectRatio: 1.6,
+              child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: Container(
+                height: 180,               // your fixed height
+                width: double.infinity,    // fill the parent's width
                 decoration: BoxDecoration(
                   color: colors.secondary,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: Center(
-                  child: Text(
-                    pack.name.substring(0, 1),
-                    style: AppTypography.h1(
-                      context.mutedForeground.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
+                child: pack.image == null
+                    ? _PackInitial(pack: pack)
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Image.network(
+                          pack.image!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null ? child : _PackInitial(pack: pack),
+                          errorBuilder: (context, error, stackTrace) => _PackInitial(pack: pack),
+                        ),
+                      ),
               ),
             ),
-            const SizedBox(height: 10),
+            ),
+            const SizedBox(height: 20),
             Row(
               children: [
-                PokeballIcon(size: 16, color: colors.primary),
+                pack.setSymbolUrl != null?
+                SvgPicture.network(
+              pack.setSymbolUrl!,
+              height: 15,
+              fit: BoxFit.contain,
+              placeholderBuilder: (context) => Text(
+                    pack.mark,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              errorBuilder: (context, error, stackTrace) => Text(
+                    pack.mark,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+            )
+                : Expanded(
+                  child: Text(
+                    pack.mark,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
@@ -97,6 +128,24 @@ class PackCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// First-letter placeholder shown while [PackCard.pack.image] loads,
+/// errors, or is absent (dummy data has no real art).
+class _PackInitial extends StatelessWidget {
+  const _PackInitial({required this.pack});
+
+  final PackModel pack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        pack.name.isEmpty ? '?' : pack.name.substring(0, 1),
+        style: AppTypography.h1(context.mutedForeground.withValues(alpha: 0.5)),
       ),
     );
   }

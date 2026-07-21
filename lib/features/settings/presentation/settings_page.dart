@@ -26,7 +26,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    final user = ref.read(authProvider);
+    final user = ref.read(authProvider).valueOrNull;
     _username = TextEditingController(text: user?.username ?? '');
     _email = TextEditingController(text: user?.email ?? '');
   }

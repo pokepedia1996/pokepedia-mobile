@@ -1,3 +1,4 @@
+import '../../core/utils/image_url.dart';
 import 'pokemon_type.dart';
 
 /// `cards.category` check constraint.
@@ -12,6 +13,18 @@ extension CardCategoryX on CardCategory {
         return 'Trainer';
       case CardCategory.energy:
         return 'Energy';
+    }
+  }
+
+  static CardCategory fromRaw(String? raw) {
+    switch (raw) {
+      case 'Trainer':
+        return CardCategory.trainer;
+      case 'Energy':
+        return CardCategory.energy;
+      case 'Pokemon':
+      default:
+        return CardCategory.pokemon;
     }
   }
 
@@ -42,6 +55,17 @@ extension TrainerSubtypeX on TrainerSubtype {
         return 'Pokémon Tool';
     }
   }
+
+  static TrainerSubtype? fromRaw(String? raw) {
+    if (raw == null) return null;
+    final needle = raw.trim().toLowerCase();
+    for (final subtype in TrainerSubtype.values) {
+      if (subtype.labelId.toLowerCase() == needle || subtype.name == needle) {
+        return subtype;
+      }
+    }
+    return null;
+  }
 }
 
 enum EvolutionStage { basic, stage1, stage2 }
@@ -56,6 +80,17 @@ extension EvolutionStageX on EvolutionStage {
       case EvolutionStage.stage2:
         return 'Stage 2';
     }
+  }
+
+  static EvolutionStage? fromRaw(String? raw) {
+    if (raw == null) return null;
+    final needle = raw.trim().toLowerCase();
+    for (final stage in EvolutionStage.values) {
+      if (stage.labelId.toLowerCase() == needle || stage.name == needle) {
+        return stage;
+      }
+    }
+    return null;
   }
 }
 
@@ -73,6 +108,18 @@ extension CardLanguageX on CardLanguage {
         return 'English';
       case CardLanguage.jp:
         return 'Japan';
+    }
+  }
+
+  static CardLanguage fromRaw(String? raw) {
+    switch (raw) {
+      case 'en':
+        return CardLanguage.en;
+      case 'jp':
+        return CardLanguage.jp;
+      case 'id':
+      default:
+        return CardLanguage.id;
     }
   }
 }
@@ -126,6 +173,58 @@ class CardDetails {
   final int? retreatCost;
   final TrainerSubtype? trainerSubtype;
   final PokemonType? energyType;
+
+  /// Decodes the `cards.details` jsonb column. Unrecognized/missing keys
+  /// fall back to their defaults rather than throwing — a malformed field
+  /// shouldn't blow up the whole card row.
+  factory CardDetails.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const CardDetails();
+    final cardType = json['card_type'] as String?;
+    final weaknessJson = json['weakness'] as Map<String, dynamic>?;
+    final resistanceJson = json['resistance'] as Map<String, dynamic>?;
+    final attacksJson = json['attacks'] as List<dynamic>?;
+
+    return CardDetails(
+      hp: json['hp'] as int?,
+      pokemonTypes: pokemonTypesFromRaw(cardType),
+      evolutionStage: EvolutionStageX.fromRaw(json['evolution_stage'] as String?),
+      evolvesFrom: json['evolves_from'] as String?,
+      attacks: attacksJson == null
+          ? const []
+          : attacksJson
+                .whereType<Map<String, dynamic>>()
+                .map(
+                  (a) => AttackModel(
+                    name: a['name'] as String? ?? '',
+                    cost: pokemonTypesFromRaw(
+                      (a['energy_cost'] as List<dynamic>?)?.whereType<String>().join('/'),
+                    ),
+                    damage: a['damage'] as String? ?? '',
+                    effect: a['description'] as String?,
+                  ),
+                )
+                .toList(),
+      weakness: weaknessJson == null
+          ? null
+          : pokemonTypeFromRaw(weaknessJson['type'] as String?) == null
+          ? null
+          : TypeModifier(
+              type: pokemonTypeFromRaw(weaknessJson['type'] as String?)!,
+              value: weaknessJson['modifier'] as String? ?? '',
+            ),
+      resistance: resistanceJson == null
+          ? null
+          : pokemonTypeFromRaw(resistanceJson['type'] as String?) == null
+          ? null
+          : TypeModifier(
+              type: pokemonTypeFromRaw(resistanceJson['type'] as String?)!,
+              value: resistanceJson['modifier'] as String? ?? '',
+            ),
+      retreatCost: json['retreat_cost'] as int?,
+      trainerSubtype: TrainerSubtypeX.fromRaw(json['trainer_subtype'] as String?),
+      energyType: pokemonTypeFromRaw(cardType),
+    );
+  }
 }
 
 /// A single Pokemon TCG card, mirroring `public.cards` in
@@ -146,6 +245,7 @@ class CardModel {
     this.details = const CardDetails(),
     this.marketPrice,
     this.owned = 0,
+    this.imageUrl,
   });
 
   final int id;
@@ -162,6 +262,10 @@ class CardModel {
   final CardDetails details;
   final int? marketPrice;
   final int owned;
+
+  /// CDN-resolved `cards.image_url` (see `proxyImageUrl`). Null for dummy
+  /// (non-catalog) data, in which case UI falls back to a placeholder.
+  final String? imageUrl;
 
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
@@ -181,5 +285,29 @@ class CardModel {
     details: details,
     marketPrice: marketPrice,
     owned: owned ?? this.owned,
+    imageUrl: imageUrl,
   );
+
+  /// Maps a `cards` row (optionally with an embedded `expansions` join) as
+  /// returned by Supabase, mirroring `mapCardRow` in
+  /// `pokepedia-web/lib/data/client.ts`.
+  factory CardModel.fromRow(Map<String, dynamic> row) {
+    final expansionCode = row['expansion_code'] as String? ?? '';
+    final rarityRaw = row['rarity'] as String?;
+    return CardModel(
+      id: row['id'] as int,
+      category: CardCategoryX.fromRaw(row['category'] as String?),
+      nameId: row['name_id'] as String? ?? '',
+      expansionCode: expansionCode,
+      packSlug: expansionCode.toLowerCase(),
+      collectorNumber: row['collector_number'] as String? ?? '',
+      rarity: (rarityRaw == null || rarityRaw.isEmpty) ? 'Tanpa tanda' : rarityRaw,
+      regulationMark: row['regulation_mark'] as String?,
+      illustrator: row['illustrator'] as String?,
+      language: CardLanguageX.fromRaw(row['language'] as String?),
+      variant: row['variant'] as String? ?? 'normal',
+      details: CardDetails.fromJson(row['details'] as Map<String, dynamic>?),
+      imageUrl: proxyImageUrl(row['image_url'] as String?),
+    );
+  }
 }

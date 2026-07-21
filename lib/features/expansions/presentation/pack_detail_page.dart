@@ -8,6 +8,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/pokeball_icon.dart';
 import '../usecase/expansions_notifier.dart';
+import '../usecase/recently_viewed_provider.dart';
 
 /// Ports `app/expansions/[packSlug]/pack-detail-client.tsx` — the card grid
 /// for a single expansion.
@@ -20,6 +21,10 @@ class PackDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final packAsync = ref.watch(packDetailProvider(packSlug));
     final cardsAsync = ref.watch(packCardsProvider(packSlug));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(recentlyViewedSlugsProvider.notifier).markViewed(packSlug);
+    });
 
     return Scaffold(
       appBar: AppBar(

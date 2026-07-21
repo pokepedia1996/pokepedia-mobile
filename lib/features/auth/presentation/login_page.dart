@@ -6,10 +6,10 @@ import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/auth_errors.dart';
 import '../../../shared/widgets/auth_card.dart';
 
-/// Ports `app/login/page.tsx` (the two-step email→password flow collapses
-/// into a single form since there is no real auth backend to gate on).
+/// Ports `app/login/page.tsx`.
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -19,9 +19,11 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController(text: 'user1@test.com');
+  final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -30,9 +32,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).logIn();
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final error = await ref
+        .read(authProvider.notifier)
+        .signIn(_email.text.trim(), _password.text);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _submitting = false;
+        _error = translateAuthError(error);
+      });
+      return;
+    }
     context.go(Routes.account);
   }
 
@@ -75,13 +91,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: const Text('Lupa password?'),
               ),
             ),
+            if (_error != null) ...[
+              Text(
+                _error!,
+                style: AppTypography.bodySm(context.appColors.error),
+              ),
+              const SizedBox(height: 8),
+            ],
             const SizedBox(height: 4),
             ElevatedButton(
-              onPressed: _submit,
+              onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('Masuk'),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Masuk'),
             ),
           ],
         ),

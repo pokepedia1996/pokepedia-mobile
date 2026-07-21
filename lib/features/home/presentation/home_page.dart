@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/widgets/app_top_bar.dart';
 import 'widgets/explore_expansions_section.dart';
 import 'widgets/hero_section.dart';
+import 'widgets/home_loading_gate.dart';
 import 'widgets/promo_sections.dart';
 import 'widgets/recently_viewed_section.dart';
 
@@ -15,18 +16,20 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: const [
-            AppTopBar(),
-            HeroSection(),
-            RecentlyViewedSection(),
-            ExploreExpansionsSection(),
-            SearchPromoSection(),
-            DeckbuilderPromoSection(),
-            CollectionPromoSection(),
-            SizedBox(height: 52),
-          ],
+        child: HomeLoadingGate(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: const [
+              AppTopBar(),
+              HeroSection(),
+              RecentlyViewedSection(),
+              ExploreExpansionsSection(),
+              SearchPromoSection(),
+              DeckbuilderPromoSection(),
+              CollectionPromoSection(),
+              SizedBox(height: 52),
+            ],
+          ),
         ),
       ),
     );

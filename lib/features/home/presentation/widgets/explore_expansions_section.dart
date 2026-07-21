@@ -30,7 +30,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
           const SizedBox(height: 12),
           async.when(
             data: (packs) => GridView.builder(
-              padding: EdgeInsets.fromLTRB(0, 0, 0, 12),
+              padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: packs.take(4).length,
@@ -38,7 +38,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 0.9,
+                childAspectRatio: 0.84,
               ),
               itemBuilder: (context, i) {
                 final pack = packs[i];

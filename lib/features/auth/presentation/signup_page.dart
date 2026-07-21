@@ -6,6 +6,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/auth_errors.dart';
 import '../../../shared/widgets/auth_card.dart';
 
 /// Ports `app/signup/page.tsx`.
@@ -21,6 +22,9 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   final _username = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+  bool _needsEmailConfirmation = false;
 
   @override
   void dispose() {
@@ -30,14 +34,62 @@ class _SignupPageState extends ConsumerState<SignupPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).logIn();
-    context.go(Routes.account);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final result = await ref
+        .read(authProvider.notifier)
+        .signUp(_username.text.trim(), _email.text.trim(), _password.text);
+    if (!mounted) return;
+    switch (result.outcome) {
+      case SignUpOutcome.signedIn:
+        context.go(Routes.account);
+      case SignUpOutcome.needsEmailConfirmation:
+        setState(() {
+          _submitting = false;
+          _needsEmailConfirmation = true;
+        });
+      case SignUpOutcome.error:
+        setState(() {
+          _submitting = false;
+          _error = translateAuthError(result.errorMessage ?? '');
+        });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_needsEmailConfirmation) {
+      return AuthCard(
+        title: 'Cek email kamu',
+        subtitle: 'Klik tautan di email untuk mengaktifkan akunmu',
+        formBody: Column(
+          children: [
+            Icon(
+              Icons.mark_email_read_outlined,
+              size: 40,
+              color: context.appSemantic.success,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Kami telah mengirim tautan aktivasi ke ${_email.text}.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+          ],
+        ),
+        footer: Center(
+          child: TextButton(
+            onPressed: () => context.go(Routes.login),
+            child: const Text('Kembali ke halaman masuk'),
+          ),
+        ),
+      );
+    }
+
     return AuthCard(
       title: 'Buat akun pokepedia.id',
       subtitle: 'Gratis untuk jual beli & mengelola koleksimu',
@@ -70,12 +122,25 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                   : null,
             ),
             const SizedBox(height: 16),
+            if (_error != null) ...[
+              Text(
+                _error!,
+                style: AppTypography.bodySm(context.appColors.error),
+              ),
+              const SizedBox(height: 8),
+            ],
             ElevatedButton(
-              onPressed: _submit,
+              onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('Daftar'),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Daftar'),
             ),
           ],
         ),
