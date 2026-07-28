@@ -21,7 +21,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
         children: [
           SectionHeader(
             title: 'Jelajahi Ekspansi',
-            subtitle: 'Koleksi lengkap set kartu Pokémon TCG',
+            subtitle: 'Koleksi lengkap set kartu Pokemon TCG',
             trailing: TextButton(
               onPressed: () => context.go(Routes.expansions),
               child: const Text('Lihat semua'),

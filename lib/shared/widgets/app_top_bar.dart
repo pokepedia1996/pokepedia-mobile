@@ -30,7 +30,7 @@ class AppTopBar extends StatelessWidget {
           Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(AppRadius.full),
-              onTap: () => context.push(Routes.search),
+              onTap: () => context.go(Routes.search),
               child: Container(
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 14),

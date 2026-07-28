@@ -23,7 +23,7 @@ class PackCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12,12,12,0),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -35,55 +35,58 @@ class PackCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 1.6,
               child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: Container(
-                height: 180,               // your fixed height
-                width: double.infinity,    // fill the parent's width
-                decoration: BoxDecoration(
-                  color: colors.secondary,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: pack.image == null
-                    ? _PackInitial(pack: pack)
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Image.network(
-                          pack.image!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) =>
-                              progress == null ? child : _PackInitial(pack: pack),
-                          errorBuilder: (context, error, stackTrace) => _PackInitial(pack: pack),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: Container(
+                  height: 180, // your fixed height
+                  width: double.infinity, // fill the parent's width
+                  decoration: BoxDecoration(
+                    color: colors.secondary,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: pack.image == null
+                      ? _PackInitial(pack: pack)
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Image.network(
+                            pack.image!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) =>
+                                progress == null
+                                ? child
+                                : _PackInitial(pack: pack),
+                            errorBuilder: (context, error, stackTrace) =>
+                                _PackInitial(pack: pack),
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
             ),
             const SizedBox(height: 20),
             Row(
               children: [
-                pack.setSymbolUrl != null?
-                SvgPicture.network(
-              pack.setSymbolUrl!,
-              height: 15,
-              fit: BoxFit.contain,
-              placeholderBuilder: (context) => Text(
-                    pack.mark,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              errorBuilder: (context, error, stackTrace) => Text(
-                    pack.mark,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-            )
-                : Expanded(
-                  child: Text(
-                    pack.mark,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                pack.setSymbolUrl != null
+                    ? SvgPicture.network(
+                        pack.setSymbolUrl!,
+                        height: 15,
+                        fit: BoxFit.contain,
+                        placeholderBuilder: (context) => Text(
+                          pack.mark,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        errorBuilder: (context, error, stackTrace) => Text(
+                          pack.mark,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    : Expanded(
+                        child: Text(
+                          pack.mark,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(

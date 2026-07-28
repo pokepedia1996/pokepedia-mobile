@@ -20,6 +20,7 @@ import '../../features/expansions/presentation/expansions_page.dart';
 import '../../features/expansions/presentation/pack_detail_page.dart';
 import '../../features/home/presentation/home_page.dart';
 import '../../features/market/presentation/market_page.dart';
+import '../../features/market/presentation/store_card_listing_page.dart';
 import '../../features/market/presentation/store_detail_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/orders/presentation/dispute_detail_page.dart';
@@ -123,6 +124,15 @@ final appRouter = GoRouter(
                   builder: (_, state) => StoreDetailPage(
                     handle: state.pathParameters['handle']!,
                   ),
+                  routes: [
+                    GoRoute(
+                      path: 'card/:cardId',
+                      builder: (_, state) => StoreCardListingPage(
+                        storeSlug: state.pathParameters['handle']!,
+                        cardId: int.parse(state.pathParameters['cardId']!),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -221,8 +231,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/portfolio/deck/:id',
-      builder: (_, state) =>
-          DeckDetailPage(deckId: int.parse(state.pathParameters['id']!)),
+      builder: (_, state) => DeckDetailPage(deckId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: Routes.lists,

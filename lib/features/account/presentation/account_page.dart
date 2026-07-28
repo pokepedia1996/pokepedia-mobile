@@ -16,6 +16,7 @@ class AccountPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).valueOrNull;
+    debugPrint('PPPPPP ${ref.toString()}');
     final isGuest = user == null;
     final colors = context.appColors;
 

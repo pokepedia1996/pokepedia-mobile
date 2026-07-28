@@ -31,7 +31,7 @@ extension CardCategoryX on CardCategory {
   String get labelId {
     switch (this) {
       case CardCategory.pokemon:
-        return 'Pokémon';
+        return 'Pokemon';
       case CardCategory.trainer:
         return 'Trainer';
       case CardCategory.energy:
@@ -52,7 +52,7 @@ extension TrainerSubtypeX on TrainerSubtype {
       case TrainerSubtype.stadium:
         return 'Stadium';
       case TrainerSubtype.tool:
-        return 'Pokémon Tool';
+        return 'Pokemon Tool';
     }
   }
 
@@ -161,6 +161,9 @@ class CardDetails {
     this.retreatCost,
     this.trainerSubtype,
     this.energyType,
+    this.pokedexNumber,
+    this.pokedexHeight,
+    this.pokedexWeight,
   });
 
   final int? hp;
@@ -174,6 +177,12 @@ class CardDetails {
   final TrainerSubtype? trainerSubtype;
   final PokemonType? energyType;
 
+  /// `details.pokedex.{number,height,weight}` — species stats shown in the
+  /// card detail page's "Pokédex" section.
+  final int? pokedexNumber;
+  final String? pokedexHeight;
+  final String? pokedexWeight;
+
   /// Decodes the `cards.details` jsonb column. Unrecognized/missing keys
   /// fall back to their defaults rather than throwing — a malformed field
   /// shouldn't blow up the whole card row.
@@ -183,6 +192,7 @@ class CardDetails {
     final weaknessJson = json['weakness'] as Map<String, dynamic>?;
     final resistanceJson = json['resistance'] as Map<String, dynamic>?;
     final attacksJson = json['attacks'] as List<dynamic>?;
+    final pokedexJson = json['pokedex'] as Map<String, dynamic>?;
 
     return CardDetails(
       hp: json['hp'] as int?,
@@ -223,6 +233,9 @@ class CardDetails {
       retreatCost: json['retreat_cost'] as int?,
       trainerSubtype: TrainerSubtypeX.fromRaw(json['trainer_subtype'] as String?),
       energyType: pokemonTypeFromRaw(cardType),
+      pokedexNumber: pokedexJson?['number'] as int?,
+      pokedexHeight: pokedexJson?['height'] as String?,
+      pokedexWeight: pokedexJson?['weight'] as String?,
     );
   }
 }

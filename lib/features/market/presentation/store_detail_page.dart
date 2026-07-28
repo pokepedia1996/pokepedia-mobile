@@ -168,14 +168,10 @@ class StoreDetailPage extends ConsumerWidget {
                               crossAxisCount: 2,
                               mainAxisSpacing: 12,
                               crossAxisSpacing: 12,
-                              childAspectRatio: 0.6,
+                              childAspectRatio: 0.42,
                             ),
                         delegate: SliverChildBuilderDelegate(
-                          (context, i) => ListingCard(
-                            listing: listings[i],
-                            onTap: () {},
-                            showSeller: false,
-                          ),
+                          (context, i) => ListingCard(listing: listings[i], showSeller: false),
                           childCount: listings.length,
                         ),
                       );

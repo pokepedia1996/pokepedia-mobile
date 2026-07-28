@@ -68,6 +68,45 @@ class ExpansionsRepository {
     return row == null ? null : CardModel.fromRow(row);
   }
 
+  /// Ports `fetchEvolutionChainCardsServer` — calls the same
+  /// `get_evolution_pool` RPC the web uses to walk `details.evolves_from`
+  /// in both directions from [seedNames] across the whole catalog.
+  Future<List<CardModel>> fetchEvolutionPool(List<String> seedNames) async {
+    if (seedNames.isEmpty) return const [];
+    final rows = await _client.rpc('get_evolution_pool', params: {'seed_names': seedNames});
+    return (rows as List).map((r) => CardModel.fromRow(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Sums `user_cards.quantity` for a card across any variant rows.
+  /// Mirrors `fetchUserCardQuantities` in `lib/products/portfolio.ts`.
+  Future<int> fetchOwnedQuantity(String userId, int cardId) async {
+    final rows = await _client
+        .from('user_cards')
+        .select('quantity')
+        .eq('user_id', userId)
+        .eq('card_id', cardId);
+    return rows.fold<int>(0, (sum, r) => sum + (r['quantity'] as int? ?? 0));
+  }
+
+  /// Ports `upsertUserCard` (`lib/products/portfolio.ts`) — `delta` is added
+  /// to the user's existing quantity for this card via the same atomic
+  /// server-side RPC the web uses.
+  Future<String?> upsertUserCard({
+    required String userId,
+    required int cardId,
+    required int delta,
+  }) async {
+    try {
+      await _client.rpc(
+        'upsert_user_card_atomic',
+        params: {'p_user_id': userId, 'p_card_id': cardId, 'p_delta': delta},
+      );
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
   /// Open listings for a card, joined with the seller's store info.
   /// `listings.user_id` and `seller_profiles.user_id` both reference
   /// `auth.users` rather than one another, so PostgREST can't embed them

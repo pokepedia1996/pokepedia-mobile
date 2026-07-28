@@ -42,6 +42,7 @@ class Routes {
   static String cardDetail(String packSlug, int cardId) =>
       '/expansions/$packSlug/$cardId';
   static String storeDetail(String handle) => '/market/$handle';
+  static String storeCardDetail(String handle, int cardId) => '/market/$handle/card/$cardId';
   static String orderDetail(String slug) => '/orders/$slug';
 
   /// View an existing dispute's detail/timeline.
@@ -51,7 +52,7 @@ class Routes {
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
   static String chatThread(String slug) => '/chat/$slug';
   static String userProfile(String username) => '/user/$username';
-  static String deckDetail(int id) => '/portfolio/deck/$id';
+  static String deckDetail(String id) => '/portfolio/deck/$id';
   static String listDetail(int id) => '/portfolio/list/$id';
   static String terms(String slug) => '/terms/$slug';
 }
