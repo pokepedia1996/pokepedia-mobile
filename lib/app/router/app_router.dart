@@ -8,8 +8,7 @@ import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/auth/presentation/signup_page.dart';
 import '../../features/cart/presentation/cart_page.dart';
-import '../../features/cart/presentation/checkout_page.dart';
-import '../../features/cart/presentation/checkout_success_page.dart';
+import '../../features/cart/presentation/checkout_webview_page.dart';
 import '../../features/chat/presentation/chat_inbox_page.dart';
 import '../../features/chat/presentation/chat_thread_page.dart';
 import '../../features/content/presentation/support_page.dart';
@@ -169,10 +168,14 @@ final appRouter = GoRouter(
 
     // Commerce.
     GoRoute(path: Routes.cart, builder: (_, __) => const CartPage()),
-    GoRoute(path: Routes.checkout, builder: (_, __) => const CheckoutPage()),
+    // Address, shipping, coupon, payment, and the post-payment success page
+    // all live on pokepedia-web (cookie-authenticated) — embedded here via
+    // WebView rather than a native flow. The web app's own
+    // `/cart/checkout/success` redirect happens inside this same WebView,
+    // so there's no separate native success route to register.
     GoRoute(
-      path: Routes.checkoutSuccess,
-      builder: (_, __) => const CheckoutSuccessPage(),
+      path: Routes.checkout,
+      builder: (_, __) => const CheckoutWebViewPage(),
     ),
     GoRoute(
       path: Routes.orders,

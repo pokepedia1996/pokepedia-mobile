@@ -91,11 +91,8 @@ class CartPage extends ConsumerWidget {
                                           value: item.quantity,
                                           min: 1,
                                           max: item.listing.available,
-                                          onChanged: (v) => notifier
-                                              .updateQuantity(
-                                                item.listing.id,
-                                                v,
-                                              ),
+                                          onChanged: (v) =>
+                                              notifier.updateQuantity(item, v),
                                         ),
                                         IconButton(
                                           icon: const Icon(
@@ -103,9 +100,8 @@ class CartPage extends ConsumerWidget {
                                             size: 20,
                                           ),
                                           color: colors.error,
-                                          onPressed: () => notifier.remove(
-                                            item.listing.id,
-                                          ),
+                                          onPressed: () =>
+                                              notifier.remove(item.cartItemId),
                                         ),
                                       ],
                                     ),
@@ -150,6 +146,12 @@ class CartPage extends ConsumerWidget {
                             minimumSize: const Size.fromHeight(48),
                           ),
                           child: const Text('Checkout'),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Alamat, ongkir, dan pembayaran dilanjutkan di pokepedia.id',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.caption(context.mutedForeground),
                         ),
                       ],
                     ),

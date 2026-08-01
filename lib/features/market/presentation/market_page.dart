@@ -25,7 +25,8 @@ class MarketPage extends ConsumerStatefulWidget {
   ConsumerState<MarketPage> createState() => _MarketPageState();
 }
 
-class _MarketPageState extends ConsumerState<MarketPage> with SingleTickerProviderStateMixin {
+class _MarketPageState extends ConsumerState<MarketPage>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
   static const _buckets = [
@@ -85,7 +86,9 @@ class _MarketPageState extends ConsumerState<MarketPage> with SingleTickerProvid
                     alignment: Alignment.center,
                     child: Text(
                       '$cartCount',
-                      style: AppTypography.badge(colors.onPrimary).copyWith(fontSize: 9),
+                      style: AppTypography.badge(
+                        colors.onPrimary,
+                      ).copyWith(fontSize: 9),
                     ),
                   ),
                 ),
@@ -100,7 +103,8 @@ class _MarketPageState extends ConsumerState<MarketPage> with SingleTickerProvid
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: TextField(
-                onChanged: (v) => ref.read(marketQueryProvider.notifier).state = v,
+                onChanged: (v) =>
+                    ref.read(marketQueryProvider.notifier).state = v,
                 decoration: const InputDecoration(
                   hintText: 'Cari kartu atau toko...',
                   prefixIcon: Icon(Icons.search, size: 20),
@@ -109,11 +113,11 @@ class _MarketPageState extends ConsumerState<MarketPage> with SingleTickerProvid
             ),
             TabBar(
               controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
               labelColor: colors.primary,
               unselectedLabelColor: context.mutedForeground,
               indicatorColor: colors.primary,
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
               tabs: const [
                 Tab(text: 'Semua'),
                 Tab(text: 'Listing'),
@@ -163,7 +167,10 @@ class _SortFilterBar extends ConsumerWidget {
                 builder: (_) => const _SortSheet(),
               ),
               icon: const Icon(Icons.swap_vert, size: 16),
-              label: Text('Urutkan: ${sort.labelId}', overflow: TextOverflow.ellipsis),
+              label: Text(
+                'Urutkan: ${sort.labelId}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -177,12 +184,16 @@ class _SortFilterBar extends ConsumerWidget {
               style: filters.activeCount > 0
                   ? OutlinedButton.styleFrom(
                       foregroundColor: colors.primary,
-                      side: BorderSide(color: colors.primary.withValues(alpha: 0.4)),
+                      side: BorderSide(
+                        color: colors.primary.withValues(alpha: 0.4),
+                      ),
                     )
                   : null,
               icon: const Icon(Icons.filter_list, size: 16),
               label: Text(
-                filters.activeCount > 0 ? 'Filter (${filters.activeCount})' : 'Filter',
+                filters.activeCount > 0
+                    ? 'Filter (${filters.activeCount})'
+                    : 'Filter',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -207,7 +218,10 @@ class _SortSheet extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('Urutkan', style: AppTypography.h3(context.appColors.onSurface)),
+              child: Text(
+                'Urutkan',
+                style: AppTypography.h3(context.appColors.onSurface),
+              ),
             ),
           ),
           Divider(height: 1, color: context.borderColor),
@@ -253,8 +267,12 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   void initState() {
     super.initState();
     _draft = ref.read(marketFiltersProvider);
-    _minPriceController = TextEditingController(text: _draft.minPrice?.toString() ?? '');
-    _maxPriceController = TextEditingController(text: _draft.maxPrice?.toString() ?? '');
+    _minPriceController = TextEditingController(
+      text: _draft.minPrice?.toString() ?? '',
+    );
+    _maxPriceController = TextEditingController(
+      text: _draft.maxPrice?.toString() ?? '',
+    );
   }
 
   @override
@@ -285,7 +303,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final colors = context.appColors;
     return SafeArea(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -293,7 +313,12 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
               child: Row(
                 children: [
-                  Expanded(child: Text('Filter', style: AppTypography.h3(colors.onSurface))),
+                  Expanded(
+                    child: Text(
+                      'Filter',
+                      style: AppTypography.h3(colors.onSurface),
+                    ),
+                  ),
                   TextButton(
                     onPressed: () => setState(() {
                       _draft = const MarketFilters();
@@ -310,7 +335,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                 children: [
-                  Text('Harga', style: AppTypography.captionSemibold(colors.onSurface)),
+                  Text(
+                    'Harga',
+                    style: AppTypography.captionSemibold(colors.onSurface),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -338,7 +366,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _draft.verifiedOnly,
-                    onChanged: (v) => setState(() => _draft = _draft.copyWith(verifiedOnly: v)),
+                    onChanged: (v) => setState(
+                      () => _draft = _draft.copyWith(verifiedOnly: v),
+                    ),
                     title: const Text('Hanya toko terverifikasi'),
                     dense: true,
                   ),
@@ -351,7 +381,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                           value: _draft.conditions.contains(condition),
                           onChanged: (_) => setState(
                             () => _draft = _draft.copyWith(
-                              conditions: _toggled(_draft.conditions, condition),
+                              conditions: _toggled(
+                                _draft.conditions,
+                                condition,
+                              ),
                             ),
                           ),
                           title: Text(condition.label),
@@ -385,7 +418,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                           value: _draft.trainerSubtypes.contains(subtype),
                           onChanged: (_) => setState(
                             () => _draft = _draft.copyWith(
-                              trainerSubtypes: _toggled(_draft.trainerSubtypes, subtype),
+                              trainerSubtypes: _toggled(
+                                _draft.trainerSubtypes,
+                                subtype,
+                              ),
                             ),
                           ),
                           title: Text(subtype.labelId),
@@ -418,7 +454,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(onPressed: _apply, child: const Text('Terapkan')),
+                child: ElevatedButton(
+                  onPressed: _apply,
+                  child: const Text('Terapkan'),
+                ),
               ),
             ),
           ],
@@ -441,7 +480,10 @@ class _FilterSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTypography.captionSemibold(context.appColors.onSurface)),
+          Text(
+            label,
+            style: AppTypography.captionSemibold(context.appColors.onSurface),
+          ),
           ...children,
         ],
       ),

@@ -9,7 +9,13 @@ import 'dart:io' show Platform;
 class AppConfig {
   const AppConfig._();
 
-  static final supabaseUrl =
-      Platform.isAndroid ? 'http://192.168.1.4:54321' : 'http://127.0.0.1:54321';
-  static const supabaseAnonKey = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
+  static final supabaseUrl = 'https://ovbzifwfohqflfsgedsj.supabase.co';
+  static const supabaseAnonKey = 'sb_publishable_hJI-p2MvaiuKQmOq8Tvxkw_vz-Zpgwi';
+
+  /// The pokepedia-web deployment. Public — same status as [supabaseUrl] —
+  /// used to hand off money-moving flows (checkout, payment, order actions)
+  /// to the real site in the device's browser, since those routes only
+  /// authenticate via browser cookies and the mobile app has no way to
+  /// share a session with them.
+  static const appUrl = 'https://pokepedia.id';
 }
