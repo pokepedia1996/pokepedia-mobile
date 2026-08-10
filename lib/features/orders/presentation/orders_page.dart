@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../repository/models/order_model.dart';
 import '../usecase/orders_notifier.dart';
@@ -44,7 +45,7 @@ class OrdersPage extends ConsumerWidget {
               },
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat pesanan')),
         ),
       ),
@@ -111,7 +112,10 @@ class _OrderTile extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(headline, style: AppTypography.bodySmSemibold(colors.onSurface)),
+            Text(
+              headline,
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
             const SizedBox(height: 2),
             Text(
               order.storeName,

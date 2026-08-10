@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../repository/models/notification_model.dart';
 import '../usecase/notifications_notifier.dart';
 
@@ -134,8 +135,9 @@ class NotificationsPage extends ConsumerWidget {
               },
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('Gagal memuat notifikasi')),
+          loading: () => const PikachuLoader(),
+          error: (_, __) =>
+              const Center(child: Text('Gagal memuat notifikasi')),
         ),
       ),
     );

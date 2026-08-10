@@ -1,13 +1,24 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'models/wallet_models.dart';
 
-/// Data access for the Wallet feature. Stands in for
-/// `public.wallets` / `public.wallet_ledger` in
-/// `supabase/migrations/00000000000000_baseline.sql` while this pass only
-/// ports the UI with dummy data.
+/// Data access for the Wallet feature, backed by `public.wallets` for the
+/// balance (real — needed by checkout's wallet-payment gating). Activity
+/// (`public.wallet_ledger`) is still dummy data pending a dedicated pass.
 class WalletRepository {
+  WalletRepository(this._client);
+
+  final SupabaseClient _client;
+
   Future<int> fetchBalance() async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    return 1250000;
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return 0;
+    final row = await _client
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', userId)
+        .maybeSingle();
+    return (row?['balance'] as num?)?.toInt() ?? 0;
   }
 
   Future<List<WalletActivity>> fetchActivity() async {

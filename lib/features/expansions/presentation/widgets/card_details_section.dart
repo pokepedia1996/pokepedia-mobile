@@ -7,6 +7,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/models/pokemon_type.dart';
 import '../../../../shared/utils/evolution_chain.dart';
+import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/type_icon.dart';
 import '../../usecase/expansions_notifier.dart';
 
@@ -262,7 +263,7 @@ class EvolutionSection extends ConsumerWidget {
       },
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        child: PikachuLoader(size: 96),
       ),
       error: (_, __) => const SizedBox.shrink(),
     );

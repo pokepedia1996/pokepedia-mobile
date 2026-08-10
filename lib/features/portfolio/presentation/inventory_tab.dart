@@ -12,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../repository/models/inventory_entry.dart';
 import '../usecase/portfolio_notifier.dart';
@@ -80,7 +81,11 @@ class _InventoryTabState extends State<InventoryTab> {
 }
 
 class _SectionChip extends StatelessWidget {
-  const _SectionChip({required this.label, required this.selected, required this.onTap});
+  const _SectionChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -97,11 +102,15 @@ class _SectionChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? colors.primary : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(color: selected ? colors.primary : context.borderColor),
+          border: Border.all(
+            color: selected ? colors.primary : context.borderColor,
+          ),
         ),
         child: Text(
           label,
-          style: AppTypography.captionSemibold(selected ? colors.onPrimary : context.mutedForeground),
+          style: AppTypography.captionSemibold(
+            selected ? colors.onPrimary : context.mutedForeground,
+          ),
         ),
       ),
     );
@@ -109,7 +118,12 @@ class _SectionChip extends StatelessWidget {
 }
 
 class _InventoryGroup {
-  const _InventoryGroup({required this.card, required this.totalQty, required this.avgPrice, required this.records});
+  const _InventoryGroup({
+    required this.card,
+    required this.totalQty,
+    required this.avgPrice,
+    required this.records,
+  });
 
   final CardModel card;
   final int totalQty;
@@ -135,8 +149,12 @@ List<_InventoryGroup> _groupByCard(List<InventoryEntry> records) {
     );
   }).toList();
   groups.sort((a, b) {
-    final aLatest = a.records.map((r) => r.createdAt).reduce((x, y) => x.isAfter(y) ? x : y);
-    final bLatest = b.records.map((r) => r.createdAt).reduce((x, y) => x.isAfter(y) ? x : y);
+    final aLatest = a.records
+        .map((r) => r.createdAt)
+        .reduce((x, y) => x.isAfter(y) ? x : y);
+    final bLatest = b.records
+        .map((r) => r.createdAt)
+        .reduce((x, y) => x.isAfter(y) ? x : y);
     return bLatest.compareTo(aLatest);
   });
   return groups;
@@ -172,8 +190,12 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
             : groups
                   .where(
                     (g) =>
-                        g.card.name.toLowerCase().contains(_query.toLowerCase()) ||
-                        g.card.collectorNumber.toLowerCase().contains(_query.toLowerCase()),
+                        g.card.name.toLowerCase().contains(
+                          _query.toLowerCase(),
+                        ) ||
+                        g.card.collectorNumber.toLowerCase().contains(
+                          _query.toLowerCase(),
+                        ),
                   )
                   .toList();
         return Column(
@@ -201,13 +223,14 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       itemCount: visible.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) => _InventoryGroupTile(group: visible[i]),
+                      itemBuilder: (context, i) =>
+                          _InventoryGroupTile(group: visible[i]),
                     ),
             ),
           ],
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat inventori')),
     );
   }
@@ -230,7 +253,13 @@ class _InventoryGroupTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: 44, child: CardArt(imageUrl: group.card.imageUrl, borderRadius: AppRadius.sm)),
+          SizedBox(
+            width: 44,
+            child: CardArt(
+              imageUrl: group.card.imageUrl,
+              borderRadius: AppRadius.sm,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -252,7 +281,10 @@ class _InventoryGroupTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatRupiah(group.totalValue), style: AppTypography.bodySmSemibold(colors.onSurface)),
+              Text(
+                formatRupiah(group.totalValue),
+                style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
               Text(
                 'Rata-rata ${formatRupiah(group.avgPrice)}',
                 style: AppTypography.caption(context.mutedForeground),
@@ -304,16 +336,23 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     if (user == null) return;
     final res = await ref
         .read(portfolioRepositoryProvider)
-        .createDraftRecord(userId: user.id, cardId: card.id, quantity: result.quantity, unitPrice: result.unitPrice);
+        .createDraftRecord(
+          userId: user.id,
+          cardId: card.id,
+          quantity: result.quantity,
+          unitPrice: result.unitPrice,
+        );
     if (!mounted) return;
     if (res.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error!)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(res.error!)));
       return;
     }
     ref.invalidate(inventoryDraftsProvider);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('${card.name} ditambahkan ke draft')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${card.name} ditambahkan ke draft')),
+    );
   }
 
   Future<void> _saveAll(List<InventoryEntry> drafts) async {
@@ -337,14 +376,18 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     final message = failures == 0
         ? '$saved inventori ditambahkan'
         : '$saved ditambahkan, $failures gagal';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final draftsAsync = ref.watch(inventoryDraftsProvider);
     final showResults = _debouncedQuery.trim().length >= 2;
-    final resultsAsync = showResults ? ref.watch(cardSearchPickerProvider(_debouncedQuery)) : null;
+    final resultsAsync = showResults
+        ? ref.watch(cardSearchPickerProvider(_debouncedQuery))
+        : null;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -364,16 +407,22 @@ class _AddSectionState extends ConsumerState<_AddSection> {
               if (results.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Tidak ditemukan.', style: AppTypography.bodySm(context.mutedForeground)),
+                  child: Text(
+                    'Tidak ditemukan.',
+                    style: AppTypography.bodySm(context.mutedForeground),
+                  ),
                 );
               }
               return Column(
-                children: [for (final c in results) _SearchResultTile(card: c, onTap: () => _openAddSheet(c))],
+                children: [
+                  for (final c in results)
+                    _SearchResultTile(card: c, onTap: () => _openAddSheet(c)),
+                ],
               );
             },
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              child: PikachuLoader(size: 96),
             ),
             error: (_, __) => const SizedBox.shrink(),
           ),
@@ -390,10 +439,15 @@ class _AddSectionState extends ConsumerState<_AddSection> {
                     Expanded(
                       child: Text(
                         'Draft belum disimpan (${drafts.length})',
-                        style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+                        style: AppTypography.bodySmSemibold(
+                          context.appColors.onSurface,
+                        ),
                       ),
                     ),
-                    TextButton(onPressed: () => _saveAll(drafts), child: const Text('Simpan Semua')),
+                    TextButton(
+                      onPressed: () => _saveAll(drafts),
+                      child: const Text('Simpan Semua'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -431,7 +485,13 @@ class _SearchResultTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SizedBox(width: 40, child: CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.sm)),
+            SizedBox(
+              width: 40,
+              child: CardArt(
+                imageUrl: card.imageUrl,
+                borderRadius: AppRadius.sm,
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -476,7 +536,13 @@ class _DraftTile extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: 40, child: CardArt(imageUrl: entry.card.imageUrl, borderRadius: AppRadius.sm)),
+          SizedBox(
+            width: 40,
+            child: CardArt(
+              imageUrl: entry.card.imageUrl,
+              borderRadius: AppRadius.sm,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -498,15 +564,16 @@ class _DraftTile extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18),
             onPressed: () async {
-              final result = await showModalBottomSheet<({int quantity, int unitPrice})>(
-                context: context,
-                isScrollControlled: true,
-                builder: (context) => _AddDraftSheet(
-                  card: entry.card,
-                  initialQuantity: entry.quantity,
-                  initialUnitPrice: entry.unitPrice,
-                ),
-              );
+              final result =
+                  await showModalBottomSheet<({int quantity, int unitPrice})>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => _AddDraftSheet(
+                      card: entry.card,
+                      initialQuantity: entry.quantity,
+                      initialUnitPrice: entry.unitPrice,
+                    ),
+                  );
               if (result == null) return;
               final user = ref.read(authProvider).valueOrNull;
               if (user == null) return;
@@ -522,7 +589,11 @@ class _DraftTile extends ConsumerWidget {
             },
           ),
           IconButton(
-            icon: Icon(Icons.check_circle_outline, size: 18, color: context.appSemantic.success),
+            icon: Icon(
+              Icons.check_circle_outline,
+              size: 18,
+              color: context.appSemantic.success,
+            ),
             onPressed: () async {
               final user = ref.read(authProvider).valueOrNull;
               if (user == null) return;
@@ -536,7 +607,9 @@ class _DraftTile extends ConsumerWidget {
                     unitPrice: entry.unitPrice,
                   );
               if (error != null && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(error)));
               }
             },
           ),
@@ -545,7 +618,9 @@ class _DraftTile extends ConsumerWidget {
             onPressed: () async {
               final user = ref.read(authProvider).valueOrNull;
               if (user == null) return;
-              await ref.read(portfolioRepositoryProvider).deleteDraftRecord(userId: user.id, recordId: entry.id);
+              await ref
+                  .read(portfolioRepositoryProvider)
+                  .deleteDraftRecord(userId: user.id, recordId: entry.id);
               ref.invalidate(inventoryDraftsProvider);
             },
           ),
@@ -556,7 +631,11 @@ class _DraftTile extends ConsumerWidget {
 }
 
 class _AddDraftSheet extends StatefulWidget {
-  const _AddDraftSheet({required this.card, this.initialQuantity = 1, this.initialUnitPrice = 0});
+  const _AddDraftSheet({
+    required this.card,
+    this.initialQuantity = 1,
+    this.initialUnitPrice = 0,
+  });
 
   final CardModel card;
   final int initialQuantity;
@@ -581,21 +660,40 @@ class _AddDraftSheetState extends State<_AddDraftSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              SizedBox(width: 48, child: CardArt(imageUrl: widget.card.imageUrl, borderRadius: AppRadius.sm)),
+              SizedBox(
+                width: 48,
+                child: CardArt(
+                  imageUrl: widget.card.imageUrl,
+                  borderRadius: AppRadius.sm,
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.card.name, style: AppTypography.bodySmSemibold(context.appColors.onSurface)),
-                    Text(widget.card.collectorNumber, style: AppTypography.caption(context.mutedForeground)),
+                    Text(
+                      widget.card.name,
+                      style: AppTypography.bodySmSemibold(
+                        context.appColors.onSurface,
+                      ),
+                    ),
+                    Text(
+                      widget.card.collectorNumber,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
                   ],
                 ),
               ),
@@ -604,9 +702,16 @@ class _AddDraftSheetState extends State<_AddDraftSheet> {
           const SizedBox(height: 16),
           Text('Jumlah', style: AppTypography.caption(context.mutedForeground)),
           const SizedBox(height: 6),
-          QuantitySelector(value: _quantity, min: 1, onChanged: (v) => setState(() => _quantity = v)),
+          QuantitySelector(
+            value: _quantity,
+            min: 1,
+            onChanged: (v) => setState(() => _quantity = v),
+          ),
           const SizedBox(height: 12),
-          Text('Harga beli (opsional)', style: AppTypography.caption(context.mutedForeground)),
+          Text(
+            'Harga beli (opsional)',
+            style: AppTypography.caption(context.mutedForeground),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _priceController,
@@ -649,13 +754,22 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         title: const Text('Hapus inventori?'),
-        content: Text('${_selectedCardIds.length} kartu terpilih akan dihapus dari inventori.'),
+        content: Text(
+          '${_selectedCardIds.length} kartu terpilih akan dihapus dari inventori.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.appColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appColors.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Hapus'),
           ),
@@ -671,7 +785,8 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
     for (final cardId in _selectedCardIds) {
       final group = groups.firstWhere((g) => g.card.id == cardId);
       var remaining = _removeQty[cardId] ?? group.totalQty;
-      final sortedRecords = [...group.records]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final sortedRecords = [...group.records]
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       for (final r in sortedRecords) {
         if (remaining <= 0) break;
         final take = remaining < r.quantity ? remaining : r.quantity;
@@ -680,7 +795,9 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
       }
     }
 
-    final error = await ref.read(cardOwnershipControllerProvider).removeInventory(userId: user.id, items: items);
+    final error = await ref
+        .read(cardOwnershipControllerProvider)
+        .removeInventory(userId: user.id, items: items);
     if (!mounted) return;
     setState(() {
       _removing = false;
@@ -688,10 +805,14 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
       _removeQty.clear();
     });
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inventori dihapus')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Inventori dihapus')));
   }
 
   @override
@@ -700,12 +821,21 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
     return async.when(
       data: (records) {
         if (records.isEmpty) {
-          return const EmptyState(icon: Icons.inventory_2_outlined, title: 'Inventori kosong');
+          return const EmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: 'Inventori kosong',
+          );
         }
         final groups = _groupByCard(records);
         final visible = _query.isEmpty
             ? groups
-            : groups.where((g) => g.card.name.toLowerCase().contains(_query.toLowerCase())).toList();
+            : groups
+                  .where(
+                    (g) => g.card.name.toLowerCase().contains(
+                      _query.toLowerCase(),
+                    ),
+                  )
+                  .toList();
         return Column(
           children: [
             Padding(
@@ -741,7 +871,9 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
                         _removeQty[g.card.id] = g.totalQty;
                       }
                     }),
-                    onQuantityChanged: (v) => setState(() => _removeQty[g.card.id] = v.clamp(1, g.totalQty)),
+                    onQuantityChanged: (v) => setState(
+                      () => _removeQty[g.card.id] = v.clamp(1, g.totalQty),
+                    ),
                   );
                 },
               ),
@@ -752,13 +884,20 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _removing ? null : () => _confirmAndRemove(groups),
-                    style: ElevatedButton.styleFrom(backgroundColor: context.appColors.error),
+                    onPressed: _removing
+                        ? null
+                        : () => _confirmAndRemove(groups),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.appColors.error,
+                    ),
                     child: _removing
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : Text('Hapus Terpilih (${_selectedCardIds.length})'),
                   ),
@@ -767,7 +906,7 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
           ],
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat inventori')),
     );
   }
@@ -796,7 +935,11 @@ class _RemoveGroupTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: selected ? colors.error.withValues(alpha: 0.4) : context.borderColor),
+        border: Border.all(
+          color: selected
+              ? colors.error.withValues(alpha: 0.4)
+              : context.borderColor,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -806,7 +949,13 @@ class _RemoveGroupTile extends StatelessWidget {
             child: Row(
               children: [
                 Checkbox(value: selected, onChanged: (_) => onToggle()),
-                SizedBox(width: 40, child: CardArt(imageUrl: group.card.imageUrl, borderRadius: AppRadius.sm)),
+                SizedBox(
+                  width: 40,
+                  child: CardArt(
+                    imageUrl: group.card.imageUrl,
+                    borderRadius: AppRadius.sm,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -818,7 +967,10 @@ class _RemoveGroupTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodySmSemibold(colors.onSurface),
                       ),
-                      Text('Dimiliki ×${group.totalQty}', style: AppTypography.caption(context.mutedForeground)),
+                      Text(
+                        'Dimiliki ×${group.totalQty}',
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
                     ],
                   ),
                 ),
@@ -831,8 +983,16 @@ class _RemoveGroupTile extends StatelessWidget {
               padding: const EdgeInsets.only(left: 50),
               child: Row(
                 children: [
-                  Text('Jumlah dihapus: ', style: AppTypography.caption(context.mutedForeground)),
-                  QuantitySelector(value: quantity, min: 1, max: group.totalQty, onChanged: onQuantityChanged),
+                  Text(
+                    'Jumlah dihapus: ',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                  QuantitySelector(
+                    value: quantity,
+                    min: 1,
+                    max: group.totalQty,
+                    onChanged: onQuantityChanged,
+                  ),
                 ],
               ),
             ),
@@ -854,7 +1014,10 @@ class _ActivitySection extends ConsumerWidget {
     return async.when(
       data: (activity) {
         if (activity.isEmpty) {
-          return const EmptyState(icon: Icons.history, title: 'Belum ada aktivitas');
+          return const EmptyState(
+            icon: Icons.history,
+            title: 'Belum ada aktivitas',
+          );
         }
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -863,7 +1026,7 @@ class _ActivitySection extends ConsumerWidget {
           itemBuilder: (context, i) => _ActivityTile(entry: activity[i]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat aktivitas')),
     );
   }
@@ -878,9 +1041,21 @@ class _ActivityTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final (icon, color, label) = switch (entry.action) {
-      InventoryActivityAction.addedIn => (Icons.add_circle_outline, context.appSemantic.success, 'Ditambahkan'),
-      InventoryActivityAction.removedOut => (Icons.remove_circle_outline, colors.error, 'Dihapus'),
-      InventoryActivityAction.updated => (Icons.edit_outlined, context.mutedForeground, 'Diperbarui'),
+      InventoryActivityAction.addedIn => (
+        Icons.add_circle_outline,
+        context.appSemantic.success,
+        'Ditambahkan',
+      ),
+      InventoryActivityAction.removedOut => (
+        Icons.remove_circle_outline,
+        colors.error,
+        'Dihapus',
+      ),
+      InventoryActivityAction.updated => (
+        Icons.edit_outlined,
+        context.mutedForeground,
+        'Diperbarui',
+      ),
     };
     return Container(
       padding: const EdgeInsets.all(12),
@@ -910,7 +1085,10 @@ class _ActivityTile extends StatelessWidget {
               ],
             ),
           ),
-          Text(formatRelativeId(entry.createdAt), style: AppTypography.caption(context.mutedForeground)),
+          Text(
+            formatRelativeId(entry.createdAt),
+            style: AppTypography.caption(context.mutedForeground),
+          ),
         ],
       ),
     );

@@ -12,6 +12,7 @@ import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
 
@@ -40,16 +41,17 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
     final user = ref.watch(authProvider).valueOrNull;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(recentlyViewedSlugsProvider.notifier).markViewed(widget.packSlug);
+      ref
+          .read(recentlyViewedSlugsProvider.notifier)
+          .markViewed(widget.packSlug);
     });
 
     return Scaffold(
       appBar: AppBar(
-        title: packAsync.when(
-          data: (pack) => Text(pack?.name ?? 'Ekspansi'),
-          loading: () => const Text('Memuat...'),
-          error: (_, __) => const Text('Ekspansi'),
-        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
         top: false,
@@ -71,7 +73,11 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
               slivers: [
                 if (pack != null)
                   SliverToBoxAdapter(
-                    child: _PackHeader(pack: pack, cardCount: cards.length, ownedCount: user != null ? ownedCount : null),
+                    child: _PackHeader(
+                      pack: pack,
+                      cardCount: cards.length,
+                      ownedCount: user != null ? ownedCount : null,
+                    ),
                   ),
                 SliverToBoxAdapter(
                   child: Padding(
@@ -107,47 +113,46 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                     sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.62,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) {
-                          final card = visible[i];
-                          return CardGridItem(
-                            card: card,
-                            onTap: () => context.push(Routes.cardDetail(widget.packSlug, card.id)),
-                          );
-                        },
-                        childCount: visible.length,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.62,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, i) {
+                        final card = visible[i];
+                        return CardGridItem(
+                          card: card,
+                          onTap: () => context.push(
+                            Routes.cardDetail(widget.packSlug, card.id),
+                          ),
+                        );
+                      }, childCount: visible.length),
                     ),
                   )
                 else
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                     sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) {
-                          final card = visible[i];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: CardListItem(
-                              card: card,
-                              onTap: () => context.push(Routes.cardDetail(widget.packSlug, card.id)),
+                      delegate: SliverChildBuilderDelegate((context, i) {
+                        final card = visible[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: CardListItem(
+                            card: card,
+                            onTap: () => context.push(
+                              Routes.cardDetail(widget.packSlug, card.id),
                             ),
-                          );
-                        },
-                        childCount: visible.length,
-                      ),
+                          ),
+                        );
+                      }, childCount: visible.length),
                     ),
                   ),
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat kartu')),
         ),
       ),
@@ -156,7 +161,11 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
 }
 
 class _PackHeader extends StatelessWidget {
-  const _PackHeader({required this.pack, required this.cardCount, required this.ownedCount});
+  const _PackHeader({
+    required this.pack,
+    required this.cardCount,
+    required this.ownedCount,
+  });
 
   final PackModel pack;
   final int cardCount;
@@ -181,7 +190,8 @@ class _PackHeader extends StatelessWidget {
                     width: double.infinity,
                     height: 120,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => _PackImageFallback(mark: pack.mark),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _PackImageFallback(mark: pack.mark),
                   )
                 : _PackImageFallback(mark: pack.mark),
           ),
@@ -215,10 +225,7 @@ class _PackImageFallback extends StatelessWidget {
       height: 120,
       color: colors.secondary,
       alignment: Alignment.center,
-      child: Text(
-        mark,
-        style: AppTypography.h1(context.mutedForeground),
-      ),
+      child: Text(mark, style: AppTypography.h1(context.mutedForeground)),
     );
   }
 }

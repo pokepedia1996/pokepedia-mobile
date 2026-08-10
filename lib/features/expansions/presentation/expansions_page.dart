@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/app_top_bar.dart';
 import '../../../shared/widgets/pack_card.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/expansions_notifier.dart';
 
 /// Ports `app/expansions/page.tsx` — expansions grouped by series.
@@ -89,7 +90,7 @@ class ExpansionsPage extends ConsumerWidget {
                     ],
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const PikachuLoader(),
                 error: (err, __) =>
                     const Center(child: Text('Gagal memuat ekspansi')),
               ),

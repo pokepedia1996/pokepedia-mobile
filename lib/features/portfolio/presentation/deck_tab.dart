@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/deck_model.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'deck_form_sheet.dart';
 
@@ -29,20 +30,28 @@ class _DeckTabState extends ConsumerState<DeckTab> {
   String _query = '';
 
   Future<void> _openCreateSheet() async {
-    final result = await showModalBottomSheet<({String name, String description})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const DeckFormSheet(title: 'Buat Deck Baru', submitLabel: 'Buat'),
-    );
+    final result =
+        await showModalBottomSheet<({String name, String description})>(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) =>
+              const DeckFormSheet(title: 'Buat Deck Baru', submitLabel: 'Buat'),
+        );
     if (result == null || !mounted) return;
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     final res = await ref
         .read(cardOwnershipControllerProvider)
-        .createDeck(userId: user.id, name: result.name, description: result.description);
+        .createDeck(
+          userId: user.id,
+          name: result.name,
+          description: result.description,
+        );
     if (!mounted) return;
     if (res.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error!)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(res.error!)));
       return;
     }
     ScaffoldMessenger.of(
@@ -52,41 +61,60 @@ class _DeckTabState extends ConsumerState<DeckTab> {
   }
 
   Future<void> _openEditSheet(DeckModel deck) async {
-    final result = await showModalBottomSheet<({String name, String description})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DeckFormSheet(
-        title: 'Edit Deck',
-        submitLabel: 'Simpan',
-        initialName: deck.name,
-        initialDescription: deck.description,
-      ),
-    );
+    final result =
+        await showModalBottomSheet<({String name, String description})>(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => DeckFormSheet(
+            title: 'Edit Deck',
+            submitLabel: 'Simpan',
+            initialName: deck.name,
+            initialDescription: deck.description,
+          ),
+        );
     if (result == null || !mounted) return;
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     final error = await ref
         .read(cardOwnershipControllerProvider)
-        .updateDeck(deckId: deck.id, userId: user.id, name: result.name, description: result.description);
+        .updateDeck(
+          deckId: deck.id,
+          userId: user.id,
+          name: result.name,
+          description: result.description,
+        );
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deck diperbarui')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Deck diperbarui')));
   }
 
   Future<void> _confirmDelete(DeckModel deck) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         title: const Text('Hapus deck?'),
-        content: Text('Deck "${deck.name}" dan semua kartu di dalamnya akan dihapus permanen.'),
+        content: Text(
+          'Deck "${deck.name}" dan semua kartu di dalamnya akan dihapus permanen.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.appColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appColors.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Hapus'),
           ),
@@ -101,26 +129,40 @@ class _DeckTabState extends ConsumerState<DeckTab> {
         .deleteDeck(deckId: deck.id, userId: user.id);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deck dihapus')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Deck dihapus')));
   }
 
   Future<void> _duplicate(DeckModel deck) async {
-    final res = await ref.read(cardOwnershipControllerProvider).duplicateDeck(deck.id);
+    final res = await ref
+        .read(cardOwnershipControllerProvider)
+        .duplicateDeck(deck.id);
     if (!mounted) return;
     if (res.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error!)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(res.error!)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deck berhasil diduplikasi')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Deck berhasil diduplikasi')));
   }
 
   Future<void> _copyShareLink(DeckModel deck) async {
-    await Clipboard.setData(ClipboardData(text: 'https://pokepedia.id/deck/${deck.shareCode}'));
+    await Clipboard.setData(
+      ClipboardData(text: 'https://pokepedia.id/deck/${deck.shareCode}'),
+    );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link disalin ke clipboard')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link disalin ke clipboard')));
   }
 
   @override
@@ -130,7 +172,11 @@ class _DeckTabState extends ConsumerState<DeckTab> {
       data: (decks) {
         final visible = _query.isEmpty
             ? decks
-            : decks.where((d) => d.name.toLowerCase().contains(_query.toLowerCase())).toList();
+            : decks
+                  .where(
+                    (d) => d.name.toLowerCase().contains(_query.toLowerCase()),
+                  )
+                  .toList();
         return Column(
           children: [
             Padding(
@@ -167,7 +213,8 @@ class _DeckTabState extends ConsumerState<DeckTab> {
                   ? const EmptyState(
                       icon: Icons.style_outlined,
                       title: 'Belum ada deck',
-                      description: 'Buat deck pertamamu untuk mulai membangun strategi!',
+                      description:
+                          'Buat deck pertamamu untuk mulai membangun strategi!',
                     )
                   : visible.isEmpty
                   ? Center(
@@ -182,7 +229,8 @@ class _DeckTabState extends ConsumerState<DeckTab> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, i) => _DeckTile(
                         deck: visible[i],
-                        onTap: () => context.push(Routes.deckDetail(visible[i].id)),
+                        onTap: () =>
+                            context.push(Routes.deckDetail(visible[i].id)),
                         onEdit: () => _openEditSheet(visible[i]),
                         onDelete: () => _confirmDelete(visible[i]),
                         onDuplicate: () => _duplicate(visible[i]),
@@ -193,7 +241,7 @@ class _DeckTabState extends ConsumerState<DeckTab> {
           ],
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat deck')),
     );
   }
@@ -243,7 +291,11 @@ class _DeckTile extends StatelessWidget {
                     color: colors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
-                  child: Icon(Icons.layers_outlined, color: colors.primary, size: 20),
+                  child: Icon(
+                    Icons.layers_outlined,
+                    color: colors.primary,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -269,14 +321,20 @@ class _DeckTile extends StatelessWidget {
                       Text(
                         '${deck.cardCount}/$_deckMaxCards kartu',
                         style: AppTypography.caption(
-                          full ? context.appSemantic.success : context.mutedForeground,
+                          full
+                              ? context.appSemantic.success
+                              : context.mutedForeground,
                         ),
                       ),
                     ],
                   ),
                 ),
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, color: context.mutedForeground, size: 20),
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: context.mutedForeground,
+                    size: 20,
+                  ),
                   onSelected: (action) {
                     switch (action) {
                       case 'copy':
@@ -292,22 +350,42 @@ class _DeckTile extends StatelessWidget {
                   itemBuilder: (context) => const [
                     PopupMenuItem(
                       value: 'copy',
-                      child: Row(children: [Icon(Icons.link, size: 16), SizedBox(width: 8), Text('Salin Link')]),
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, size: 16),
+                          SizedBox(width: 8),
+                          Text('Salin Link'),
+                        ],
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'duplicate',
                       child: Row(
-                        children: [Icon(Icons.copy_all, size: 16), SizedBox(width: 8), Text('Buat Duplikat')],
+                        children: [
+                          Icon(Icons.copy_all, size: 16),
+                          SizedBox(width: 8),
+                          Text('Buat Duplikat'),
+                        ],
                       ),
                     ),
                     PopupMenuItem(
                       value: 'edit',
-                      child: Row(children: [Icon(Icons.edit_outlined, size: 16), SizedBox(width: 8), Text('Edit')]),
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'delete',
                       child: Row(
-                        children: [Icon(Icons.delete_outline, size: 16), SizedBox(width: 8), Text('Hapus')],
+                        children: [
+                          Icon(Icons.delete_outline, size: 16),
+                          SizedBox(width: 8),
+                          Text('Hapus'),
+                        ],
                       ),
                     ),
                   ],

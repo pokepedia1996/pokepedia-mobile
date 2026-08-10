@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../shared/widgets/pack_card.dart';
+import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../usecase/home_notifier.dart';
 
@@ -50,7 +51,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
             ),
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              child: PikachuLoader(size: 96),
             ),
             error: (_, __) => const SizedBox.shrink(),
           ),

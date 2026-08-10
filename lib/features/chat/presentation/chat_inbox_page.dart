@@ -6,6 +6,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../repository/models/chat_models.dart';
 import '../usecase/chat_notifier.dart';
 
@@ -35,7 +36,7 @@ class ChatInboxPage extends ConsumerWidget {
               itemBuilder: (context, i) => _ThreadTile(thread: threads[i]),
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat pesan')),
         ),
       ),

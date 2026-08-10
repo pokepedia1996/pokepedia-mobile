@@ -7,6 +7,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/pack_model.dart';
+import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/pokeball_icon.dart';
 import '../../usecase/home_notifier.dart';
 
@@ -40,18 +41,15 @@ class RecentlyViewedSection extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: packs.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, i) =>
-                      _RecentPackChip(pack: packs[i]),
+                  itemBuilder: (context, i) => _RecentPackChip(pack: packs[i]),
                 ),
               ),
             ],
           ),
         );
       },
-      loading: () => const SizedBox(
-        height: 108,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      ),
+      loading: () =>
+          const SizedBox(height: 108, child: PikachuLoader(size: 96)),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -84,7 +82,9 @@ class _RecentPackChip extends StatelessWidget {
                   color: colors.secondary,
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
-                child: Center(child: PokeballIcon(size: 22, color: colors.primary)),
+                child: Center(
+                  child: PokeballIcon(size: 22, color: colors.primary),
+                ),
               ),
             ),
             const SizedBox(height: 6),

@@ -15,6 +15,7 @@ import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'deck_tab.dart';
 import 'inventory_tab.dart';
@@ -70,7 +71,8 @@ class _PortfolioPageState extends ConsumerState<PortfolioPage>
                 child: EmptyState(
                   icon: Icons.style_outlined,
                   title: 'Masuk untuk melihat koleksimu',
-                  description: 'Kelola koleksi, deck, inventori, dan wishlist kartu Pokemon-mu.',
+                  description:
+                      'Kelola koleksi, deck, inventori, dan wishlist kartu Pokemon-mu.',
                   action: ElevatedButton(
                     onPressed: () => context.push(Routes.login),
                     child: const Text('Masuk'),
@@ -95,7 +97,12 @@ class _PortfolioPageState extends ConsumerState<PortfolioPage>
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
-                  children: const [_CollectionTab(), DeckTab(), InventoryTab(), _WishlistTab()],
+                  children: const [
+                    _CollectionTab(),
+                    DeckTab(),
+                    InventoryTab(),
+                    _WishlistTab(),
+                  ],
                 ),
               ),
             ],
@@ -121,7 +128,8 @@ class _CardBrowseTab extends ConsumerStatefulWidget {
   final IconData emptyIcon;
   final String emptyTitle;
   final String? emptyDescription;
-  final Widget Function(BuildContext context, List<CardModel> cards)? headerBuilder;
+  final Widget Function(BuildContext context, List<CardModel> cards)?
+  headerBuilder;
 
   @override
   ConsumerState<_CardBrowseTab> createState() => _CardBrowseTabState();
@@ -188,41 +196,39 @@ class _CardBrowseTabState extends ConsumerState<_CardBrowseTab> {
                     crossAxisSpacing: 12,
                     childAspectRatio: 0.62,
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final card = visible[i];
-                      return CardGridItem(
-                        card: card,
-                        onTap: () => context.push(Routes.cardDetail(card.packSlug, card.id)),
-                      );
-                    },
-                    childCount: visible.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    final card = visible[i];
+                    return CardGridItem(
+                      card: card,
+                      onTap: () => context.push(
+                        Routes.cardDetail(card.packSlug, card.id),
+                      ),
+                    );
+                  }, childCount: visible.length),
                 ),
               )
             else
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final card = visible[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: CardListItem(
-                          card: card,
-                          onTap: () => context.push(Routes.cardDetail(card.packSlug, card.id)),
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    final card = visible[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: CardListItem(
+                        card: card,
+                        onTap: () => context.push(
+                          Routes.cardDetail(card.packSlug, card.id),
                         ),
-                      );
-                    },
-                    childCount: visible.length,
-                  ),
+                      ),
+                    );
+                  }, childCount: visible.length),
                 ),
               ),
           ],
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat data')),
     );
   }
@@ -237,16 +243,23 @@ class _CollectionTab extends StatelessWidget {
       provider: collectionProvider,
       emptyIcon: Icons.style_outlined,
       emptyTitle: 'Koleksi masih kosong',
-      emptyDescription: 'Tambahkan kartu yang kamu miliki dari halaman ekspansi.',
+      emptyDescription:
+          'Tambahkan kartu yang kamu miliki dari halaman ekspansi.',
       headerBuilder: (context, cards) {
-        final totalValue = cards.fold<int>(0, (sum, c) => sum + (c.marketPrice ?? 0) * c.owned);
+        final totalValue = cards.fold<int>(
+          0,
+          (sum, c) => sum + (c.marketPrice ?? 0) * c.owned,
+        );
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
             children: [
               _StatChip(label: 'Kartu unik', value: '${cards.length}'),
               const SizedBox(width: 8),
-              _StatChip(label: 'Estimasi nilai', value: formatRupiah(totalValue)),
+              _StatChip(
+                label: 'Estimasi nilai',
+                value: formatRupiah(totalValue),
+              ),
             ],
           ),
         );
@@ -264,7 +277,8 @@ class _WishlistTab extends StatelessWidget {
       provider: wishlistProvider,
       emptyIcon: Icons.favorite_border,
       emptyTitle: 'Wishlist masih kosong',
-      emptyDescription: 'Ketuk ikon hati di halaman detail kartu untuk menambahkannya ke sini.',
+      emptyDescription:
+          'Ketuk ikon hati di halaman detail kartu untuk menambahkannya ke sini.',
     );
   }
 }

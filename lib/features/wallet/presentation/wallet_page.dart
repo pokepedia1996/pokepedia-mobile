@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../repository/models/wallet_models.dart';
 import '../usecase/wallet_notifier.dart';
 
@@ -32,7 +33,10 @@ class WalletPage extends ConsumerWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [colors.primary, colors.primary.withValues(alpha: 0.75)],
+                  colors: [
+                    colors.primary,
+                    colors.primary.withValues(alpha: 0.75),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -43,7 +47,9 @@ class WalletPage extends ConsumerWidget {
                 children: [
                   Text(
                     'Saldo pokepedia.id',
-                    style: AppTypography.bodySm(colors.onPrimary.withValues(alpha: 0.85)),
+                    style: AppTypography.bodySm(
+                      colors.onPrimary.withValues(alpha: 0.85),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   balanceAsync.when(
@@ -65,7 +71,8 @@ class WalletPage extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    error: (_, __) => Text('Rp-', style: AppTypography.h1(colors.onPrimary)),
+                    error: (_, __) =>
+                        Text('Rp-', style: AppTypography.h1(colors.onPrimary)),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -74,7 +81,9 @@ class WalletPage extends ConsumerWidget {
                       onPressed: () => _showWithdrawSheet(context),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: colors.onPrimary,
-                        side: BorderSide(color: colors.onPrimary.withValues(alpha: 0.6)),
+                        side: BorderSide(
+                          color: colors.onPrimary.withValues(alpha: 0.6),
+                        ),
                       ),
                       child: const Text('Tarik Saldo'),
                     ),
@@ -83,7 +92,10 @@ class WalletPage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Text('Riwayat Aktivitas', style: AppTypography.h3(colors.onSurface)),
+            Text(
+              'Riwayat Aktivitas',
+              style: AppTypography.h3(colors.onSurface),
+            ),
             const SizedBox(height: 10),
             activityAsync.when(
               data: (items) {
@@ -101,7 +113,7 @@ class WalletPage extends ConsumerWidget {
               },
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
+                child: PikachuLoader(),
               ),
               error: (_, __) => const Text('Gagal memuat aktivitas'),
             ),
@@ -128,7 +140,10 @@ class WalletPage extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Tarik Saldo', style: AppTypography.h3(context.appColors.onSurface)),
+            Text(
+              'Tarik Saldo',
+              style: AppTypography.h3(context.appColors.onSurface),
+            ),
             const SizedBox(height: 12),
             const TextField(
               keyboardType: TextInputType.number,
@@ -145,7 +160,9 @@ class WalletPage extends ConsumerWidget {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
               child: const Text('Ajukan Penarikan'),
             ),
           ],
@@ -199,7 +216,10 @@ class _ActivityTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.bodySmSemibold(colors.onSurface),
                 ),
-                Text(activity.date, style: AppTypography.caption(context.mutedForeground)),
+                Text(
+                  activity.date,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
               ],
             ),
           ),

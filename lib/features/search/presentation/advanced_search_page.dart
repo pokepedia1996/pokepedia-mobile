@@ -10,6 +10,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/search_notifier.dart';
 
 /// Ports `app/advanced-search/advanced-search-client.tsx`, simplified into
@@ -71,12 +72,17 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        onPressed: () => setState(() => _advancedOpen = !_advancedOpen),
+                        onPressed: () =>
+                            setState(() => _advancedOpen = !_advancedOpen),
                         icon: Icon(
-                          _advancedOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                          _advancedOpen
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
                           size: 16,
                         ),
-                        label: Text(_advancedOpen ? 'Sembunyikan Filter' : 'Filter'),
+                        label: Text(
+                          _advancedOpen ? 'Sembunyikan Filter' : 'Filter',
+                        ),
                       ),
                     ),
                     if (_advancedOpen) ...[
@@ -129,19 +135,19 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
                             onToggle: (n, v) => n.toggleRegulationMark(v),
                           ),
                           _FilterDropdownButton<String>(
-                          label: 'Kelangkaan',
-                          options: options.rarities,
-                          labelOf: (v) => v,
-                          selectedOf: (s) => s.filters.rarities,
-                          onToggle: (n, v) => n.toggleRarity(v),
-                        ),
-                        _FilterDropdownButton<String>(
-                          label: 'Ekspansi',
-                          options: options.packMarks,
-                          labelOf: (v) => v,
-                          selectedOf: (s) => s.packMarks,
-                          onToggle: (n, v) => n.togglePackMark(v),
-                        ),
+                            label: 'Kelangkaan',
+                            options: options.rarities,
+                            labelOf: (v) => v,
+                            selectedOf: (s) => s.filters.rarities,
+                            onToggle: (n, v) => n.toggleRarity(v),
+                          ),
+                          _FilterDropdownButton<String>(
+                            label: 'Ekspansi',
+                            options: options.packMarks,
+                            labelOf: (v) => v,
+                            selectedOf: (s) => s.packMarks,
+                            onToggle: (n, v) => n.togglePackMark(v),
+                          ),
                         ],
                       ),
                     ],
@@ -154,7 +160,7 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
             ),
             Expanded(
               child: state.loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const PikachuLoader()
                   : !state.hasSearched
                   ? EmptyState(
                       icon: Icons.travel_explore,
@@ -240,16 +246,24 @@ class _FilterDropdownButton<T> extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: active ? colors.primary.withValues(alpha: 0.1) : Theme.of(context).cardColor,
+              color: active
+                  ? colors.primary.withValues(alpha: 0.1)
+                  : Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: active ? colors.primary.withValues(alpha: 0.4) : context.borderColor),
+              border: Border.all(
+                color: active
+                    ? colors.primary.withValues(alpha: 0.4)
+                    : context.borderColor,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   label,
-                  style: AppTypography.captionSemibold(active ? colors.primary : context.mutedForeground),
+                  style: AppTypography.captionSemibold(
+                    active ? colors.primary : context.mutedForeground,
+                  ),
                 ),
                 if (active) ...[
                   const SizedBox(width: 6),
@@ -257,8 +271,14 @@ class _FilterDropdownButton<T> extends StatelessWidget {
                     width: 18,
                     height: 18,
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
-                    child: Text('${selected.length}', style: AppTypography.badge(Colors.white)),
+                    decoration: BoxDecoration(
+                      color: colors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${selected.length}',
+                      style: AppTypography.badge(Colors.white),
+                    ),
                   ),
                 ],
                 const SizedBox(width: 4),
@@ -300,7 +320,9 @@ class _FilterDropdownSheet<T> extends StatelessWidget {
           final notifier = ref.read(searchNotifierProvider.notifier);
           final selected = selectedOf(state);
           return ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.6,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -309,7 +331,10 @@ class _FilterDropdownSheet<T> extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(label, style: AppTypography.h3(context.appColors.onSurface)),
+                        child: Text(
+                          label,
+                          style: AppTypography.h3(context.appColors.onSurface),
+                        ),
                       ),
                       if (selected.isNotEmpty)
                         TextButton(

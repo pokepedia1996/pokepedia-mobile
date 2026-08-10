@@ -7,6 +7,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/user_notifier.dart';
 
@@ -64,11 +65,16 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(user.username, style: AppTypography.h3(colors.onSurface)),
+                                  Text(
+                                    user.username,
+                                    style: AppTypography.h3(colors.onSurface),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(
                                     user.joinedAt,
-                                    style: AppTypography.caption(context.mutedForeground),
+                                    style: AppTypography.caption(
+                                      context.mutedForeground,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -76,30 +82,54 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Text(user.bio, style: AppTypography.bodySm(colors.onSurface)),
+                        Text(
+                          user.bio,
+                          style: AppTypography.bodySm(colors.onSurface),
+                        ),
                         const SizedBox(height: 14),
                         Wrap(
                           spacing: 20,
                           runSpacing: 6,
                           children: [
-                            _Stat(label: 'Kartu', value: '${user.collectionCount}'),
-                            _Stat(label: 'Pengikut', value: '${user.followerCount}'),
-                            _Stat(label: 'Trading', value: '${user.totalTrades}'),
+                            _Stat(
+                              label: 'Kartu',
+                              value: '${user.collectionCount}',
+                            ),
+                            _Stat(
+                              label: 'Pengikut',
+                              value: '${user.followerCount}',
+                            ),
+                            _Stat(
+                              label: 'Trading',
+                              value: '${user.totalTrades}',
+                            ),
                             if (user.positivePct != null)
-                              _Stat(label: 'Positif', value: '${user.positivePct}%'),
+                              _Stat(
+                                label: 'Positif',
+                                value: '${user.positivePct}%',
+                              ),
                           ],
                         ),
                         if (user.role != ProfileRole.user) ...[
                           const SizedBox(height: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: colors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(AppRadius.full),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                             ),
                             child: Text(
-                              user.role == ProfileRole.admin ? 'Admin' : 'Kontributor',
-                              style: AppTypography.captionSemibold(colors.primary),
+                              user.role == ProfileRole.admin
+                                  ? 'Admin'
+                                  : 'Kontributor',
+                              style: AppTypography.captionSemibold(
+                                colors.primary,
+                              ),
                             ),
                           ),
                         ],
@@ -108,16 +138,21 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                           width: double.infinity,
                           child: _following
                               ? OutlinedButton(
-                                  onPressed: () => setState(() => _following = false),
+                                  onPressed: () =>
+                                      setState(() => _following = false),
                                   child: const Text('Mengikuti'),
                                 )
                               : ElevatedButton(
-                                  onPressed: () => setState(() => _following = true),
+                                  onPressed: () =>
+                                      setState(() => _following = true),
                                   child: const Text('Ikuti'),
                                 ),
                         ),
                         const SizedBox(height: 20),
-                        Text('Koleksi Unggulan', style: AppTypography.h3(colors.onSurface)),
+                        Text(
+                          'Koleksi Unggulan',
+                          style: AppTypography.h3(colors.onSurface),
+                        ),
                       ],
                     ),
                   ),
@@ -126,27 +161,29 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                   data: (cards) => SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.62,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.62,
+                          ),
                       delegate: SliverChildBuilderDelegate(
-                        (context, i) => CardGridItem(card: cards[i], onTap: () {}),
+                        (context, i) =>
+                            CardGridItem(card: cards[i], onTap: () {}),
                         childCount: cards.length > 6 ? 6 : cards.length,
                       ),
                     ),
                   ),
-                  loading: () => const SliverToBoxAdapter(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+                  loading: () =>
+                      const SliverToBoxAdapter(child: PikachuLoader()),
+                  error: (_, __) =>
+                      const SliverToBoxAdapter(child: SizedBox.shrink()),
                 ),
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const EmptyState(
             icon: Icons.error_outline,
             title: 'Gagal memuat profil',
@@ -169,7 +206,10 @@ class _Stat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
       children: [
-        Text(value, style: AppTypography.bodySemibold(context.appColors.onSurface)),
+        Text(
+          value,
+          style: AppTypography.bodySemibold(context.appColors.onSurface),
+        ),
         const SizedBox(width: 4),
         Text(label, style: AppTypography.caption(context.mutedForeground)),
       ],

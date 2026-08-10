@@ -7,6 +7,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../repository/models/wantlist_model.dart';
 import '../usecase/portfolio_notifier.dart';
 
@@ -36,7 +37,7 @@ class ListsPage extends ConsumerWidget {
               itemBuilder: (context, i) => _ListTile(list: lists[i]),
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat list')),
         ),
       ),
@@ -78,7 +79,10 @@ class _ListTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(list.name, style: AppTypography.bodySmSemibold(colors.onSurface)),
+                  Text(
+                    list.name,
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     '${list.cardCount} kartu · ${list.updatedAt}',

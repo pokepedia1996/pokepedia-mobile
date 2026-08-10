@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/market_notifier.dart';
 
 /// Ports `components/store/storefront-view.tsx` — a seller's storefront.
@@ -105,17 +106,31 @@ class StoreDetailPage extends ConsumerWidget {
                           if (store.onVacation) ...[
                             const SizedBox(height: 10),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: colors.error.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.beach_access_outlined, size: 14, color: colors.error),
+                                  Icon(
+                                    Icons.beach_access_outlined,
+                                    size: 14,
+                                    color: colors.error,
+                                  ),
                                   const SizedBox(width: 6),
-                                  Text('Toko sedang libur', style: AppTypography.captionSemibold(colors.error)),
+                                  Text(
+                                    'Toko sedang libur',
+                                    style: AppTypography.captionSemibold(
+                                      colors.error,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -171,14 +186,16 @@ class StoreDetailPage extends ConsumerWidget {
                               childAspectRatio: 0.42,
                             ),
                         delegate: SliverChildBuilderDelegate(
-                          (context, i) => ListingCard(listing: listings[i], showSeller: false),
+                          (context, i) => ListingCard(
+                            listing: listings[i],
+                            showSeller: false,
+                          ),
                           childCount: listings.length,
                         ),
                       );
                     },
-                    loading: () => const SliverToBoxAdapter(
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
+                    loading: () =>
+                        const SliverToBoxAdapter(child: PikachuLoader()),
                     error: (_, __) => const SliverToBoxAdapter(
                       child: Text('Gagal memuat listing'),
                     ),
@@ -188,7 +205,7 @@ class StoreDetailPage extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
           icon: Icons.error_outline,
           title: 'Gagal memuat toko',

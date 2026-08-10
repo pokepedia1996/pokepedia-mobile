@@ -14,6 +14,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../repository/models/deck_card_entry.dart';
 import '../usecase/portfolio_notifier.dart';
@@ -62,7 +63,9 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
         .read(cardOwnershipControllerProvider)
         .upsertDeckCard(deckId: widget.deckId, cardId: card.id, delta: 1);
     if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(translateDeckCardError(error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(translateDeckCardError(error))));
     }
   }
 
@@ -71,82 +74,126 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
     if (user == null) return;
     final error = await ref
         .read(cardOwnershipControllerProvider)
-        .upsertDeckCard(deckId: widget.deckId, cardId: entry.card.id, delta: delta);
+        .upsertDeckCard(
+          deckId: widget.deckId,
+          cardId: entry.card.id,
+          delta: delta,
+        );
     if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(translateDeckCardError(error))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(translateDeckCardError(error))));
     }
   }
 
   Future<void> _editHeader(String name, String description) async {
-    final result = await showModalBottomSheet<({String name, String description})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DeckFormSheet(
-        title: 'Edit Deck',
-        submitLabel: 'Simpan',
-        initialName: name,
-        initialDescription: description,
-      ),
-    );
+    final result =
+        await showModalBottomSheet<({String name, String description})>(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => DeckFormSheet(
+            title: 'Edit Deck',
+            submitLabel: 'Simpan',
+            initialName: name,
+            initialDescription: description,
+          ),
+        );
     if (result == null || !mounted) return;
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     final error = await ref
         .read(cardOwnershipControllerProvider)
-        .updateDeck(deckId: widget.deckId, userId: user.id, name: result.name, description: result.description);
+        .updateDeck(
+          deckId: widget.deckId,
+          userId: user.id,
+          name: result.name,
+          description: result.description,
+        );
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deck diperbarui')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Deck diperbarui')));
   }
 
   Future<void> _copyShareLink(String shareCode) async {
-    await Clipboard.setData(ClipboardData(text: 'https://pokepedia.id/deck/$shareCode'));
+    await Clipboard.setData(
+      ClipboardData(text: 'https://pokepedia.id/deck/$shareCode'),
+    );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link disalin ke clipboard')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link disalin ke clipboard')));
   }
 
   Future<void> _duplicate() async {
     setState(() => _duplicating = true);
-    final res = await ref.read(cardOwnershipControllerProvider).duplicateDeck(widget.deckId);
+    final res = await ref
+        .read(cardOwnershipControllerProvider)
+        .duplicateDeck(widget.deckId);
     if (!mounted) return;
     setState(() => _duplicating = false);
     if (res.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error!)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(res.error!)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deck berhasil diduplikasi')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Deck berhasil diduplikasi')));
     context.push(Routes.deckDetail(res.deck!.id));
   }
 
-  Future<void> _copyDeckList(List<DeckCardEntry> entries, DeckValidationResult validation) async {
+  Future<void> _copyDeckList(
+    List<DeckCardEntry> entries,
+    DeckValidationResult validation,
+  ) async {
     if (entries.isEmpty) return;
-    final pokemon = entries.where((e) => e.category == DeckCategory.pokemon).toList();
-    final trainer = entries.where((e) => e.category == DeckCategory.trainer).toList();
-    final energy = entries.where((e) => e.category == DeckCategory.energy).toList();
+    final pokemon = entries
+        .where((e) => e.category == DeckCategory.pokemon)
+        .toList();
+    final trainer = entries
+        .where((e) => e.category == DeckCategory.trainer)
+        .toList();
+    final energy = entries
+        .where((e) => e.category == DeckCategory.energy)
+        .toList();
 
     String section(String label, int count, List<DeckCardEntry> group) {
-      final lines = group.map((e) => '${e.quantity} ${e.card.name} ${e.card.expansionCode} ${e.card.collectorNumber}');
+      final lines = group.map(
+        (e) =>
+            '${e.quantity} ${e.card.name} ${e.card.expansionCode} ${e.card.collectorNumber}',
+      );
       return '$label: $count\n${lines.join('\n')}';
     }
 
     final sections = <String>[
-      if (pokemon.isNotEmpty) section('Pokemon', validation.pokemonCount, pokemon),
-      if (trainer.isNotEmpty) section('Trainer', validation.trainerCount, trainer),
+      if (pokemon.isNotEmpty)
+        section('Pokemon', validation.pokemonCount, pokemon),
+      if (trainer.isNotEmpty)
+        section('Trainer', validation.trainerCount, trainer),
       if (energy.isNotEmpty) section('Energy', validation.energyCount, energy),
     ];
     final text = '${sections.join('\n\n')}\n\nTotal: ${validation.totalCards}';
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Daftar deck disalin ke clipboard')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Daftar deck disalin ke clipboard')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final decksAsync = ref.watch(decksProvider);
-    final deck = decksAsync.valueOrNull?.where((d) => d.id == widget.deckId).firstOrNull;
+    final deck = decksAsync.valueOrNull
+        ?.where((d) => d.id == widget.deckId)
+        .firstOrNull;
     final entriesAsync = ref.watch(deckCardsProvider(widget.deckId));
 
     return Scaffold(
@@ -161,9 +208,12 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
         ],
       ),
       body: decksAsync.isLoading && deck == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const PikachuLoader()
           : deck == null
-          ? const EmptyState(icon: Icons.search_off, title: 'Deck tidak ditemukan')
+          ? const EmptyState(
+              icon: Icons.search_off,
+              title: 'Deck tidak ditemukan',
+            )
           : entriesAsync.when(
               data: (entries) {
                 final validation = validateDeck(entries);
@@ -176,7 +226,9 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             deck.description,
-                            style: AppTypography.bodySm(context.mutedForeground),
+                            style: AppTypography.bodySm(
+                              context.mutedForeground,
+                            ),
                           ),
                         ),
                       ),
@@ -199,7 +251,9 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                                   ? const SizedBox(
                                       height: 14,
                                       width: 14,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Icon(Icons.copy_all, size: 16),
                               label: const Text('Duplikat'),
@@ -226,7 +280,8 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _TabChip(
-                              label: 'Deck (${validation.totalCards}/$deckMaxCards)',
+                              label:
+                                  'Deck (${validation.totalCards}/$deckMaxCards)',
                               selected: _tab == 1,
                               onTap: () => setState(() => _tab = 1),
                             ),
@@ -244,7 +299,10 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                               entries: entries,
                               onAdd: _addCard,
                             )
-                          : _DeckPane(entries: entries, onQuantityChange: _changeQuantity),
+                          : _DeckPane(
+                              entries: entries,
+                              onQuantityChange: _changeQuantity,
+                            ),
                     ),
                     if (_tab == 1)
                       Padding(
@@ -252,7 +310,9 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                         child: SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: entries.isEmpty ? null : () => _copyDeckList(entries, validation),
+                            onPressed: entries.isEmpty
+                                ? null
+                                : () => _copyDeckList(entries, validation),
                             icon: const Icon(Icons.checklist, size: 16),
                             label: const Text('Salin Daftar Deck'),
                           ),
@@ -261,7 +321,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                   ],
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const PikachuLoader(),
               error: (_, __) => const Center(child: Text('Gagal memuat deck')),
             ),
     );
@@ -273,7 +333,11 @@ extension _FirstOrNull<T> on Iterable<T> {
 }
 
 class _TabChip extends StatelessWidget {
-  const _TabChip({required this.label, required this.selected, required this.onTap});
+  const _TabChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -291,11 +355,15 @@ class _TabChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? colors.primary : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: selected ? colors.primary : context.borderColor),
+          border: Border.all(
+            color: selected ? colors.primary : context.borderColor,
+          ),
         ),
         child: Text(
           label,
-          style: AppTypography.captionSemibold(selected ? colors.onPrimary : context.mutedForeground),
+          style: AppTypography.captionSemibold(
+            selected ? colors.onPrimary : context.mutedForeground,
+          ),
         ),
       ),
     );
@@ -311,7 +379,8 @@ class _DeckValidityBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final pct = (validation.totalCards / deckMaxCards).clamp(0.0, 1.0);
-    final overLimit = validation.hasOverCopies || validation.totalCards > deckMaxCards;
+    final overLimit =
+        validation.hasOverCopies || validation.totalCards > deckMaxCards;
     final barColor = validation.isValid
         ? context.appSemantic.success
         : overLimit
@@ -386,7 +455,9 @@ class _SearchPane extends StatelessWidget {
     return Consumer(
       builder: (context, ref, _) {
         final trimmed = query.trim();
-        final resultsAsync = trimmed.length >= 2 ? ref.watch(cardSearchPickerProvider(trimmed)) : null;
+        final resultsAsync = trimmed.length >= 2
+            ? ref.watch(cardSearchPickerProvider(trimmed))
+            : null;
         final nameQuantities = _nameQuantities();
 
         return ListView(
@@ -430,12 +501,13 @@ class _SearchPane extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: results.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.62,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.62,
+                        ),
                     itemBuilder: (context, i) {
                       final card = results[i];
                       final isBasic = isBasicEnergy(card);
@@ -465,12 +537,15 @@ class _SearchPane extends StatelessWidget {
                 },
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: PikachuLoader(),
                 ),
                 error: (_, __) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(
-                    child: Text('Gagal memuat hasil pencarian', style: AppTypography.bodySm(context.mutedForeground)),
+                    child: Text(
+                      'Gagal memuat hasil pencarian',
+                      style: AppTypography.bodySm(context.mutedForeground),
+                    ),
                   ),
                 ),
               ),
@@ -522,7 +597,9 @@ class _DeckSearchCard extends StatelessWidget {
             color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(AppRadius.lg),
             border: Border.all(
-              color: thisPrintQty > 0 ? colors.primary.withValues(alpha: 0.5) : context.borderColor,
+              color: thisPrintQty > 0
+                  ? colors.primary.withValues(alpha: 0.5)
+                  : context.borderColor,
             ),
           ),
           child: Column(
@@ -539,8 +616,14 @@ class _DeckSearchCard extends StatelessWidget {
                         width: 22,
                         height: 22,
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
-                        child: Text('$thisPrintQty', style: AppTypography.badge(Colors.white)),
+                        decoration: BoxDecoration(
+                          color: colors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$thisPrintQty',
+                          style: AppTypography.badge(Colors.white),
+                        ),
                       ),
                     ),
                 ],
@@ -561,10 +644,17 @@ class _DeckSearchCard extends StatelessWidget {
                           : maxQty != null
                           ? '$nameQty/$maxQty'
                           : (thisPrintQty > 0 ? '×$thisPrintQty' : ''),
-                      style: AppTypography.caption(blockedByOtherPrints ? colors.error : context.mutedForeground),
+                      style: AppTypography.caption(
+                        blockedByOtherPrints
+                            ? colors.error
+                            : context.mutedForeground,
+                      ),
                     ),
                   ),
-                  Text(card.collectorNumber, style: AppTypography.caption(context.mutedForeground)),
+                  Text(
+                    card.collectorNumber,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
                 ],
               ),
             ],
@@ -590,23 +680,45 @@ class _DeckPane extends StatelessWidget {
         description: 'Cari dan tambahkan kartu dari tab Cari Kartu.',
       );
     }
-    final pokemon = entries.where((e) => e.category == DeckCategory.pokemon).toList();
-    final trainer = entries.where((e) => e.category == DeckCategory.trainer).toList();
-    final energy = entries.where((e) => e.category == DeckCategory.energy).toList();
+    final pokemon = entries
+        .where((e) => e.category == DeckCategory.pokemon)
+        .toList();
+    final trainer = entries
+        .where((e) => e.category == DeckCategory.trainer)
+        .toList();
+    final energy = entries
+        .where((e) => e.category == DeckCategory.energy)
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        _DeckCategorySection(label: 'Pokemon', entries: pokemon, onQuantityChange: onQuantityChange),
-        _DeckCategorySection(label: 'Trainer', entries: trainer, onQuantityChange: onQuantityChange),
-        _DeckCategorySection(label: 'Energy', entries: energy, onQuantityChange: onQuantityChange),
+        _DeckCategorySection(
+          label: 'Pokemon',
+          entries: pokemon,
+          onQuantityChange: onQuantityChange,
+        ),
+        _DeckCategorySection(
+          label: 'Trainer',
+          entries: trainer,
+          onQuantityChange: onQuantityChange,
+        ),
+        _DeckCategorySection(
+          label: 'Energy',
+          entries: energy,
+          onQuantityChange: onQuantityChange,
+        ),
       ],
     );
   }
 }
 
 class _DeckCategorySection extends StatelessWidget {
-  const _DeckCategorySection({required this.label, required this.entries, required this.onQuantityChange});
+  const _DeckCategorySection({
+    required this.label,
+    required this.entries,
+    required this.onQuantityChange,
+  });
 
   final String label;
   final List<DeckCardEntry> entries;
@@ -626,7 +738,8 @@ class _DeckCategorySection extends StatelessWidget {
             style: AppTypography.overline(context.mutedForeground),
           ),
           const SizedBox(height: 8),
-          for (final e in entries) _DeckCardRow(entry: e, onQuantityChange: onQuantityChange),
+          for (final e in entries)
+            _DeckCardRow(entry: e, onQuantityChange: onQuantityChange),
         ],
       ),
     );
@@ -653,7 +766,13 @@ class _DeckCardRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: 36, child: CardArt(imageUrl: entry.card.imageUrl, borderRadius: AppRadius.sm)),
+          SizedBox(
+            width: 36,
+            child: CardArt(
+              imageUrl: entry.card.imageUrl,
+              borderRadius: AppRadius.sm,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

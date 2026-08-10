@@ -2,10 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lottie/lottie.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../usecase/home_notifier.dart';
 
 const _gateCapDuration = Duration(seconds: 3);
@@ -57,25 +56,7 @@ class _HomeLoadingGateState extends ConsumerState<HomeLoadingGate> {
           Positioned.fill(
             child: ColoredBox(
               color: context.appColors.surface,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 180,
-                    child: Lottie.asset(
-                      'assets/animation/pikachu.json',
-                      repeat: true,
-                    ),
-                  ),
-                  Transform.translate(
-                    offset: const Offset(0, -24),
-                    child: Text(
-                      'Memuat...',
-                      style: AppTypography.h3(context.mutedForeground),
-                    ),
-                  ),
-                ],
-              ),
+              child: const PikachuLoader(size: 180, label: 'Memuat...'),
             ),
           ),
       ],

@@ -10,6 +10,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../repository/models/order_model.dart';
 import '../usecase/orders_notifier.dart';
@@ -21,12 +22,7 @@ class OrderDetailPage extends ConsumerWidget {
 
   final String slug;
 
-  static const _steps = [
-    'Menunggu Dikirim',
-    'Dikirim',
-    'Diterima',
-    'Selesai',
-  ];
+  static const _steps = ['Menunggu Dikirim', 'Dikirim', 'Diterima', 'Selesai'];
 
   int _stepIndex(OrderStatus status) {
     switch (status) {
@@ -91,7 +87,11 @@ class OrderDetailPage extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, size: 18, color: colors.error),
+                        Icon(
+                          Icons.error_outline,
+                          size: 18,
+                          color: colors.error,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -105,14 +105,24 @@ class OrderDetailPage extends ConsumerWidget {
                     ),
                   ),
                 const SizedBox(height: 20),
-                Text('Penjual', style: AppTypography.captionSemibold(context.mutedForeground)),
+                Text(
+                  'Penjual',
+                  style: AppTypography.captionSemibold(context.mutedForeground),
+                ),
                 const SizedBox(height: 4),
-                Text(order.storeName, style: AppTypography.bodySmSemibold(colors.onSurface)),
+                Text(
+                  order.storeName,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
                 if (order.trackingNumber != null) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(Icons.local_shipping_outlined, size: 14, color: context.mutedForeground),
+                      Icon(
+                        Icons.local_shipping_outlined,
+                        size: 14,
+                        color: context.mutedForeground,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '${order.courier} · ${order.trackingNumber}',
@@ -122,31 +132,47 @@ class OrderDetailPage extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: 16),
-                Text('Item Pesanan', style: AppTypography.captionSemibold(context.mutedForeground)),
+                Text(
+                  'Item Pesanan',
+                  style: AppTypography.captionSemibold(context.mutedForeground),
+                ),
                 const SizedBox(height: 8),
                 for (final item in order.items) _OrderItemTile(item: item),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     border: Border(top: BorderSide(color: context.borderColor)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Total', style: AppTypography.bodySemibold(colors.onSurface)),
-                      Text(formatRupiah(order.total), style: AppTypography.bodySemibold(colors.onSurface)),
+                      Text(
+                        'Total',
+                        style: AppTypography.bodySemibold(colors.onSurface),
+                      ),
+                      Text(
+                        formatRupiah(order.total),
+                        style: AppTypography.bodySemibold(colors.onSurface),
+                      ),
                     ],
                   ),
                 ),
-                if (order.status == OrderStatus.shipped || order.status == OrderStatus.received) ...[
+                if (order.status == OrderStatus.shipped ||
+                    order.status == OrderStatus.received) ...[
                   const SizedBox(height: 16),
                   OutlinedButton(
-                    onPressed: () => context.push(Routes.orderOpenDispute(slug)),
+                    onPressed: () =>
+                        context.push(Routes.orderOpenDispute(slug)),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(46),
                       foregroundColor: colors.error,
-                      side: BorderSide(color: colors.error.withValues(alpha: 0.4)),
+                      side: BorderSide(
+                        color: colors.error.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: const Text('Ajukan Sengketa'),
                   ),
@@ -158,8 +184,11 @@ class OrderDetailPage extends ConsumerWidget {
                       return Padding(
                         padding: const EdgeInsets.only(top: 16),
                         child: OutlinedButton(
-                          onPressed: () => context.push(Routes.orderDispute(slug)),
-                          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                          onPressed: () =>
+                              context.push(Routes.orderDispute(slug)),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
                           child: const Text('Lihat Detail Sengketa'),
                         ),
                       );
@@ -170,7 +199,7 @@ class OrderDetailPage extends ConsumerWidget {
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat pesanan')),
         ),
       ),
@@ -203,21 +232,33 @@ class _OrderItemTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.card.name, style: AppTypography.bodySmSemibold(colors.onSurface)),
+                Text(
+                  item.card.name,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
                     ConditionBadge(condition: item.condition),
                     const SizedBox(width: 6),
-                    Text('×${item.matchedQuantity}', style: AppTypography.caption(context.mutedForeground)),
+                    Text(
+                      '×${item.matchedQuantity}',
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(item.status.label, style: AppTypography.caption(context.mutedForeground)),
+                Text(
+                  item.status.label,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
               ],
             ),
           ),
-          Text(formatRupiah(item.subtotal), style: AppTypography.bodySmSemibold(colors.onSurface)),
+          Text(
+            formatRupiah(item.subtotal),
+            style: AppTypography.bodySmSemibold(colors.onSurface),
+          ),
         ],
       ),
     );
@@ -246,7 +287,9 @@ class _Stepper extends StatelessWidget {
                     height: 18,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: i <= activeIndex ? colors.primary : colors.secondary,
+                      color: i <= activeIndex
+                          ? colors.primary
+                          : colors.secondary,
                     ),
                     child: i <= activeIndex
                         ? const Icon(Icons.check, size: 12, color: Colors.white)
@@ -256,7 +299,9 @@ class _Stepper extends StatelessWidget {
                     Container(
                       width: 2,
                       height: 28,
-                      color: i < activeIndex ? colors.primary : context.borderColor,
+                      color: i < activeIndex
+                          ? colors.primary
+                          : context.borderColor,
                     ),
                 ],
               ),

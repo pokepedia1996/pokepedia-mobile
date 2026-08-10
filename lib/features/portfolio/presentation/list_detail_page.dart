@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/portfolio_notifier.dart';
 
 /// Ports `app/portfolio/list/[id]/page.tsx`.
@@ -40,7 +41,7 @@ class ListDetailPage extends ConsumerWidget {
                   CardGridItem(card: cards[i], onTap: () {}),
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const PikachuLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat list')),
         ),
       ),

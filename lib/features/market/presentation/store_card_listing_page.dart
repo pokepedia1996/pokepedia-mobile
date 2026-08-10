@@ -13,6 +13,7 @@ import '../../../shared/models/store_model.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
@@ -22,11 +23,22 @@ import '../../expansions/presentation/widgets/card_details_section.dart';
 import '../usecase/market_notifier.dart';
 
 const _monthNamesIdFull = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
 ];
 
-String _formatDateId(DateTime date) => '${date.day} ${_monthNamesIdFull[date.month - 1]}';
+String _formatDateId(DateTime date) =>
+    '${date.day} ${_monthNamesIdFull[date.month - 1]}';
 
 /// Ports `app/market/[slug]/card/[cardId]/page.tsx` — `PerSellerCardDetail`
 /// + `StoreCardDetailView` + `StorePurchasePanel` — a single seller's
@@ -40,13 +52,18 @@ String _formatDateId(DateTime date) => '${date.day} ${_monthNamesIdFull[date.mon
 /// `StoreCardDetailView` backs both pages on the web. Report/admin actions
 /// from the web panel are still out of scope.
 class StoreCardListingPage extends ConsumerStatefulWidget {
-  const StoreCardListingPage({super.key, required this.storeSlug, required this.cardId});
+  const StoreCardListingPage({
+    super.key,
+    required this.storeSlug,
+    required this.cardId,
+  });
 
   final String storeSlug;
   final int cardId;
 
   @override
-  ConsumerState<StoreCardListingPage> createState() => _StoreCardListingPageState();
+  ConsumerState<StoreCardListingPage> createState() =>
+      _StoreCardListingPageState();
 }
 
 class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
@@ -90,7 +107,9 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(_following ? 'Mengikuti $storeName' : 'Berhenti mengikuti $storeName'),
+        content: Text(
+          _following ? 'Mengikuti $storeName' : 'Berhenti mengikuti $storeName',
+        ),
       ),
     );
   }
@@ -98,13 +117,20 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(
-      storeCardListingsProvider((storeSlug: widget.storeSlug, cardId: widget.cardId)),
+      storeCardListingsProvider((
+        storeSlug: widget.storeSlug,
+        cardId: widget.cardId,
+      )),
     );
 
     return Scaffold(
       appBar: AppBar(
         title: async.when(
-          data: (data) => Text(data == null || data.listings.isEmpty ? 'Kartu' : data.listings.first.card.name),
+          data: (data) => Text(
+            data == null || data.listings.isEmpty
+                ? 'Kartu'
+                : data.listings.first.card.name,
+          ),
           loading: () => const Text('Memuat...'),
           error: (_, __) => const Text('Kartu'),
         ),
@@ -115,9 +141,11 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             return EmptyState(
               icon: Icons.storefront_outlined,
               title: 'Listing tidak lagi tersedia',
-              description: 'Penjual ini mungkin sudah kehabisan atau menghentikan listing kartu ini.',
+              description:
+                  'Penjual ini mungkin sudah kehabisan atau menghentikan listing kartu ini.',
               action: OutlinedButton(
-                onPressed: () => context.push(Routes.storeDetail(widget.storeSlug)),
+                onPressed: () =>
+                    context.push(Routes.storeDetail(widget.storeSlug)),
                 child: const Text('Lihat toko'),
               ),
             );
@@ -130,8 +158,10 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
               cheapestByCondition[listing.condition] = listing;
             }
           }
-          final activeCondition = _selectedCondition ?? data.listings.first.condition;
-          final active = cheapestByCondition[activeCondition] ?? data.listings.first;
+          final activeCondition =
+              _selectedCondition ?? data.listings.first.condition;
+          final active =
+              cheapestByCondition[activeCondition] ?? data.listings.first;
           final card = active.card;
           final store = data.store;
 
@@ -150,14 +180,20 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                     ),
                     child: Hero(
                       tag: 'card-image-${card.id}',
-                      child: SizedBox(width: 220, child: CardArt(imageUrl: card.imageUrl)),
+                      child: SizedBox(
+                        width: 220,
+                        child: CardArt(imageUrl: card.imageUrl),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
 
                 // Identity header.
-                Text(card.name, style: AppTypography.h2(context.appColors.onSurface)),
+                Text(
+                  card.name,
+                  style: AppTypography.h2(context.appColors.onSurface),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   '${card.expansionCode.toUpperCase()} · No. ${card.collectorNumber}',
@@ -165,11 +201,15 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                 ),
                 if (card.rarity != null) ...[
                   const SizedBox(height: 2),
-                  Text(card.rarity!, style: AppTypography.bodySm(context.mutedForeground)),
+                  Text(
+                    card.rarity!,
+                    style: AppTypography.bodySm(context.mutedForeground),
+                  ),
                 ],
                 const SizedBox(height: 8),
                 OutlinedButton(
-                  onPressed: () => context.push(Routes.cardDetail(card.packSlug, card.id)),
+                  onPressed: () =>
+                      context.push(Routes.cardDetail(card.packSlug, card.id)),
                   child: const Text('Lihat detail kartu'),
                 ),
                 const SizedBox(height: 20),
@@ -184,7 +224,8 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                   active: active,
                   otherSellersCount: data.otherSellersCount,
                   globalCardHref: Routes.cardDetail(card.packSlug, card.id),
-                  onSelectCondition: (c) => setState(() => _selectedCondition = c),
+                  onSelectCondition: (c) =>
+                      setState(() => _selectedCondition = c),
                   vacationHard: store.vacationMode == 'hard',
                   onAddToCart: (qty) => _addToCart(active, qty),
                   onMakeOffer: _makeOffer,
@@ -197,7 +238,8 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                   feedbackScore: data.feedbackScore,
                   following: _following,
                   onToggleFollow: () => _toggleFollow(store.storeName),
-                  onContact: () => context.push(Routes.chatThread(store.handle)),
+                  onContact: () =>
+                      context.push(Routes.chatThread(store.handle)),
                 ),
                 const SizedBox(height: 20),
 
@@ -207,7 +249,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
           icon: Icons.error_outline,
           title: 'Gagal memuat listing',
@@ -241,9 +283,18 @@ class _VacationBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.beach_access_outlined, size: 16, color: Colors.amber),
+          const Icon(
+            Icons.beach_access_outlined,
+            size: 16,
+            color: Colors.amber,
+          ),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: AppTypography.caption(Colors.amber.shade900))),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTypography.caption(Colors.amber.shade900),
+            ),
+          ),
         ],
       ),
     );
@@ -303,7 +354,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
     // `CONDITION_COMPANIES` — "Raw" (NM/LP/MP/HP) plus PSA/BGS/CGC/EGS.
     final byCompany = <String, List<CardCondition>>{};
     for (final condition in cheapestByCondition.keys) {
-      byCompany.putIfAbsent(condition.gradingCompany ?? 'Raw', () => []).add(condition);
+      byCompany
+          .putIfAbsent(condition.gradingCompany ?? 'Raw', () => [])
+          .add(condition);
     }
     const companyOrder = ['Raw', 'PSA', 'BGS', 'CGC', 'EGS'];
 
@@ -328,7 +381,12 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(company, style: AppTypography.captionSemibold(context.mutedForeground)),
+                          Text(
+                            company,
+                            style: AppTypography.captionSemibold(
+                              context.mutedForeground,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           Wrap(
                             spacing: 6,
@@ -362,10 +420,15 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isBid ? semantic.bid : semantic.ask,
-                                  borderRadius: BorderRadius.circular(AppRadius.full),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.full,
+                                  ),
                                 ),
                                 child: Text(
                                   active.condition.label,
@@ -375,7 +438,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                               const SizedBox(width: 6),
                               Text(
                                 '${active.available} tersedia',
-                                style: AppTypography.caption(context.mutedForeground),
+                                style: AppTypography.caption(
+                                  context.mutedForeground,
+                                ),
                               ),
                             ],
                           ),
@@ -390,7 +455,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                               onTap: () => context.push(globalCardHref),
                               child: Text(
                                 'Lihat $otherSellersCount listing lain →',
-                                style: AppTypography.captionSemibold(colors.primary),
+                                style: AppTypography.captionSemibold(
+                                  colors.primary,
+                                ),
                               ),
                             ),
                           ],
@@ -409,7 +476,10 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                 if (widget.vacationHard) ...[
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amber.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -431,7 +501,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                           label: const Text('Buat Penawaran'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: context.appSemantic.success,
-                            side: BorderSide(color: context.appSemantic.success),
+                            side: BorderSide(
+                              color: context.appSemantic.success,
+                            ),
                           ),
                         ),
                       ),
@@ -443,7 +515,10 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                         onPressed: active.available <= 0 || widget.vacationHard
                             ? null
                             : () => widget.onAddToCart(_qty),
-                        icon: const Icon(Icons.shopping_cart_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 16,
+                        ),
                         label: const Text('Tambah ke Keranjang'),
                       ),
                     ),
@@ -459,7 +534,11 @@ class _PurchasePanelState extends State<_PurchasePanel> {
 }
 
 class _ConditionPill extends StatelessWidget {
-  const _ConditionPill({required this.condition, required this.active, required this.onTap});
+  const _ConditionPill({
+    required this.condition,
+    required this.active,
+    required this.onTap,
+  });
 
   final CardCondition condition;
   final bool active;
@@ -475,12 +554,16 @@ class _ConditionPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: active ? colors.primary : Colors.transparent,
-          border: Border.all(color: active ? colors.primary : context.borderColor),
+          border: Border.all(
+            color: active ? colors.primary : context.borderColor,
+          ),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: Text(
           condition.short,
-          style: AppTypography.captionSemibold(active ? colors.onPrimary : context.mutedForeground),
+          style: AppTypography.captionSemibold(
+            active ? colors.onPrimary : context.mutedForeground,
+          ),
         ),
       ),
     );
@@ -521,12 +604,18 @@ class _SellerCard extends StatelessWidget {
         children: [
           InkWell(
             onTap: () => context.push(Routes.storeDetail(storeSlug)),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.lg),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  SellerAvatar(name: listing.storeName, imageUrl: listing.sellerImageUrl, size: 40),
+                  SellerAvatar(
+                    name: listing.storeName,
+                    imageUrl: listing.sellerImageUrl,
+                    size: 40,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -539,12 +628,18 @@ class _SellerCard extends StatelessWidget {
                                 listing.storeName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppTypography.bodySmSemibold(colors.primary),
+                                style: AppTypography.bodySmSemibold(
+                                  colors.primary,
+                                ),
                               ),
                             ),
                             if (listing.isVerified) ...[
                               const SizedBox(width: 4),
-                              Icon(Icons.verified, size: 14, color: colors.primary),
+                              Icon(
+                                Icons.verified,
+                                size: 14,
+                                color: colors.primary,
+                              ),
                             ],
                             const SizedBox(width: 6),
                             ReputationStar(score: feedbackScore, size: 13),
@@ -562,14 +657,20 @@ class _SellerCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              Icon(Icons.location_on_outlined, size: 11, color: context.mutedForeground),
+                              Icon(
+                                Icons.location_on_outlined,
+                                size: 11,
+                                color: context.mutedForeground,
+                              ),
                               const SizedBox(width: 2),
                               Expanded(
                                 child: Text(
                                   listing.cityName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption(context.mutedForeground),
+                                  style: AppTypography.caption(
+                                    context.mutedForeground,
+                                  ),
                                 ),
                               ),
                             ],

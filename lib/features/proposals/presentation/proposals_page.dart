@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../repository/models/bid_proposal_model.dart';
 import '../repository/models/listing_offer_model.dart';
@@ -117,7 +118,7 @@ class _OffersTab extends ConsumerWidget {
           itemBuilder: (context, i) => _OfferTile(offer: items[i]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat penawaran')),
     );
   }
@@ -158,7 +159,10 @@ class _OfferTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(offer.storeName, style: AppTypography.caption(context.mutedForeground)),
+          Text(
+            offer.storeName,
+            style: AppTypography.caption(context.mutedForeground),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -170,13 +174,16 @@ class _OfferTile extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   formatRupiah(offer.listingPrice),
-                  style: AppTypography.caption(context.mutedForeground).copyWith(
-                    decoration: TextDecoration.lineThrough,
-                  ),
+                  style: AppTypography.caption(
+                    context.mutedForeground,
+                  ).copyWith(decoration: TextDecoration.lineThrough),
                 ),
               ],
               const Spacer(),
-              Text(formatRelativeId(offer.createdAt), style: AppTypography.caption(context.mutedForeground)),
+              Text(
+                formatRelativeId(offer.createdAt),
+                style: AppTypography.caption(context.mutedForeground),
+              ),
             ],
           ),
           if (offer.isCountered) ...[
@@ -206,7 +213,8 @@ class _ReceivedProposalsTab extends ConsumerWidget {
           return const EmptyState(
             icon: Icons.inbox_outlined,
             title: 'Belum ada proposal diterima',
-            description: 'Proposal muncul saat penjual menawarkan kartu untuk bid (WTB) aktifmu.',
+            description:
+                'Proposal muncul saat penjual menawarkan kartu untuk bid (WTB) aktifmu.',
           );
         }
         return ListView.separated(
@@ -216,7 +224,7 @@ class _ReceivedProposalsTab extends ConsumerWidget {
           itemBuilder: (context, i) => _BidProposalTile(proposal: items[i]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat proposal')),
     );
   }
@@ -269,7 +277,10 @@ class _BidProposalTile extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          Text(formatRelativeId(proposal.createdAt), style: AppTypography.caption(context.mutedForeground)),
+          Text(
+            formatRelativeId(proposal.createdAt),
+            style: AppTypography.caption(context.mutedForeground),
+          ),
         ],
       ),
     );

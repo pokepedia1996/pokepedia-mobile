@@ -10,6 +10,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/store_card.dart';
 import '../usecase/market_notifier.dart';
 
@@ -518,7 +519,7 @@ class _ListingGrid extends ConsumerWidget {
           itemBuilder: (context, i) => ListingCard(listing: listings[i]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat listing')),
     );
   }
@@ -551,7 +552,7 @@ class _StoreDirectory extends ConsumerWidget {
           },
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat toko')),
     );
   }

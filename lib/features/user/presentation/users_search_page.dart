@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/models/user_model.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/user_notifier.dart';
 
 /// Ports `app/users/page.tsx`.
@@ -55,8 +56,9 @@ class UsersSearchPage extends ConsumerWidget {
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const Center(child: Text('Gagal memuat pengguna')),
+                loading: () => const PikachuLoader(),
+                error: (_, __) =>
+                    const Center(child: Text('Gagal memuat pengguna')),
               ),
             ),
           ],
@@ -93,7 +95,10 @@ class _UserTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(user.username, style: AppTypography.bodySmSemibold(colors.onSurface)),
+                  Text(
+                    user.username,
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
                   Text(
                     '${user.collectionCount} kartu · ${user.followerCount} pengikut',
                     style: AppTypography.caption(context.mutedForeground),

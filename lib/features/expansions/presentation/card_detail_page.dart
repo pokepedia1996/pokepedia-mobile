@@ -15,6 +15,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/listing_card.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
@@ -85,11 +86,6 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: cardAsync.when(
-          data: (card) => Text(card?.name ?? 'Kartu'),
-          loading: () => const Text('Memuat...'),
-          error: (_, __) => const Text('Kartu'),
-        ),
         actions: [
           IconButton(
             icon: _wishlistToggling
@@ -227,7 +223,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
                   },
                   loading: () => const Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator()),
+                    child: PikachuLoader(),
                   ),
                   error: (_, __) => const Text('Gagal memuat listing'),
                 ),
@@ -239,7 +235,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
           icon: Icons.error_outline,
           title: 'Gagal memuat kartu',
