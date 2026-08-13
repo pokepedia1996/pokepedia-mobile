@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Address, shipping, coupon, and payment only exist as a real, working
 /// flow on pokepedia-web — those routes authenticate via browser cookies
@@ -51,13 +52,18 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
   /// off anything else — bank/e-wallet app deep links, `intent:`/`market:`
   /// URIs some payment channels use, `mailto:`, etc. — to the OS so those
   /// apps open natively instead of failing to load in-WebView.
-  Future<NavigationDecision> _handleNavigation(NavigationRequest request) async {
+  Future<NavigationDecision> _handleNavigation(
+    NavigationRequest request,
+  ) async {
     final uri = Uri.tryParse(request.url);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
       return NavigationDecision.navigate;
     }
     if (uri != null && await launcher.canLaunchUrl(uri)) {
-      await launcher.launchUrl(uri, mode: launcher.LaunchMode.externalApplication);
+      await launcher.launchUrl(
+        uri,
+        mode: launcher.LaunchMode.externalApplication,
+      );
     }
     return NavigationDecision.prevent;
   }
@@ -65,7 +71,10 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
   Future<void> _openInBrowser() async {
     final url = await _controller.currentUrl();
     if (url == null) return;
-    await launcher.launchUrl(Uri.parse(url), mode: launcher.LaunchMode.externalApplication);
+    await launcher.launchUrl(
+      Uri.parse(url),
+      mode: launcher.LaunchMode.externalApplication,
+    );
   }
 
   Future<bool> _handleBack() async {
@@ -87,8 +96,7 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Checkout'),
+        appBar: TransparentAppBar(
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Ports `app/orders/[slug]/open-dispute/page.tsx`.
 class OrderDisputePage extends StatefulWidget {
@@ -36,13 +37,16 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Scaffold(
-      appBar: AppBar(title: Text('Sengketa ${widget.slug}')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Alasan sengketa', style: AppTypography.bodySmSemibold(colors.onSurface)),
+            Text(
+              'Alasan sengketa',
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
             const SizedBox(height: 8),
             for (final reason in _reasons)
               InkWell(
@@ -57,16 +61,24 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
                             ? Icons.radio_button_checked
                             : Icons.radio_button_off,
                         size: 18,
-                        color: _reason == reason ? colors.primary : context.mutedForeground,
+                        color: _reason == reason
+                            ? colors.primary
+                            : context.mutedForeground,
                       ),
                       const SizedBox(width: 10),
-                      Text(reason, style: AppTypography.bodySm(colors.onSurface)),
+                      Text(
+                        reason,
+                        style: AppTypography.bodySm(colors.onSurface),
+                      ),
                     ],
                   ),
                 ),
               ),
             const SizedBox(height: 12),
-            Text('Detail tambahan', style: AppTypography.bodySmSemibold(colors.onSurface)),
+            Text(
+              'Detail tambahan',
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _details,

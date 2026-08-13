@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/chat_notifier.dart';
 
 /// Ports `components/chat/chat-room.tsx`.
@@ -31,9 +32,9 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.slug)),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: Column(
           children: [
             Expanded(
@@ -55,7 +56,9 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                       ),
                       constraints: const BoxConstraints(maxWidth: 260),
                       decoration: BoxDecoration(
-                        color: message.fromMe ? colors.primary : colors.secondary,
+                        color: message.fromMe
+                            ? colors.primary
+                            : colors.secondary,
                         borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
                       child: Column(
@@ -64,7 +67,9 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                           Text(
                             message.text,
                             style: AppTypography.bodySm(
-                              message.fromMe ? colors.onPrimary : colors.onSurface,
+                              message.fromMe
+                                  ? colors.onPrimary
+                                  : colors.onSurface,
                             ),
                           ),
                           const SizedBox(height: 3),

@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/bid_proposal_model.dart';
 import '../repository/models/listing_offer_model.dart';
 import '../usecase/proposals_notifier.dart';
@@ -41,8 +42,7 @@ class _ProposalsPageState extends ConsumerState<ProposalsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Proposal Saya'),
+      appBar: TransparentAppBar(
         bottom: TabBar(
           controller: _tabController,
           labelColor: context.appColors.primary,

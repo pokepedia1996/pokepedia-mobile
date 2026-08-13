@@ -64,6 +64,7 @@ class ListingModel {
     this.sellerAvatarUrl,
     this.storeLogoUrl,
     this.sellerFeedbackScore = 0,
+    this.photoUrls = const [],
   });
 
   final int id;
@@ -98,6 +99,12 @@ class ListingModel {
   /// `seller_profiles`' reputation score (`positive - negative` review
   /// counts), used by the seller footer's reputation star.
   final int sellerFeedbackScore;
+
+  /// `listings.photo_urls` — the seller's own photos of this exact copy. The
+  /// per-seller card page shows the first as the hero image (falling back to
+  /// the catalog artwork) with the rest as thumbnails, like `heroPhotos` in
+  /// `store-card-detail.tsx`.
+  final List<String> photoUrls;
 
   /// `quantity - qty_locked`, i.e. what a buyer can actually purchase.
   int get available => quantity - qtyLocked;
@@ -141,6 +148,10 @@ class ListingModel {
       sellerAvatarUrl: proxyImageUrl(sellerAvatarUrl),
       storeLogoUrl: proxyImageUrl(storeLogoUrl),
       sellerFeedbackScore: sellerFeedbackScore,
+      photoUrls: ((row['photo_urls'] as List?) ?? const [])
+          .map((u) => proxyImageUrl(u as String?))
+          .whereType<String>()
+          .toList(),
     );
   }
 

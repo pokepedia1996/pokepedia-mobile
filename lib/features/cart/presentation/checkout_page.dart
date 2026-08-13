@@ -6,6 +6,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/checkout_dummy_data.dart';
 import '../repository/checkout_pricing.dart';
 import '../repository/models/cart_item.dart';
@@ -115,7 +116,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
   }
 
-  void _selectCourier(String sellerId, CourierOption option, int sellerSubtotal) {
+  void _selectCourier(
+    String sellerId,
+    CourierOption option,
+    int sellerSubtotal,
+  ) {
     setState(() {
       _selectedCourier[sellerId] = option;
       if (!option.insuranceAvailable) {
@@ -195,7 +200,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _handleCheckout(_CalcResult calc, bool payDisabled) async {
@@ -256,9 +263,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         _paymentMethod == PaymentMethod.wallet;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: items.isEmpty
             ? const EmptyState(
                 icon: Icons.shopping_cart_outlined,

@@ -16,6 +16,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/deck_card_entry.dart';
 import '../usecase/portfolio_notifier.dart';
 import '../utils/deck_validation.dart';
@@ -197,8 +198,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
     final entriesAsync = ref.watch(deckCardsProvider(widget.deckId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(deck?.name ?? 'Deck'),
+      appBar: TransparentAppBar(
         actions: [
           if (deck != null)
             IconButton(

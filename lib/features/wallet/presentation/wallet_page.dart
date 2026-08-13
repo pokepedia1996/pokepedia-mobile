@@ -7,6 +7,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/wallet_models.dart';
 import '../usecase/wallet_notifier.dart';
 
@@ -22,9 +23,9 @@ class WalletPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Saldo')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [

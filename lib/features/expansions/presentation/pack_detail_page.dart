@@ -13,6 +13,7 @@ import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
 
@@ -47,14 +48,9 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
     });
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: cardsAsync.when(
           data: (cards) {
             final pack = packAsync.valueOrNull;

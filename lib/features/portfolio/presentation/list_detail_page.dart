@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/portfolio_notifier.dart';
 
 /// Ports `app/portfolio/list/[id]/page.tsx`.
@@ -17,9 +18,9 @@ class ListDetailPage extends ConsumerWidget {
     final async = ref.watch(listCardsProvider(listId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Detail List')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (cards) {
             if (cards.isEmpty) {

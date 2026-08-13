@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/chat_models.dart';
 import '../usecase/chat_notifier.dart';
 
@@ -18,9 +19,9 @@ class ChatInboxPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(chatThreadsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Pesan')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (threads) {
             if (threads.isEmpty) {

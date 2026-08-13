@@ -10,6 +10,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/quantity_selector.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/cart_notifier.dart';
 
 /// Ports `app/cart/page.tsx` / `components/cart/cart-client.tsx`.
@@ -23,9 +24,9 @@ class CartPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Keranjang')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: items.isEmpty
             ? const EmptyState(
                 icon: Icons.shopping_cart_outlined,

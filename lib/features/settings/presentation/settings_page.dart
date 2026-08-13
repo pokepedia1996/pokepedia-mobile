@@ -5,6 +5,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Ports `app/settings/page.tsx` — `components/seller/settings-client.tsx`'s
 /// buyer-facing counterpart (profile fields + notification toggles).
@@ -43,9 +44,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Scaffold(
-      appBar: AppBar(title: const Text('Pengaturan akun')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -76,19 +77,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               children: [
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('Email', style: AppTypography.bodySm(colors.onSurface)),
+                  title: Text(
+                    'Email',
+                    style: AppTypography.bodySm(colors.onSurface),
+                  ),
                   value: _emailNotif,
                   onChanged: (v) => setState(() => _emailNotif = v),
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('Push notification', style: AppTypography.bodySm(colors.onSurface)),
+                  title: Text(
+                    'Push notification',
+                    style: AppTypography.bodySm(colors.onSurface),
+                  ),
                   value: _pushNotif,
                   onChanged: (v) => setState(() => _pushNotif = v),
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('Promo & info terbaru', style: AppTypography.bodySm(colors.onSurface)),
+                  title: Text(
+                    'Promo & info terbaru',
+                    style: AppTypography.bodySm(colors.onSurface),
+                  ),
                   value: _marketingNotif,
                   onChanged: (v) => setState(() => _marketingNotif = v),
                 ),
@@ -101,7 +111,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const SnackBar(content: Text('Pengaturan disimpan')),
                 );
               },
-              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
               child: const Text('Simpan Perubahan'),
             ),
           ],
@@ -129,7 +141,10 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppTypography.bodySmSemibold(context.appColors.onSurface)),
+          Text(
+            title,
+            style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+          ),
           const SizedBox(height: 12),
           ...children,
         ],

@@ -12,6 +12,7 @@ import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/order_model.dart';
 import '../usecase/orders_notifier.dart';
 import 'orders_page.dart' show orderStatusColor;
@@ -47,9 +48,9 @@ class OrderDetailPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: Text(async.valueOrNull?.orderNumber ?? slug)),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (order) {
             if (order == null) {

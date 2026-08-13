@@ -7,6 +7,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/market_notifier.dart';
 
 /// Ports `components/store/storefront-view.tsx` — a seller's storefront.
@@ -22,13 +23,8 @@ class StoreDetailPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(
-        title: storeAsync.when(
-          data: (store) => Text(store?.storeName ?? 'Toko'),
-          loading: () => const Text('Memuat...'),
-          error: (_, __) => const Text('Toko'),
-        ),
-      ),
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
       body: storeAsync.when(
         data: (store) {
           if (store == null) {
@@ -37,8 +33,7 @@ class StoreDetailPage extends ConsumerWidget {
               title: 'Toko tidak ditemukan',
             );
           }
-          return SafeArea(
-            top: false,
+          return AppBarOverlayBody(
             child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(

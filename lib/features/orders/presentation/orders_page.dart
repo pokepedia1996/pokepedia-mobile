@@ -10,6 +10,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/order_model.dart';
 import '../usecase/orders_notifier.dart';
 
@@ -21,9 +22,9 @@ class OrdersPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(ordersProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Pesanan')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (orders) {
             if (orders.isEmpty) {

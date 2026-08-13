@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Ports `app/tutorial/page.tsx` — `components/tutorial/tutorial-content.tsx`.
 class TutorialPage extends StatelessWidget {
@@ -35,9 +36,9 @@ class TutorialPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Scaffold(
-      appBar: AppBar(title: const Text('Tutorial')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: _steps.length,
@@ -68,9 +69,15 @@ class TutorialPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${i + 1}. $title', style: AppTypography.bodySmSemibold(colors.onSurface)),
+                        Text(
+                          '${i + 1}. $title',
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
+                        ),
                         const SizedBox(height: 4),
-                        Text(desc, style: AppTypography.bodySm(context.mutedForeground)),
+                        Text(
+                          desc,
+                          style: AppTypography.bodySm(context.mutedForeground),
+                        ),
                       ],
                     ),
                   ),

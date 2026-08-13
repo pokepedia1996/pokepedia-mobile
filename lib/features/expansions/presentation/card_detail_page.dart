@@ -17,6 +17,7 @@ import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
 import 'widgets/card_details_section.dart';
@@ -85,7 +86,8 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBodyBehindAppBar: true,
+      appBar: TransparentAppBar(
         actions: [
           IconButton(
             icon: _wishlistToggling
@@ -112,8 +114,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage>
               title: 'Kartu tidak ditemukan',
             );
           }
-          return SafeArea(
-            top: false,
+          return AppBarOverlayBody(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               children: [

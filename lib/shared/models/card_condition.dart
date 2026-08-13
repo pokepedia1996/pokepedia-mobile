@@ -34,6 +34,12 @@ const rawConditions = [
   CardCondition.hp,
 ];
 
+/// Company headings in `CONDITION_COMPANIES` order (`lib/orders/conditions.ts`),
+/// used to group condition pills. [CardCondition]'s declaration order matches
+/// each company's grade order, so sorting by `values.indexOf` reproduces the
+/// web's pill order within a group.
+const conditionCompanies = ['Raw', 'PSA', 'BGS', 'CGC', 'EGS'];
+
 extension CardConditionX on CardCondition {
   /// The exact value stored in `listings.condition` / `price_history.condition`.
   String get raw {
@@ -148,6 +154,47 @@ extension CardConditionX on CardCondition {
         return short;
     }
   }
+
+  /// The grade on its own, as shown under a company heading in the condition
+  /// picker — mirrors `gradeLabel` in `lib/orders/conditions.ts`, where "PSA 10"
+  /// renders as just "10" beneath the "PSA" column.
+  String get gradeLabel {
+    switch (this) {
+      case CardCondition.nm:
+      case CardCondition.lp:
+      case CardCondition.mp:
+      case CardCondition.hp:
+        return short;
+      case CardCondition.psa10:
+      case CardCondition.cgc10:
+      case CardCondition.egs10:
+        return '10';
+      case CardCondition.psa9:
+      case CardCondition.bgs9:
+      case CardCondition.cgc9:
+      case CardCondition.egs9:
+        return '9';
+      case CardCondition.psaLow:
+      case CardCondition.bgsLow:
+      case CardCondition.cgcLow:
+      case CardCondition.egsLow:
+        return '≤8';
+      case CardCondition.bgsBl10:
+        return 'Black 10';
+      case CardCondition.bgsGd10:
+        return 'Gold 10';
+      case CardCondition.bgs95:
+      case CardCondition.cgc95:
+      case CardCondition.egs95:
+        return '9.5';
+      case CardCondition.cgcPr10:
+        return 'Pristine 10';
+    }
+  }
+
+  /// Company heading this condition groups under — [gradingCompany] with raw
+  /// conditions folded into "Raw", matching `CONDITION_COMPANIES`' labels.
+  String get companyLabel => gradingCompany ?? 'Raw';
 
   /// Grading company for graded conditions, null for raw.
   String? get gradingCompany {

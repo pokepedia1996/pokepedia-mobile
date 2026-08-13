@@ -8,6 +8,7 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/user_notifier.dart';
 
@@ -31,9 +32,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: Text('@${widget.username}')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (user) {
             if (user == null) {

@@ -8,6 +8,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/models/user_model.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/user_notifier.dart';
 
 /// Ports `app/users/page.tsx`.
@@ -20,7 +21,7 @@ class UsersSearchPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cari Pengguna')),
+      appBar: const TransparentAppBar(),
       body: SafeArea(
         top: false,
         child: Column(
