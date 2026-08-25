@@ -23,6 +23,9 @@ import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/remote_image.dart';
+import '../../expansions/presentation/widgets/market_activity_section.dart';
+import 'widgets/more_from_seller_section.dart';
+import 'widgets/store_share_sheet.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/repository/cart_repository.dart';
 import '../../cart/usecase/cart_notifier.dart';
@@ -212,7 +215,13 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                _PackRow(pack: pack, card: card),
+                // "Nama toko > Nama kartu — nomor", as sketched. Plain text
+                // rather than the breadcrumb that used to sit here: the app
+                // bar already carries the way back, so this is context, not
+                // navigation.
+                _TitleLine(store: store, card: card),
+                // const SizedBox(height: 10),
+                // _PackRow(pack: pack, card: card),
                 const SizedBox(height: 16),
 
                 // Artwork column — photos, then the link back to the
@@ -264,22 +273,15 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => context.push(
-                              Routes.cardDetail(card.packSlug, card.id),
-                            ),
-                            icon: const Icon(Icons.visibility_outlined, size: 15),
-                            label: const Text('Lihat detail kartu'),
-                          ),
-                        ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+                // "Nama kartu — Nomor — Ekspansi", the heading the sketch
+                // puts directly under the image and above the price.
+                _CardTitle(card: card, pack: pack),
+                const SizedBox(height: 14),
 
                 // Buy block.
                 _PurchasePanel(
@@ -300,6 +302,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                   onReport: _reportListing,
                   onToggleFollow: () => _toggleFollow(store.storeName),
                   onContact: () => context.push(Routes.chatThread(store.handle)),
+                  onShare: () => showStoreShareSheet(context, store: store),
                 ),
                 const SizedBox(height: 20),
 
@@ -313,6 +316,21 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                 ),
                 const SizedBox(height: 12),
                 CardDetailsSection(card: card),
+
+                const SizedBox(height: 20),
+                Divider(height: 1, color: context.borderColor),
+                const SizedBox(height: 16),
+                // Price chart and "Histori Transaksi", as sketched. This is
+                // the same widget the catalog card page uses rather than a
+                // second implementation — the market data is per card, not
+                // per listing, so a buyer comparing this seller's price
+                // against the market sees exactly what the catalog shows.
+                MarketActivitySection(cardId: card.id),
+
+                MoreFromSellerSection(
+                  storeHandle: store.handle,
+                  excludeCardId: card.id,
+                ),
               ],
             ),
           );
@@ -329,6 +347,49 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
 
 /// The expansion row above the artwork: pack image + name on the left, set
 /// symbol and collector number on the right.
+/// "Nama kartu — Nomor — Ekspansi" under the artwork, per the design.
+class _CardTitle extends StatelessWidget {
+  const _CardTitle({required this.card, required this.pack});
+
+  final CardModel card;
+  final PackModel? pack;
+
+  @override
+  Widget build(BuildContext context) {
+    // The expansion's real name when it has loaded; its code is the honest
+    // stand-in rather than a blank while it does.
+    final expansion = pack?.name ?? card.expansionCode.toUpperCase();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${card.name} — ${card.collectorNumber} — $expansion',
+          style: AppTypography.h2(context.appColors.onSurface),
+        ),
+      ],
+    );
+  }
+}
+
+/// The store-and-card line above the artwork.
+class _TitleLine extends StatelessWidget {
+  const _TitleLine({required this.store, required this.card});
+
+  final StoreModel store;
+  final CardModel card;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${store.storeName} › ${card.name} — ${card.collectorNumber}',
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: AppTypography.caption(context.mutedForeground),
+    );
+  }
+}
+
 class _PackRow extends StatelessWidget {
   const _PackRow({required this.pack, required this.card});
 
@@ -474,6 +535,7 @@ class _PurchasePanel extends StatefulWidget {
     required this.onReport,
     required this.onToggleFollow,
     required this.onContact,
+    required this.onShare,
   });
 
   final Map<CardCondition, ListingModel> cheapestByCondition;
@@ -490,6 +552,7 @@ class _PurchasePanel extends StatefulWidget {
   final VoidCallback onReport;
   final VoidCallback onToggleFollow;
   final VoidCallback onContact;
+  final VoidCallback onShare;
 
   @override
   State<_PurchasePanel> createState() => _PurchasePanelState();
@@ -650,7 +713,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                       ? null
                       : () => widget.onAddToCart(_qty),
                   icon: const Icon(Icons.shopping_cart_outlined, size: 15),
-                  label: const Text('Tambah ke Keranjang'),
+                  label: const Text('Keranjang'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colors.onSurface,
                     foregroundColor: colors.surface,
@@ -669,6 +732,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
             following: widget.following,
             onToggleFollow: widget.onToggleFollow,
             onContact: widget.onContact,
+            onShare: widget.onShare,
           ),
           Divider(height: 1, color: context.borderColor),
           Align(
@@ -764,6 +828,7 @@ class _SellerStrip extends StatelessWidget {
     required this.following,
     required this.onToggleFollow,
     required this.onContact,
+    required this.onShare,
   });
 
   final StoreModel store;
@@ -773,6 +838,9 @@ class _SellerStrip extends StatelessWidget {
   final bool following;
   final VoidCallback onToggleFollow;
   final VoidCallback onContact;
+
+  /// Opens the store share sheet — the poster the seller hands out.
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -890,6 +958,17 @@ class _SellerStrip extends StatelessWidget {
                         ),
                       ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onShare,
+                  icon: const Icon(Icons.ios_share, size: 15),
+                  label: const Text('Bagikan'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -920,12 +999,17 @@ class _CardHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: Text(card.name, style: AppTypography.h1(colors.onSurface)),
+              child: Text(
+                'Detail kartu',
+                style: AppTypography.h3(colors.onSurface),
+              ),
             ),
             const SizedBox(width: 8),
+            // The name itself now lives under the artwork, so this row keeps
+            // only what it uniquely offers — the wishlist toggle.
             _WishlistButton(
               wishlisted: wishlisted,
               toggling: toggling,
