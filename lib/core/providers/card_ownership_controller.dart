@@ -37,6 +37,45 @@ class CardOwnershipController {
     return error;
   }
 
+  /// Ports `handleBulkAdd` on the pack detail page — adds one copy of every
+  /// card the user doesn't already own.
+  Future<({int count, String? error})> bulkAddToCollection({
+    required String userId,
+    required List<int> cardIds,
+  }) async {
+    final result = await _ref
+        .read(expansionsRepositoryProvider)
+        .bulkUpsertUserCards(userId: userId, cardIds: cardIds, delta: 1);
+    // Revalidated even on a partial failure: `count` copies did land.
+    _revalidateBulkOwnership(cardIds);
+    return result;
+  }
+
+  /// Ports `handleBulkRemove`. `bulk_remove_user_cards` also clears the
+  /// matching `user_inventory` rows and logs an `out` activity row for each,
+  /// so this revalidates inventory on top of ownership.
+  Future<({int count, String? error})> bulkRemoveFromCollection({
+    required String userId,
+    required List<int> cardIds,
+  }) async {
+    final result = await _ref
+        .read(expansionsRepositoryProvider)
+        .bulkRemoveUserCards(userId: userId, cardIds: cardIds);
+    _revalidateBulkOwnership(cardIds);
+    _revalidateInventory();
+    return result;
+  }
+
+  void _revalidateBulkOwnership(List<int> cardIds) {
+    for (final cardId in cardIds) {
+      _ref.invalidate(ownedQuantityProvider(cardId));
+    }
+    _ref.invalidate(collectionProvider);
+    // Family-wide: the controller doesn't know which pack slug the caller
+    // acted on, and a card can appear in only one expansion anyway.
+    _ref.invalidate(packOwnedQuantitiesProvider);
+  }
+
   Future<String?> setWishlisted(int cardId, bool wishlisted) async {
     final error = await _ref.read(portfolioRepositoryProvider).setWishlisted(cardId, wishlisted);
     if (error == null) _revalidateWishlist(cardId);

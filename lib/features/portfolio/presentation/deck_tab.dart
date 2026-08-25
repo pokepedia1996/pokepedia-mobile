@@ -10,6 +10,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/deck_model.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../usecase/portfolio_notifier.dart';
@@ -224,7 +225,12 @@ class _DeckTabState extends ConsumerState<DeckTab> {
                       ),
                     )
                   : ListView.separated(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        16,
+                        AppBottomNav.reservedSpace(context) + 12,
+                      ),
                       itemCount: visible.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, i) => _DeckTile(

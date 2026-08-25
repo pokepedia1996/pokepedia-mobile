@@ -25,13 +25,30 @@ class EvolutionStageGroup {
   final List<EvolutionCardInfo> cards;
 }
 
-/// Ports `buildEvolutionStages` from `lib/utils/index.tsx` — walks
+/// Ports `buildEvolutionStages` from `lib/cards/evolution.ts` — walks
 /// [pool] (every card reachable from [current] via `evolves_from` in
 /// either direction) back to the root of the line, then breadth-first
 /// forward from the root to group cards into stages. Returns null when
 /// there's nothing to show (a single-stage "evolution").
+///
+/// [current] is prepended to [pool] rather than only being used for its
+/// name, which is a deliberate divergence from the web. `get_evolution_pool`
+/// collapses each species to one row with `DISTINCT ON (name_id)`, and the
+/// row that survives is whichever print has the lowest id — not necessarily
+/// the card being viewed, and old prints often carry no `evolves_from` at
+/// all. Web looks the species up in that pool (`nameToFirst.get(rootName)`)
+/// and so walks up from a row that may not know its own parent: the root
+/// resolves to the card itself, nothing evolves from it, one stage comes
+/// back and the section silently disappears. Real case: Beedrill's pool row
+/// is id 339 with a null `evolves_from`, which hides the whole
+/// Weedle → Kakuna → Beedrill line. Putting [current] first means its own
+/// `evolves_from` edge is in the graph, its row wins for its own species,
+/// and the stage chip shows the print the user is actually looking at.
 List<EvolutionStageGroup>? buildEvolutionStages(CardModel current, List<CardModel> pool) {
-  final allCards = pool.where((c) => c.category == CardCategory.pokemon).toList();
+  final allCards = [
+    current,
+    ...pool.where((c) => c.id != current.id),
+  ].where((c) => c.category == CardCategory.pokemon).toList();
 
   final nameToFirst = <String, CardModel>{};
   for (final c in allCards) {

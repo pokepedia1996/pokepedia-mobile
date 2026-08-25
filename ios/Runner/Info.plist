@@ -45,5 +45,25 @@
     <true/>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Pilih foto kartu dari galeri untuk dilampirkan ke listing jualanmu.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Ambil foto kartu langsung dari kamera untuk dilampirkan ke listing jualanmu.</string>
+    <!-- Where Google returns after OAuth. The scheme must match
+         `oauthRedirectUrl` in lib/core/providers/auth_provider.dart and the
+         Supabase project's Redirect URLs allow-list. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>id.pokepedia.app</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>id.pokepedia.app</string>
+        </array>
+      </dict>
+    </array>
   </dict>
 </plist>

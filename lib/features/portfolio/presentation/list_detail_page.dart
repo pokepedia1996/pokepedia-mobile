@@ -11,7 +11,8 @@ import '../usecase/portfolio_notifier.dart';
 class ListDetailPage extends ConsumerWidget {
   const ListDetailPage({super.key, required this.listId});
 
-  final int listId;
+  /// `lists.id` — a uuid.
+  final String listId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

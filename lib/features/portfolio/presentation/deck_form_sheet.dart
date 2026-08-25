@@ -6,19 +6,25 @@ import '../../../core/theme/app_typography.dart';
 const maxDeckNameLen = 100;
 const maxDeckDescLen = 500;
 
-/// Name + description bottom sheet used for both creating a new deck
-/// (`DeckTab`) and editing an existing one's header (`DeckDetailPage`).
+/// Name + description bottom sheet, used for creating and editing a deck
+/// (`DeckTab`, `DeckDetailPage`) and a list (`ListsPage`) alike — the two
+/// forms are the same shape and the same length limits.
 class DeckFormSheet extends StatefulWidget {
   const DeckFormSheet({
     super.key,
     required this.title,
     required this.submitLabel,
+    this.nameLabel = 'Nama deck',
     this.initialName = '',
     this.initialDescription = '',
   });
 
   final String title;
   final String submitLabel;
+
+  /// What the name field is called — a deck by default, a list when the
+  /// lists page opens it.
+  final String nameLabel;
   final String initialName;
   final String initialDescription;
 
@@ -51,7 +57,7 @@ class _DeckFormSheetState extends State<DeckFormSheet> {
             controller: _nameController,
             autofocus: true,
             maxLength: maxDeckNameLen,
-            decoration: const InputDecoration(labelText: 'Nama deck'),
+            decoration: InputDecoration(labelText: widget.nameLabel),
           ),
           TextField(
             controller: _descController,

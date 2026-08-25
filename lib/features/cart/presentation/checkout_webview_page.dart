@@ -6,19 +6,23 @@ import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 
-/// Address, shipping, coupon, and payment only exist as a real, working
-/// flow on pokepedia-web — those routes authenticate via browser cookies
-/// the mobile app has no way to share, so the buyer finishes checkout
-/// there instead of in a native (would-be dummy) flow. Embeds it in-app via
-/// a WebView (rather than handing off to an external browser) so the buyer
-/// never leaves pokepedia.id mobile.
+/// Hosts the one checkout screen that is deliberately not native: the
+/// payment gateway's own page.
+///
+/// Passing [url] loads it directly — that's the Xendit hosted invoice the
+/// native flow gets back from `/api/cart/checkout`, and it has to be the
+/// gateway's page because that is where the card and VA details are
+/// entered. Passing [path] instead loads a pokepedia.id route, which is the
+/// fallback used when the app can't reach the API and the buyer has to
+/// finish on the web.
 class CheckoutWebViewPage extends StatefulWidget {
-  const CheckoutWebViewPage({super.key, this.path = '/cart/checkout'});
+  const CheckoutWebViewPage({super.key, this.path = '/cart/checkout', this.url});
 
-  /// Path under [AppConfig.appUrl] to load — overridable so this same page
-  /// can host other cookie-authenticated flows later (order actions,
-  /// disputes) without a new widget per page.
+  /// Path under [AppConfig.appUrl] to load. Ignored when [url] is set.
   final String path;
+
+  /// Absolute URL to load instead of [path].
+  final String? url;
 
   @override
   State<CheckoutWebViewPage> createState() => _CheckoutWebViewPageState();
@@ -44,7 +48,9 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
           onNavigationRequest: _handleNavigation,
         ),
       )
-      ..loadRequest(Uri.parse('${AppConfig.appUrl}${widget.path}'));
+      ..loadRequest(
+        Uri.parse(widget.url ?? '${AppConfig.appUrl}${widget.path}'),
+      );
   }
 
   /// Keeps ordinary http(s) navigation (our own domain, and Xendit's hosted

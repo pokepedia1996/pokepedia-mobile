@@ -6,6 +6,8 @@ class Routes {
   static const home = '/';
   static const expansions = '/expansions';
   static const portfolio = '/portfolio/collection';
+  static const decks = '/portfolio/deck';
+  static const inventory = '/portfolio/inventory';
   static const market = '/market';
   static const account = '/account';
 
@@ -27,10 +29,15 @@ class Routes {
   static const wallet = '/wallet';
   static const lists = '/portfolio/list';
 
+  // Seller.
+  static const seller = '/seller';
+  static const sellerProducts = '/seller/products';
+
   // Social / account.
   static const chat = '/chat';
   static const notifications = '/notifications';
   static const settings = '/settings';
+  static const addresses = '/settings/addresses';
   static const users = '/users';
   static const accountFollowing = '/account/following';
 
@@ -53,6 +60,6 @@ class Routes {
   static String chatThread(String slug) => '/chat/$slug';
   static String userProfile(String username) => '/user/$username';
   static String deckDetail(String id) => '/portfolio/deck/$id';
-  static String listDetail(int id) => '/portfolio/list/$id';
+  static String listDetail(String id) => '/portfolio/list/$id';
   static String terms(String slug) => '/terms/$slug';
 }

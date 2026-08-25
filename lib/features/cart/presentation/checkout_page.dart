@@ -3,26 +3,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/routes.dart';
-import '../../../core/utils/formatters.dart';
-import '../../../shared/widgets/confirm_dialog.dart';
+import '../../../core/network/pokepedia_api.dart';
+import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
-import '../repository/checkout_dummy_data.dart';
-import '../repository/checkout_pricing.dart';
+import '../../account/presentation/widgets/address_form_sheet.dart';
+import '../../account/repository/models/address_model.dart';
+import '../../account/usecase/address_notifier.dart';
+import '../../wallet/usecase/wallet_notifier.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import '../usecase/cart_notifier.dart';
+import '../usecase/cart_selection.dart';
+import '../usecase/checkout_notifier.dart';
 import 'checkout/buyer_note_box.dart';
-import 'checkout/checkout_address_picker.dart';
 import 'checkout/order_summary.dart';
 import 'checkout/payment_method_picker.dart';
 import 'checkout/payment_section.dart';
 import 'checkout/seller_group_card.dart';
+import 'checkout_status_page.dart';
+import 'checkout_webview_page.dart';
+import 'payment_webview_page.dart';
 
-/// Ports `features/checkout/ui/CheckoutClient.tsx` — address, per-seller
-/// shipping/insurance, buyer note, payment method, and order summary, all
-/// backed by dummy data ([CheckoutDummyData]) while this pass only ports
-/// the UI.
+/// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
+/// the order grouped per seller, delivery address, live courier quotes,
+/// shipping insurance, promo code, buyer note, payment choice and totals.
+///
+/// Only the last screen isn't native, by design — a card or VA payment is
+/// completed on Xendit's own hosted invoice page, which is the gateway's
+/// PCI surface and not something to reimplement. `/api/cart/checkout`
+/// returns that URL and this page opens it.
+///
+/// The two server calls behind this (Biteship quotes, Xendit invoice) stay
+/// on pokepedia.id: they need `BITESHIP_API_KEY` / `XENDIT_SECRET_KEY` and
+/// `service_role`, none of which belong in a shipped app. The app
+/// authenticates to them with its own Supabase session, which
+/// `getRequestAuth` accepts. If those routes can't be reached, this page
+/// falls back to finishing checkout on the web rather than pretending.
 class CheckoutPage extends ConsumerStatefulWidget {
   const CheckoutPage({super.key});
 
@@ -30,313 +49,473 @@ class CheckoutPage extends ConsumerStatefulWidget {
   ConsumerState<CheckoutPage> createState() => _CheckoutPageState();
 }
 
-class _CalcResult {
-  const _CalcResult({
-    required this.groups,
-    required this.itemsSubtotal,
-    required this.shippingTotal,
-    required this.insuranceTotal,
-    required this.totals,
-  });
-
-  final Map<String, List<CartItem>> groups;
-  final int itemsSubtotal;
-  final int shippingTotal;
-  final int insuranceTotal;
-  final CheckoutTotals totals;
-}
-
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
-  CheckoutAddress? _selectedAddress;
-  String _buyerNote = '';
-  final Map<String, CourierOption?> _selectedCourier = {};
-  final Map<String, bool> _insuranceEnabled = {};
-  PaymentMethod _paymentMethod = PaymentMethod.xendit;
-  PaymentChannel? _paymentChannel;
-  String _couponInput = '';
-  AppliedCoupon? _appliedCoupon;
-  bool _couponLoading = false;
-  bool _submitting = false;
+  final _couponInput = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _selectedAddress = CheckoutDummyData.addresses.firstWhere(
+  void dispose() {
+    _couponInput.dispose();
+    super.dispose();
+  }
+
+  /// Falls back to the primary address until the buyer picks another, then
+  /// pushes it into the notifier so shipping is quoted against it.
+  AddressModel? _syncAddress(List<AddressModel> addresses) {
+    final state = ref.read(checkoutProvider);
+    final chosen = state.address;
+    if (chosen != null) {
+      for (final address in addresses) {
+        if (address.id == chosen.id) return address;
+      }
+    }
+    if (addresses.isEmpty) return null;
+    final fallback = addresses.firstWhere(
       (a) => a.isPrimary,
-      orElse: () => CheckoutDummyData.addresses.first,
+      orElse: () => addresses.first,
     );
-    _reconcilePayment(ref.read(cartProvider));
+    // Deferred: this runs during build, and selecting kicks off a fetch.
+    Future.microtask(
+      () => ref.read(checkoutProvider.notifier).selectAddress(fallback),
+    );
+    return fallback;
   }
 
-  _CalcResult _calc(List<CartItem> items) {
-    final groups = <String, List<CartItem>>{};
-    for (final item in items) {
-      groups.putIfAbsent(item.listing.storeSlug, () => []).add(item);
+  Future<void> _pickAddress(List<AddressModel> addresses, int? selectedId) async {
+    final picked = await showModalBottomSheet<AddressModel>(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Alamat pengiriman',
+                style: AppTypography.h3(context.appColors.onSurface),
+              ),
+            ),
+            for (final address in addresses)
+              ListTile(
+                title: Text(
+                  '${address.label} · ${address.contactName}',
+                  style: AppTypography.bodySmSemibold(
+                    context.appColors.onSurface,
+                  ),
+                ),
+                subtitle: Text(
+                  address.areaLine,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+                trailing: address.id == selectedId
+                    ? Icon(Icons.check, color: context.appColors.primary)
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(address),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  showAddressFormSheet(context);
+                },
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Tambah alamat baru'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && mounted) {
+      ref.read(checkoutProvider.notifier).selectAddress(picked);
     }
-    final itemsSubtotal = items.fold(0, (sum, item) => sum + item.subtotal);
-    var shippingTotal = 0;
-    var insuranceTotal = 0;
-    for (final sellerId in groups.keys) {
-      final courier = _selectedCourier[sellerId];
-      if (courier == null) continue;
-      shippingTotal += courier.cost;
-      final insured = _insuranceEnabled[sellerId] ?? false;
-      if (insured && courier.insuranceAvailable) {
-        insuranceTotal += courier.insuranceFee;
+  }
+
+  /// Validates locally, submits, then opens the gateway's page.
+  Future<void> _pay() async {
+    final notifier = ref.read(checkoutProvider.notifier);
+
+    final problems = await ref
+        .read(cartRepositoryProvider)
+        .validate(only: ref.read(cartSelectionProvider));
+    if (!mounted) return;
+    if (problems.isNotEmpty) {
+      await ref.read(cartProvider.notifier).refresh();
+      if (!mounted) return;
+      _toast(problems.first);
+      return;
+    }
+
+    try {
+      final result = await notifier.submit();
+      if (!mounted) return;
+
+      final invoiceUrl = result.invoiceUrl;
+      if (invoiceUrl == null) {
+        // Wallet settled it outright — no gateway page, nothing to poll.
+        await ref.read(cartProvider.notifier).refresh();
+        if (mounted) context.go(Routes.orders);
+        return;
       }
-    }
-    final totals = computeCheckoutTotals(
-      itemsSubtotal: itemsSubtotal,
-      shippingTotal: shippingTotal,
-      insuranceTotal: insuranceTotal,
-      paymentMethod: _paymentMethod,
-      paymentChannel: _paymentChannel,
-      appliedCoupon: _appliedCoupon,
-    );
-    return _CalcResult(
-      groups: groups,
-      itemsSubtotal: itemsSubtotal,
-      shippingTotal: shippingTotal,
-      insuranceTotal: insuranceTotal,
-      totals: totals,
-    );
-  }
 
-  /// Mirrors `usePayment`'s two effects: drop a channel that's no longer
-  /// allowed for the current total, then auto-pick the first allowed one.
-  void _reconcilePayment(List<CartItem> items) {
-    if (_paymentMethod == PaymentMethod.wallet) return;
-    final total = _calc(items).totals.grandTotalBeforeFee;
-    final allowed = availablePaymentChannels(total);
-    if (_paymentChannel != null && !allowed.contains(_paymentChannel)) {
-      _paymentChannel = null;
-    }
-    if (_paymentChannel == null && total > 0 && allowed.isNotEmpty) {
-      _paymentChannel = allowed.first;
-    }
-  }
+      // The one non-native screen: Xendit's hosted invoice.
+      await Navigator.of(context).push(
+        MaterialPageRoute<PaymentOutcome>(
+          builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
+        ),
+      );
+      if (!mounted) return;
 
-  void _selectCourier(
-    String sellerId,
-    CourierOption option,
-    int sellerSubtotal,
-  ) {
-    setState(() {
-      _selectedCourier[sellerId] = option;
-      if (!option.insuranceAvailable) {
-        _insuranceEnabled[sellerId] = false;
-      } else if (isInsuranceMandatory(sellerSubtotal)) {
-        _insuranceEnabled[sellerId] = true;
+      // Deliberately regardless of how the payment page closed. Returning
+      // isn't proof of payment, and dismissing isn't proof it didn't
+      // happen — a VA transfer is often paid in a banking app with the
+      // page long gone. Only our own backend knows, so go ask it.
+      final externalId = result.externalId;
+      if (externalId == null) {
+        // No id to poll with; the order still exists server-side.
+        await ref.read(cartProvider.notifier).refresh();
+        if (mounted) context.go(Routes.orders);
+        return;
       }
-      _reconcilePayment(ref.read(cartProvider));
-    });
-  }
 
-  void _toggleInsurance(String sellerId, bool next, int sellerSubtotal) {
-    if (isInsuranceMandatory(sellerSubtotal) && !next) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Asuransi wajib untuk pesanan di atas '
-            '${formatRupiah(insuranceMandatoryThresholdIdr)}',
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CheckoutStatusPage(
+            externalId: externalId,
+            droppedItems: result.droppedItems,
           ),
         ),
       );
-      return;
+      if (!mounted) return;
+      await ref.read(cartProvider.notifier).refresh();
+    } on ApiUnreachableException catch (e) {
+      if (!mounted) return;
+      _toast(e.message);
+      await _finishOnWeb();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _toast(e.message);
     }
-    setState(() {
-      _insuranceEnabled[sellerId] = next;
-      _reconcilePayment(ref.read(cartProvider));
-    });
   }
 
-  void _onPaymentPick(PaymentPick pick) {
-    setState(() {
-      switch (pick) {
-        case XenditPick(:final channel):
-          _paymentMethod = PaymentMethod.xendit;
-          _paymentChannel = channel;
-        case WalletPick():
-          _paymentMethod = PaymentMethod.wallet;
-          _paymentChannel = null;
-      }
-    });
-  }
-
-  Future<void> _applyCoupon() async {
-    final code = _couponInput.trim();
-    if (code.isEmpty) {
-      _showSnack('Masukkan kode promo');
-      return;
-    }
-    if (_paymentMethod == PaymentMethod.wallet) {
-      _showSnack('Promo tidak berlaku untuk pembayaran saldo');
-      return;
-    }
-    if (_paymentChannel == null) {
-      _showSnack('Pilih metode pembayaran dulu');
-      return;
-    }
-    setState(() => _couponLoading = true);
-    await Future.delayed(const Duration(milliseconds: 400));
-    final gatewayFee = _calc(ref.read(cartProvider)).totals.gatewayFee;
-    final result = CheckoutDummyData.applyCoupon(code, gatewayFee);
-    if (!mounted) return;
-    setState(() {
-      _couponLoading = false;
-      if (result.ok) {
-        _appliedCoupon = result.coupon;
-        _couponInput = '';
-      }
-    });
-    _showSnack(result.ok ? 'Promo diterapkan' : result.message!);
-  }
-
-  void _removeCoupon() {
-    setState(() {
-      _appliedCoupon = null;
-      _couponInput = '';
-    });
-  }
-
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _handleCheckout(_CalcResult calc, bool payDisabled) async {
-    if (_submitting || payDisabled) return;
-    final items = ref.read(cartProvider);
-    final itemCount = items.length;
-    final total = calc.totals.grandTotal;
-
-    if (_paymentMethod == PaymentMethod.wallet) {
-      var confirmed = false;
-      await showConfirmDialog(
-        context,
-        title: 'Lanjutkan dengan saldo?',
-        description:
-            'Saldo sebesar ${formatRupiah(calc.totals.grandTotalBeforeFee)} '
-            'akan langsung dipotong dari dompet kamu.',
-        confirmLabel: 'Lanjutkan',
-        loadingLabel: 'Memproses...',
-        destructive: false,
-        onConfirm: () async {
-          confirmed = true;
-          await Future.delayed(const Duration(milliseconds: 700));
-        },
-      );
-      if (!confirmed) return;
-    } else {
-      setState(() => _submitting = true);
-      await Future.delayed(const Duration(milliseconds: 700));
-    }
-
-    if (!mounted) return;
-    ref.read(cartProvider.notifier).clear();
-    setState(() => _submitting = false);
-    context.push(
-      Routes.checkoutSuccess,
-      extra: {'itemCount': itemCount, 'total': total},
+  /// Last resort when the API can't be reached from the app: the same
+  /// checkout on pokepedia.id, where the browser can satisfy the edge.
+  Future<void> _finishOnWeb() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const CheckoutWebViewPage()),
     );
+    if (!mounted) return;
+    await ref.read(cartProvider.notifier).refresh();
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 4),
+          persist: false,
+        ),
+      );
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = ref.watch(cartProvider);
-    final calc = _calc(items);
-    final groups = calc.groups;
-    final hasAddress = _selectedAddress != null;
+    // Only what was ticked in the cart. `CheckoutNotifier` already prices
+    // and submits the selection, so reading the whole cart here showed a
+    // buyer two lines while charging them for one.
+    final items = ref.watch(selectedCartItemsProvider);
+    final state = ref.watch(checkoutProvider);
+    final notifier = ref.watch(checkoutProvider.notifier);
+    final addresses = ref.watch(addressesProvider).valueOrNull ?? const [];
+    final address = _syncAddress(addresses);
 
-    final payDisabled =
-        items.isEmpty ||
-        !hasAddress ||
-        groups.keys.any((id) => _selectedCourier[id] == null) ||
-        (_paymentMethod == PaymentMethod.xendit && _paymentChannel == null) ||
-        (_paymentMethod == PaymentMethod.wallet &&
-            CheckoutDummyData.walletBalance < calc.totals.grandTotalBeforeFee);
+    // Wallet payment is gated on the real balance, so keep it in sync.
+    ref.listen(walletBalanceProvider, (_, next) {
+      final balance = next.valueOrNull;
+      if (balance != null) notifier.setWalletBalance(balance);
+    });
 
-    final couponApplyDisabled =
-        _couponInput.trim().isEmpty ||
-        _paymentChannel == null ||
-        _paymentMethod == PaymentMethod.wallet;
+    final groups = _groupBySeller(items);
+    final totals = notifier.totals;
+    final blockedReason = notifier.blockedReason;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: items.isEmpty
-            ? const EmptyState(
+            ? EmptyState(
                 icon: Icons.shopping_cart_outlined,
-                title: 'Keranjang kosong',
-                description: 'Yuk cari kartu incaranmu di Market.',
+                // An empty cart and an empty selection are different
+                // problems, and only one of them is solved by shopping.
+                title: ref.watch(cartProvider).isEmpty
+                    ? 'Keranjang kosong'
+                    : 'Belum ada kartu yang dipilih',
+                description: ref.watch(cartProvider).isEmpty
+                    ? 'Tambahkan kartu dulu sebelum checkout.'
+                    : 'Pilih kartu di keranjang untuk dilanjutkan.',
+                action: ref.watch(cartProvider).isEmpty
+                    ? null
+                    : ElevatedButton(
+                        onPressed: () => context.pop(),
+                        child: const Text('Kembali ke Keranjang'),
+                      ),
               )
             : ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
-                  CheckoutAddressPicker(
-                    selected: _selectedAddress,
-                    onSelect: (address) =>
-                        setState(() => _selectedAddress = address),
+                  Text(
+                    'Checkout',
+                    style: AppTypography.h2(context.appColors.onSurface),
                   ),
+                  const SizedBox(height: 12),
+
+                  _AddressSection(
+                    address: address,
+                    onTap: () => addresses.isEmpty
+                        ? showAddressFormSheet(context)
+                        : _pickAddress(addresses, address?.id),
+                  ),
+
+                  if (state.contextError != null) ...[
+                    const SizedBox(height: 12),
+                    _ServerUnreachableNotice(
+                      message: state.contextError!,
+                      onRetry: notifier.loadContext,
+                      onFinishOnWeb: _finishOnWeb,
+                    ),
+                  ],
+
                   const SizedBox(height: 12),
                   for (final entry in groups.entries) ...[
                     SellerGroupCard(
                       items: entry.value,
-                      courierOptions: CheckoutDummyData.courierOptionsFor(
-                        entry.key,
-                      ),
-                      selectedCourier: _selectedCourier[entry.key],
-                      hasAddress: hasAddress,
-                      onSelectCourier: (opt) => _selectCourier(
-                        entry.key,
-                        opt,
-                        entry.value.fold(0, (s, i) => s + i.subtotal),
-                      ),
-                      insuranceEnabled: _insuranceEnabled[entry.key] ?? false,
-                      onToggleInsurance: (next) => _toggleInsurance(
-                        entry.key,
-                        next,
-                        entry.value.fold(0, (s, i) => s + i.subtotal),
-                      ),
+                      courierOptions:
+                          state.shippingBySeller[entry.key]?.options ??
+                          const [],
+                      selectedCourier:
+                          state.shippingBySeller[entry.key]?.selected,
+                      onSelectCourier: (option) =>
+                          notifier.selectCourier(entry.key, option),
+                      insuranceEnabled:
+                          state.insuranceBySeller[entry.key] ?? false,
+                      onToggleInsurance: (next) =>
+                          notifier.toggleInsurance(entry.key, next),
+                      hasAddress: address != null,
+                      ratesLoading:
+                          state.contextLoading ||
+                          (state.shippingBySeller[entry.key]?.loading ?? false),
+                      ratesError: state.shippingBySeller[entry.key]?.error,
+                      onRetryRates: () =>
+                          notifier.fetchRatesForSeller(entry.key),
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   BuyerNoteBox(
-                    value: _buyerNote,
-                    onChanged: (v) => _buyerNote = v,
+                    value: state.buyerNote,
+                    onChanged: notifier.setBuyerNote,
                   ),
                   const SizedBox(height: 12),
+
                   PaymentSection(
-                    grandTotalBeforeFee: calc.totals.grandTotalBeforeFee,
-                    paymentMethod: _paymentMethod,
-                    paymentChannel: _paymentChannel,
-                    walletBalance: CheckoutDummyData.walletBalance,
-                    onPick: _onPaymentPick,
+                    grandTotalBeforeFee: totals.grandTotalBeforeFee,
+                    paymentMethod: state.paymentMethod,
+                    paymentChannel: state.paymentChannel,
+                    walletBalance: state.walletBalance,
+                    onPick: (pick) => switch (pick) {
+                      XenditPick(:final channel) =>
+                        notifier.selectXendit(channel),
+                      WalletPick() => notifier.selectWallet(),
+                    },
                   ),
                   const SizedBox(height: 12),
+
                   OrderSummary(
-                    itemsSubtotal: calc.itemsSubtotal,
-                    shippingTotal: calc.shippingTotal,
-                    insuranceTotal: calc.insuranceTotal,
-                    paymentMethod: _paymentMethod,
-                    hasChannel: _paymentChannel != null,
-                    totals: calc.totals,
-                    appliedCoupon: _appliedCoupon,
-                    couponInput: _couponInput,
-                    onCouponInputChanged: (v) =>
-                        setState(() => _couponInput = v),
-                    couponLoading: _couponLoading,
-                    couponApplyDisabled: couponApplyDisabled,
-                    onApplyCoupon: _applyCoupon,
-                    onRemoveCoupon: _removeCoupon,
-                    submitting: _submitting,
-                    payDisabled: payDisabled,
-                    onCheckout: () => _handleCheckout(calc, payDisabled),
+                    itemsSubtotal: notifier.itemsSubtotal,
+                    shippingTotal: notifier.shippingTotal,
+                    insuranceTotal: notifier.insuranceTotal,
+                    paymentMethod: state.paymentMethod,
+                    hasChannel: state.paymentChannel != null,
+                    totals: totals,
+                    appliedCoupon: state.coupon,
+                    couponInput: _couponInput.text,
+                    onCouponInputChanged: (value) =>
+                        setState(() => _couponInput.text = value),
+                    couponLoading: state.couponLoading,
+                    couponApplyDisabled:
+                        _couponInput.text.trim().isEmpty ||
+                        state.paymentChannel == null ||
+                        state.paymentMethod == PaymentMethod.wallet,
+                    onApplyCoupon: () =>
+                        notifier.applyCoupon(_couponInput.text),
+                    onRemoveCoupon: notifier.removeCoupon,
+                    submitting: state.submitting,
+                    payDisabled: blockedReason != null,
+                    onCheckout: _pay,
                   ),
+
+                  if (state.couponError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      state.couponError!,
+                      style: AppTypography.caption(context.appColors.error),
+                    ),
+                  ],
+                  if (blockedReason != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      blockedReason,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  ],
                 ],
               ),
+      ),
+    );
+  }
+
+  /// Groups by `listings.user_id`, as the web does — a seller can have more
+  /// than one store slug, and the checkout payload is keyed by seller id.
+  Map<String, List<CartItem>> _groupBySeller(List<CartItem> items) {
+    final map = <String, List<CartItem>>{};
+    for (final item in items) {
+      (map[item.listing.sellerId] ??= []).add(item);
+    }
+    return map;
+  }
+}
+
+/// Shown when the seller origins or courier quotes can't be fetched. Both
+/// need the server, so the honest options are retry or finish on the web.
+class _ServerUnreachableNotice extends StatelessWidget {
+  const _ServerUnreachableNotice({
+    required this.message,
+    required this.onRetry,
+    required this.onFinishOnWeb,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onFinishOnWeb;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.error.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: colors.error.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(message, style: AppTypography.bodySm(colors.onSurface)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Coba lagi'),
+              ),             
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddressSection extends StatelessWidget {
+  const _AddressSection({required this.address, required this.onTap});
+
+  final AddressModel? address;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final address = this.address;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: Border.all(
+            color: address == null
+                ? colors.error.withValues(alpha: 0.5)
+                : context.borderColor,
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.location_on_outlined,
+              size: 20,
+              color: context.mutedForeground,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: address == null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Belum ada alamat pengiriman',
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
+                        ),
+                        Text(
+                          'Tambahkan alamat untuk melanjutkan',
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${address.label} · ${address.contactName}',
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
+                        ),
+                        Text(
+                          address.contactPhone,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          address.fullAddress,
+                          style: AppTypography.bodySm(context.mutedForeground),
+                        ),
+                        Text(
+                          address.areaLine,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ],
+                    ),
+            ),
+            Text(
+              address == null ? 'Tambah' : 'Ubah',
+              style: AppTypography.captionSemibold(colors.primary),
+            ),
+          ],
+        ),
       ),
     );
   }

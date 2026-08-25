@@ -136,6 +136,14 @@ class CheckoutAddress {
 /// Ports `PaymentChannel` / `PaymentChannelMeta` from `lib/payments/pricing.ts`.
 enum PaymentChannel { qris, bni, bri, mandiri, permata, cimb }
 
+extension PaymentChannelX on PaymentChannel {
+  /// The wire value `/api/cart/checkout` expects — the uppercase keys of
+  /// `CHANNEL_TO_XENDIT_PAYMENT_METHOD` in `lib/payments/pricing.ts`.
+  /// (BCA is defined server-side but commented out of `VA_CHANNELS` pending
+  /// Xendit activation, so it is deliberately absent here too.)
+  String get code => name.toUpperCase();
+}
+
 enum PaymentChannelGroup { qr, va }
 
 class PaymentChannelMeta {

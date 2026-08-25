@@ -100,6 +100,36 @@ enum CardLanguage { id, en, jp }
 extension CardLanguageX on CardLanguage {
   String get raw => name;
 
+  /// Two-letter form used by the catalog language switch, mirroring
+  /// `LANGUAGE_LABELS` in `lib/catalog/language.ts`.
+  String get shortLabel {
+    switch (this) {
+      case CardLanguage.id:
+        return 'ID';
+      case CardLanguage.en:
+        return 'EN';
+      case CardLanguage.jp:
+        return 'JP';
+    }
+  }
+
+  /// The country flag for this catalog language, as a regional-indicator
+  /// pair the platform renders as a real flag.
+  ///
+  /// English uses 🇬🇧 rather than 🇺🇸: these label the *print* a card came
+  /// from, and English prints are the international release, which the TCG
+  /// itself and the rest of the site treat as UK-flagged.
+  String get flag {
+    switch (this) {
+      case CardLanguage.id:
+        return '🇮🇩';
+      case CardLanguage.en:
+        return '🇬🇧';
+      case CardLanguage.jp:
+        return '🇯🇵';
+    }
+  }
+
   String get labelId {
     switch (this) {
       case CardLanguage.id:
@@ -133,6 +163,15 @@ class TypeModifier {
   final String value;
 }
 
+/// `details.abilities[0]` — the web only ever renders the first ability
+/// (`mapParsedCardDetailRow` in `lib/data/client.ts` takes `abilities[0]`).
+class AbilityModel {
+  const AbilityModel({required this.name, this.description});
+
+  final String name;
+  final String? description;
+}
+
 /// One entry of `details.attacks[]`.
 class AttackModel {
   const AttackModel({
@@ -155,6 +194,8 @@ class CardDetails {
     this.pokemonTypes = const [],
     this.evolutionStage,
     this.evolvesFrom,
+    this.ability,
+    this.effect,
     this.attacks = const [],
     this.weakness,
     this.resistance,
@@ -170,6 +211,12 @@ class CardDetails {
   final List<PokemonType> pokemonTypes;
   final EvolutionStage? evolutionStage;
   final String? evolvesFrom;
+
+  /// Pokemon ability (`details.abilities[0]`).
+  final AbilityModel? ability;
+
+  /// Rules text for Trainer/Energy cards (`details.effect`).
+  final String? effect;
   final List<AttackModel> attacks;
   final TypeModifier? weakness;
   final TypeModifier? resistance;
@@ -193,12 +240,26 @@ class CardDetails {
     final resistanceJson = json['resistance'] as Map<String, dynamic>?;
     final attacksJson = json['attacks'] as List<dynamic>?;
     final pokedexJson = json['pokedex'] as Map<String, dynamic>?;
+    final abilitiesJson = (json['abilities'] as List<dynamic>?)
+        ?.whereType<Map<String, dynamic>>()
+        .toList();
+    final abilityJson = (abilitiesJson == null || abilitiesJson.isEmpty)
+        ? null
+        : abilitiesJson.first;
+    final abilityName = abilityJson?['name'] as String?;
 
     return CardDetails(
       hp: json['hp'] as int?,
       pokemonTypes: pokemonTypesFromRaw(cardType),
       evolutionStage: EvolutionStageX.fromRaw(json['evolution_stage'] as String?),
       evolvesFrom: json['evolves_from'] as String?,
+      ability: abilityName == null || abilityName.isEmpty
+          ? null
+          : AbilityModel(
+              name: abilityName,
+              description: abilityJson?['description'] as String?,
+            ),
+      effect: json['effect'] as String?,
       attacks: attacksJson == null
           ? const []
           : attacksJson

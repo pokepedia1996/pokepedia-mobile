@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/catalog_language_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
+import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../../expansions/usecase/recently_viewed_provider.dart';
@@ -15,9 +17,15 @@ final homeRepositoryProvider = Provider((ref) {
 
 final recentlyViewedPacksProvider = FutureProvider<List<PackModel>>((ref) {
   final slugs = ref.watch(recentlyViewedSlugsProvider);
-  return ref.read(homeRepositoryProvider).fetchRecentlyViewed(slugs);
+  final language = ref.watch(catalogLanguageProvider);
+  return ref
+      .read(homeRepositoryProvider)
+      .fetchRecentlyViewed(slugs, language: language.raw);
 });
 
 final explorePacksProvider = FutureProvider<List<PackModel>>((ref) {
-  return ref.read(homeRepositoryProvider).fetchExplorePacks();
+  final language = ref.watch(catalogLanguageProvider);
+  return ref
+      .read(homeRepositoryProvider)
+      .fetchExplorePacks(language: language.raw);
 });

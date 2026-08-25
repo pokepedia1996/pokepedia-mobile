@@ -11,16 +11,19 @@ class HomeRepository {
   final SupabaseClient _client;
   final ExpansionsRepository _expansionsRepository;
 
-  Future<List<PackModel>> fetchExplorePacks() {
-    return _expansionsRepository.fetchPacks();
+  Future<List<PackModel>> fetchExplorePacks({String language = 'id'}) {
+    return _expansionsRepository.fetchPacks(language: language);
   }
 
   /// Resolves the given (most-recent-first) pack slugs against Supabase.
   /// Falls back to the first few explore packs when there's no view
   /// history yet (fresh app session).
-  Future<List<PackModel>> fetchRecentlyViewed(List<String> slugs) async {
+  Future<List<PackModel>> fetchRecentlyViewed(
+    List<String> slugs, {
+    String language = 'id',
+  }) async {
     if (slugs.isEmpty) {
-      final explore = await fetchExplorePacks();
+      final explore = await fetchExplorePacks(language: language);
       return explore.take(6).toList();
     }
 
@@ -32,7 +35,7 @@ class HomeRepository {
           'series:series_id(name_id, series_image_url)',
         )
         .inFilter('code_lower', slugs)
-        .eq('language', 'id');
+        .eq('language', language);
 
     final bySlug = {for (final r in rows) r['code_lower'] as String: PackModel.fromRow(r)};
     return slugs.map((s) => bySlug[s]).whereType<PackModel>().toList();

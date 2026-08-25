@@ -7,6 +7,7 @@ import '../models/card_model.dart';
 import '../models/pokemon_type.dart';
 import '../utils/card_filtering.dart';
 import 'type_icon.dart';
+import 'view_mode_toggle.dart';
 
 /// Ports `components/card/card-filters.tsx` + `SortDropdown` +
 /// `ViewToggle` — the search box, facet filter chips, sort picker and
@@ -70,7 +71,10 @@ class _CardFilterBarState extends State<CardFilterBar> {
             const Spacer(),
             _SortButton(sortBy: widget.sortBy, onChanged: widget.onSortChanged),
             const SizedBox(width: 8),
-            _ViewToggle(value: widget.viewMode, onChanged: widget.onViewModeChanged),
+            ViewModeToggle(
+              value: widget.viewMode,
+              onChanged: widget.onViewModeChanged,
+            ),
           ],
         ),
         if (_panelOpen) ...[
@@ -336,60 +340,6 @@ class _SortButton extends StatelessWidget {
             Icon(Icons.keyboard_arrow_down, size: 16, color: context.mutedForeground),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ViewToggle extends StatelessWidget {
-  const _ViewToggle({required this.value, required this.onChanged});
-
-  final CardViewMode value;
-  final ValueChanged<CardViewMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: context.borderColor),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ViewToggleButton(
-            icon: Icons.grid_view_rounded,
-            selected: value == CardViewMode.grid,
-            onTap: () => onChanged(CardViewMode.grid),
-          ),
-          _ViewToggleButton(
-            icon: Icons.view_list_rounded,
-            selected: value == CardViewMode.list,
-            onTap: () => onChanged(CardViewMode.list),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ViewToggleButton extends StatelessWidget {
-  const _ViewToggleButton({required this.icon, required this.selected, required this.onTap});
-
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        color: selected ? colors.primary : Theme.of(context).cardColor,
-        child: Icon(icon, size: 18, color: selected ? colors.onPrimary : context.mutedForeground),
       ),
     );
   }

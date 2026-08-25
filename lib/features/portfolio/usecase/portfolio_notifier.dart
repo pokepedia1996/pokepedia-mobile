@@ -59,17 +59,18 @@ final isWishlistedProvider = Provider.family<bool, int>((ref, cardId) {
 });
 
 final listsProvider = FutureProvider<List<WantlistModel>>((ref) {
-  return ref.read(portfolioRepositoryProvider).fetchLists();
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return Future.value(const []);
+  return ref.read(portfolioRepositoryProvider).fetchLists(user.id);
 });
 
-final listCardsProvider = FutureProvider.family<List<CardModel>, int>((
+final listCardsProvider = FutureProvider.family<List<CardModel>, String>((
   ref,
   listId,
 ) {
   return ref.read(portfolioRepositoryProvider).fetchListCards(listId);
 });
 
-/// Confirmed `user_inventory` rows — the Inventori tab's "Database" view.
 final inventoryRecordsProvider = FutureProvider<List<InventoryEntry>>((ref) {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return Future.value(const []);

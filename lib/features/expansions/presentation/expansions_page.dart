@@ -1,103 +1,318 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/routes.dart';
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/models/pack_model.dart';
+import '../../../shared/utils/card_filtering.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/app_top_bar.dart';
+import '../../../shared/widgets/catalog_language_toggle.dart';
+import '../../../shared/widgets/expansion_list_item.dart';
 import '../../../shared/widgets/pack_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/view_mode_toggle.dart';
 import '../usecase/expansions_notifier.dart';
+import '../utils/pack_sort.dart';
 
-/// Ports `app/expansions/page.tsx` — expansions grouped by series.
-class ExpansionsPage extends ConsumerWidget {
+/// Ports `features/expansions/components/expansions-list-client.tsx` — the
+/// Ekspansi tab: a sort + view toolbar over the expansions, grouped by
+/// series while sorted by date and flattened when sorted by name.
+///
+/// The ID/EN/JP switch scopes which language's catalog is shown, like the
+/// web's localized `/en/expansions` routes. Its ad slots between series are
+/// skipped — the app has no ad placements.
+class ExpansionsPage extends ConsumerStatefulWidget {
   const ExpansionsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ExpansionsPage> createState() => _ExpansionsPageState();
+}
+
+class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
+  PackSortOption _sortBy = PackSortOption.newest;
+  CardViewMode _viewMode = CardViewMode.grid;
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(seriesGroupsProvider);
+
     return Scaffold(
+      // `bottom: false` lets the list run under the floating nav pill —
+      // the scroll padding below keeps the last row clear of it.
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             const AppTopBar(),
             Expanded(
               child: async.when(
-                data: (groups) {
-                  final totalPacks = groups.fold<int>(
-                    0,
-                    (s, g) => s + g.totalPacks,
-                  );
-                  return ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: [
-                      Text(
-                        'Ekspansi',
-                        style: AppTypography.h2(context.appColors.onSurface),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$totalPacks ekspansi',
-                        style: AppTypography.bodySm(context.mutedForeground),
-                      ),
-                      const SizedBox(height: 12),
-                      for (final group in groups) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12, bottom: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                group.series,
-                                style: AppTypography.h2(
-                                  context.appColors.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${group.totalPacks} ekspansi · ${group.totalCards} kartu',
-                                style: AppTypography.caption(
-                                  context.mutedForeground,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: group.packs.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                mainAxisSpacing: 12,
-                                crossAxisSpacing: 12,
-                                childAspectRatio: 0.84,
-                              ),
-                          itemBuilder: (context, i) {
-                            final pack = group.packs[i];
-                            return PackCard(
-                              pack: pack,
-                              onTap: () =>
-                                  context.push(Routes.packDetail(pack.slug)),
-                            );
-                          },
-                        ),
-                      ],
-                    ],
-                  );
-                },
+                data: (groups) => _buildBody(groups),
                 loading: () => const PikachuLoader(),
-                error: (err, __) =>
+                error: (_, __) =>
                     const Center(child: Text('Gagal memuat ekspansi')),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(List<SeriesGroup> groups) {
+    final totalPacks = groups.fold<int>(0, (sum, g) => sum + g.totalPacks);
+    final padding = EdgeInsets.fromLTRB(
+      16,
+      4,
+      16,
+      AppBottomNav.reservedSpace(context) + 12,
+    );
+
+    // Sorting by name drops the series grouping, matching web's `isGrouped`.
+    if (!_sortBy.isGrouped) {
+      final packs = sortPacks(
+        [for (final group in groups) ...group.packs],
+        _sortBy,
+      );
+      return ListView(
+        padding: padding,
+        children: [
+          _Toolbar(
+            totalPacks: totalPacks,
+            sortBy: _sortBy,
+            viewMode: _viewMode,
+            onSortChanged: (value) => setState(() => _sortBy = value),
+            onViewModeChanged: (value) => setState(() => _viewMode = value),
+          ),
+          const SizedBox(height: 12),
+          _PackCollection(packs: packs, viewMode: _viewMode),
+        ],
+      );
+    }
+
+    final ordered = _sortBy == PackSortOption.oldest
+        ? groups.reversed.toList()
+        : groups;
+
+    return ListView(
+      padding: padding,
+      children: [
+        _Toolbar(
+          totalPacks: totalPacks,
+          sortBy: _sortBy,
+          viewMode: _viewMode,
+          onSortChanged: (value) => setState(() => _sortBy = value),
+          onViewModeChanged: (value) => setState(() => _viewMode = value),
+        ),
+        for (final group in ordered) ...[
+          const SizedBox(height: 20),
+          _SeriesHeader(group: group),
+          const SizedBox(height: 12),
+          _PackCollection(
+            packs: sortPacks(group.packs, _sortBy),
+            viewMode: _viewMode,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The catalog language switch over a row of sort control, pack count and
+/// grid/list toggle — the same stack the web puts above its series list.
+class _Toolbar extends StatelessWidget {
+  const _Toolbar({
+    required this.totalPacks,
+    required this.sortBy,
+    required this.viewMode,
+    required this.onSortChanged,
+    required this.onViewModeChanged,
+  });
+
+  final int totalPacks;
+  final PackSortOption sortBy;
+  final CardViewMode viewMode;
+  final ValueChanged<PackSortOption> onSortChanged;
+  final ValueChanged<CardViewMode> onViewModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: CatalogLanguageToggle(),
+        ),
+        Row(
+          children: [
+            _SortButton(sortBy: sortBy, onChanged: onSortChanged),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$totalPacks ekspansi',
+                style: AppTypography.bodySm(context.mutedForeground),
+              ),
+            ),
+            ViewModeToggle(value: viewMode, onChanged: onViewModeChanged),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Ports `SortDropdown` for the four pack sort options.
+class _SortButton extends StatelessWidget {
+  const _SortButton({required this.sortBy, required this.onChanged});
+
+  final PackSortOption sortBy;
+  final ValueChanged<PackSortOption> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<PackSortOption>(
+      initialValue: sortBy,
+      onSelected: onChanged,
+      position: PopupMenuPosition.under,
+      color: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: BorderSide(color: context.borderColor),
+      ),
+      itemBuilder: (context) => [
+        for (final option in PackSortOption.values)
+          PopupMenuItem(
+            value: option,
+            height: 42,
+            child: Row(
+              children: [
+                if (option == sortBy)
+                  Icon(Icons.check, size: 16, color: context.appColors.primary)
+                else
+                  const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(
+                  option.labelId,
+                  style: AppTypography.bodySm(context.appColors.onSurface),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              sortBy.labelId,
+              style: AppTypography.captionSemibold(context.mutedForeground),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 16,
+              color: context.mutedForeground,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The series wordmark (when the series has one) beside its name and counts.
+class _SeriesHeader extends StatelessWidget {
+  const _SeriesHeader({required this.group});
+
+  final SeriesGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final image = group.seriesImageUrl;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (image != null) ...[
+          Image.network(
+            image,
+            height: 56,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(group.series, style: AppTypography.h2(colors.onSurface)),
+              const SizedBox(height: 2),
+              Text(
+                '${group.totalPacks} ekspansi · ${group.totalCards} kartu',
+                style: AppTypography.caption(context.mutedForeground),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One batch of packs in whichever view mode is active.
+class _PackCollection extends StatelessWidget {
+  const _PackCollection({required this.packs, required this.viewMode});
+
+  final List<PackModel> packs;
+  final CardViewMode viewMode;
+
+  @override
+  Widget build(BuildContext context) {
+    if (viewMode == CardViewMode.list) {
+      return Column(
+        children: [
+          for (final pack in packs)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ExpansionListItem(
+                pack: pack,
+                onTap: () => context.push(Routes.packDetail(pack.slug)),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: packs.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.84,
+      ),
+      itemBuilder: (context, i) {
+        final pack = packs[i];
+        return PackCard(
+          pack: pack,
+          onTap: () => context.push(Routes.packDetail(pack.slug)),
+        );
+      },
     );
   }
 }

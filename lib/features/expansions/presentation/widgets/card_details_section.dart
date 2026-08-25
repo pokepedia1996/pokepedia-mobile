@@ -215,7 +215,10 @@ class EvolutionSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (card.category != CardCategory.pokemon) return const SizedBox.shrink();
     final poolAsync = ref.watch(
-      evolutionPoolProvider((card.name, card.details.evolvesFrom)),
+      evolutionPoolProvider((
+        name: card.name,
+        evolvesFrom: card.details.evolvesFrom,
+      )),
     );
 
     return poolAsync.when(

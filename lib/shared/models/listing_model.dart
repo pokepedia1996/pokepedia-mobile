@@ -65,9 +65,16 @@ class ListingModel {
     this.storeLogoUrl,
     this.sellerFeedbackScore = 0,
     this.photoUrls = const [],
+    this.sellerId = '',
   });
 
   final int id;
+
+  /// `listings.user_id` — the seller. Checkout groups and quotes shipping
+  /// per seller, and the courier choices it posts are keyed by this, so it
+  /// can't be inferred from the store slug.
+  final String sellerId;
+
   final String slug;
   final ListingSide side;
   final int price;
@@ -130,6 +137,7 @@ class ListingModel {
   }) {
     return ListingModel(
       id: row['id'] as int,
+      sellerId: row['user_id'] as String? ?? '',
       slug: row['slug'] as String? ?? '',
       side: (row['side'] as String?) == 'bid' ? ListingSide.bid : ListingSide.ask,
       price: row['price'] as int? ?? 0,

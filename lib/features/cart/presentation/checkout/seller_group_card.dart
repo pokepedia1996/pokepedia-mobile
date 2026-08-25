@@ -11,6 +11,7 @@ import '../../repository/checkout_pricing.dart';
 import '../../repository/models/checkout_models.dart';
 import '../../repository/models/cart_item.dart';
 import 'courier_picker.dart';
+import 'package:logging/logging.dart';
 
 /// One seller's items within the cart, plus their shipping/insurance
 /// choices. Ports `features/checkout/ui/SellerGroupCard.tsx`.
@@ -24,6 +25,9 @@ class SellerGroupCard extends StatelessWidget {
     required this.insuranceEnabled,
     required this.onToggleInsurance,
     required this.hasAddress,
+    this.ratesLoading = false,
+    this.ratesError,
+    this.onRetryRates,
   });
 
   final List<CartItem> items;
@@ -33,6 +37,15 @@ class SellerGroupCard extends StatelessWidget {
   final bool insuranceEnabled;
   final ValueChanged<bool> onToggleInsurance;
   final bool hasAddress;
+
+  /// Quote in flight for this seller. Ports the web card's `addressLoading`
+  /// spinner state.
+  final bool ratesLoading;
+
+  /// Why the quote failed, if it did. Biteship is a live third-party call,
+  /// so this is a normal outcome and needs a retry rather than a dead card.
+  final String? ratesError;
+  final VoidCallback? onRetryRates;
 
   int get _subtotal => items.fold(0, (sum, item) => sum + item.subtotal);
 
@@ -48,7 +61,8 @@ class SellerGroupCard extends StatelessWidget {
     final checkboxChecked =
         insuranceAvailable && (insuranceEnabled || mandatory);
     final checkboxDisabled = !insuranceAvailable || mandatory;
-
+    final log = Logger('NetworkService');
+    log.info(courierOptions);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -201,6 +215,41 @@ class SellerGroupCard extends StatelessWidget {
                   Text(
                     'Tambah alamat pengiriman dulu untuk melihat pilihan kurir.',
                     style: AppTypography.caption(context.mutedForeground),
+                  )
+                else if (ratesLoading)
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Mengambil tarif kurir...',
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
+                    ],
+                  )
+                else if (ratesError != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ratesError!,
+                        style: AppTypography.caption(colors.error),
+                      ),
+                      if (onRetryRates != null)
+                        TextButton(
+                          onPressed: onRetryRates,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Coba lagi'),
+                        ),
+                    ],
                   )
                 else
                   CourierPicker(

@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -33,29 +34,77 @@ extension on _InventorySection {
 /// segmented layout instead of the web's desktop data-grid (no custom
 /// columns, keyboard nav, or cost-basis analytics — those don't translate
 /// to a phone screen).
-class InventoryTab extends StatefulWidget {
+class InventoryTab extends ConsumerStatefulWidget {
   const InventoryTab({super.key});
 
   @override
-  State<InventoryTab> createState() => _InventoryTabState();
+  ConsumerState<InventoryTab> createState() => _InventoryTabState();
 }
 
-class _InventoryTabState extends State<InventoryTab> {
+class _InventoryTabState extends ConsumerState<InventoryTab> {
   _InventorySection _section = _InventorySection.database;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final records = ref.watch(inventoryRecordsProvider).valueOrNull ?? const [];
+    final totalValue = records.fold<int>(
+      0,
+      (sum, r) => sum + r.unitPrice * r.quantity,
+    );
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Ports the web header: the record count under the title, with the
+        // holding's total value alongside it.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Inventori Kartu',
+                style: AppTypography.h2(colors.onSurface),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${records.length} inventori',
+                style: AppTypography.bodySm(context.mutedForeground),
+              ),
+              const SizedBox(height: 6),
+              Text.rich(
+                TextSpan(
+                  text: 'Nilai Total: ',
+                  style: AppTypography.h3(colors.onSurface),
+                  children: [
+                    TextSpan(
+                      // A dash rather than Rp0 while nothing is priced, the
+                      // same distinction the web draws.
+                      text: totalValue > 0 ? formatRupiah(totalValue) : 'Rp–',
+                      style: AppTypography.h3(colors.primary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Web's four-up segmented control rather than the pill chips this
+        // used to carry.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: colors.secondary,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
             child: Row(
               children: [
                 for (final section in _InventorySection.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                  Expanded(
                     child: _SectionChip(
                       label: section.label,
                       selected: _section == section,
@@ -66,7 +115,7 @@ class _InventoryTabState extends State<InventoryTab> {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Expanded(
           child: switch (_section) {
             _InventorySection.database => const _DatabaseSection(),
@@ -96,21 +145,19 @@ class _SectionChip extends StatelessWidget {
     final colors = context.appColors;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.full),
+      borderRadius: BorderRadius.circular(AppRadius.xs),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? colors.primary : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(
-            color: selected ? colors.primary : context.borderColor,
-          ),
+          color: selected ? Theme.of(context).cardColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.xs),
         ),
         child: Text(
           label,
-          style: AppTypography.captionSemibold(
-            selected ? colors.onPrimary : context.mutedForeground,
-          ),
+          style: selected
+              ? AppTypography.captionSemibold(colors.onSurface)
+              : AppTypography.caption(context.mutedForeground),
         ),
       ),
     );
@@ -185,19 +232,14 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
           );
         }
         final groups = _groupByCard(records);
-        final visible = _query.isEmpty
+        final needle = _query.trim().toLowerCase();
+        final visible = needle.isEmpty
             ? groups
-            : groups
-                  .where(
-                    (g) =>
-                        g.card.name.toLowerCase().contains(
-                          _query.toLowerCase(),
-                        ) ||
-                        g.card.collectorNumber.toLowerCase().contains(
-                          _query.toLowerCase(),
-                        ),
-                  )
-                  .toList();
+            : groups.where((g) {
+                return g.card.name.toLowerCase().contains(needle) ||
+                    g.card.collectorNumber.toLowerCase().contains(needle) ||
+                    g.card.expansionCode.toLowerCase().contains(needle);
+              }).toList();
         return Column(
           children: [
             Padding(
@@ -205,7 +247,7 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
                 decoration: const InputDecoration(
-                  hintText: 'Cari nama atau nomor kartu...',
+                  hintText: 'Cari nama, ekspansi, atau nomor...',
                   prefixIcon: Icon(Icons.search, size: 20),
                 ),
               ),
@@ -220,7 +262,12 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
                       ),
                     )
                   : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        AppBottomNav.reservedSpace(context) + 12,
+                      ),
                       itemCount: visible.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, i) =>

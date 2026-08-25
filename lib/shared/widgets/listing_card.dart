@@ -11,9 +11,9 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/formatters.dart';
 import '../../features/portfolio/usecase/portfolio_notifier.dart';
-import '../models/card_model.dart';
 import '../models/listing_model.dart';
 import 'card_art.dart';
+import 'card_language_badge.dart';
 import 'condition_badge.dart';
 import 'reputation_star.dart';
 import 'seller_avatar.dart';
@@ -144,7 +144,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _LanguageBadge(language: listing.card.language),
+                CardLanguageBadge(language: listing.card.language),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -364,39 +364,6 @@ class _WishlistBadge extends StatelessWidget {
                 size: 16,
                 color: wishlisted ? Colors.white : context.mutedForeground,
               ),
-      ),
-    );
-  }
-}
-
-/// A small colored circle standing in for web's `CardLanguageBadge` flag
-/// image — the mobile app doesn't bundle per-language flag assets, so this
-/// shows a 2-letter code instead.
-class _LanguageBadge extends StatelessWidget {
-  const _LanguageBadge({required this.language});
-
-  final CardLanguage language;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (language) {
-      CardLanguage.id => ('ID', const Color(0xFFDC2626)),
-      CardLanguage.en => ('EN', const Color(0xFF2563EB)),
-      CardLanguage.jp => ('JP', const Color(0xFF16A34A)),
-    };
-    return Container(
-      width: 16,
-      height: 16,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 7,
-          height: 1,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-        ),
       ),
     );
   }

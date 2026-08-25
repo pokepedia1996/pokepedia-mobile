@@ -8,6 +8,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../features/cart/usecase/cart_notifier.dart';
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -49,6 +50,33 @@ class _MarketPageState extends ConsumerState<MarketPage>
     });
   }
 
+  /// Web's navbar morph fires at `window.scrollY > 100`
+  /// (`NavbarMain` in `components/layout/navbar.tsx`). Position-based, not
+  /// direction-based, so the header state matches the scroll offset exactly
+  /// the way it does on web.
+  static const _morphThreshold = 100.0;
+
+  /// `MobileScrollMorph`'s GSAP timeline runs 0.4s at power2.inOut; this is
+  /// deliberately quicker, since a phone scroll reaches the threshold faster
+  /// than a desktop one and the header should be settled by the time the
+  /// first row of results is in view. `easeOutCubic` puts most of the travel
+  /// up front so the shorter duration reads as snap rather than a rush.
+  static const _morphDuration = Duration(milliseconds: 180);
+  static const _morphCurve = Curves.easeOutCubic;
+
+  /// True past the threshold: the title row folds away and the cart button
+  /// moves down beside the search field.
+  bool _scrolled = false;
+
+  bool _onScroll(ScrollNotification notification) {
+    // The TabBarView's own horizontal paging bubbles up here too.
+    if (notification.metrics.axis != Axis.vertical) return false;
+
+    final scrolled = notification.metrics.pixels > _morphThreshold;
+    if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    return false;
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -60,87 +88,200 @@ class _MarketPageState extends ConsumerState<MarketPage>
     final bucket = ref.watch(bucketProvider);
     final colors = context.appColors;
 
-    final cartCount = ref.watch(cartProvider).length;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Market'),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart_outlined),
-                onPressed: () => context.push(Routes.cart),
-              ),
-              if (cartCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$cartCount',
-                      style: AppTypography.badge(
-                        colors.onPrimary,
-                      ).copyWith(fontSize: 9),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+      // No AppBar: the title row has to collapse and hand its cart button
+      // down to the search row, which an AppBar can't do. `top: true` puts
+      // the header below the status bar now that the AppBar isn't supplying
+      // that inset; `bottom: false` still lets the grid run under the
+      // floating nav pill.
       body: SafeArea(
-        top: false,
+        bottom: false,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                onChanged: (v) =>
-                    ref.read(marketQueryProvider.notifier).state = v,
-                decoration: const InputDecoration(
-                  hintText: 'Cari kartu atau toko...',
-                  prefixIcon: Icon(Icons.search, size: 20),
+            // Sticky header: search, bucket tabs and the sort/filter row
+            // stay put while the results scroll underneath, mirroring the
+            // web's `sticky top-0 border-b border-border/50 bg-card/95`
+            // treatment. An opaque background is what makes it read as
+            // sticky — without it the grid shows through as it passes by.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border(
+                  bottom: BorderSide(
+                    // `dividerColor` is where the theme puts the web's
+                    // `--border` token.
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                  ),
                 ),
               ),
-            ),
-            TabBar(
-              controller: _tabController,
-              labelColor: colors.primary,
-              unselectedLabelColor: context.mutedForeground,
-              indicatorColor: colors.primary,
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              tabs: const [
-                Tab(text: 'Semua'),
-                Tab(text: 'Listing'),
-                Tab(text: 'Buylist'),
-                Tab(text: 'Toko'),
-              ],
-            ),
-            if (bucket != MarketBucket.toko) const _SortFilterBar(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: const [
-                  _ListingGrid(),
-                  _ListingGrid(),
-                  _ListingGrid(),
-                  _StoreDirectory(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The web morph keeps this 8px gap above the header in
+                  // both states; only the gap below the title row animates.
+                  const SizedBox(height: 8),
+                  // Title row — collapses to nothing on scroll. `heightFactor`
+                  // rather than an animated height so the row is clipped as
+                  // it shrinks instead of overflowing its own box.
+                  ClipRect(
+                    child: AnimatedAlign(
+                      alignment: Alignment.topCenter,
+                      heightFactor: _scrolled ? 0 : 1,
+                      duration: _morphDuration,
+                      curve: _morphCurve,
+                      child: AnimatedSlide(
+                        // The timeline's `y: -4` on a 48px row.
+                        offset: _scrolled ? const Offset(0, -4 / 48) : Offset.zero,
+                        duration: _morphDuration,
+                        curve: _morphCurve,
+                        child: AnimatedOpacity(
+                          opacity: _scrolled ? 0 : 1,
+                          duration: _morphDuration,
+                          curve: _morphCurve,
+                          child: SizedBox(
+                            height: 48,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 4, 0),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Market',
+                                      style: AppTypography.h2(colors.onSurface),
+                                    ),
+                                  ),
+                                  const _CartButton(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Search row. Its top gap closes as the title row leaves,
+                  // matching the web's `marginTop: 8 -> 0`.
+                  AnimatedPadding(
+                    duration: _morphDuration,
+                    curve: _morphCurve,
+                    padding: EdgeInsets.fromLTRB(16, _scrolled ? 0 : 8, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            onChanged: (v) =>
+                                ref.read(marketQueryProvider.notifier).state = v,
+                            decoration: const InputDecoration(
+                              hintText: 'Cari kartu atau toko...',
+                              prefixIcon: Icon(Icons.search, size: 20),
+                            ),
+                          ),
+                        ),
+                        // The cart that slides in beside the search once the
+                        // title row's copy is gone. `widthFactor` animates
+                        // the web's `width: 0 -> auto`, and `IgnorePointer`
+                        // stands in for `pointerEvents: none` so the
+                        // zero-width button can't be tapped.
+                        IgnorePointer(
+                          ignoring: !_scrolled,
+                          child: ClipRect(
+                            child: AnimatedAlign(
+                              alignment: Alignment.centerRight,
+                              widthFactor: _scrolled ? 1 : 0,
+                              duration: _morphDuration,
+                              curve: _morphCurve,
+                              child: AnimatedOpacity(
+                                opacity: _scrolled ? 1 : 0,
+                                duration: _morphDuration,
+                                curve: _morphCurve,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(left: 8),
+                                  child: _CartButton(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: colors.primary,
+                    unselectedLabelColor: context.mutedForeground,
+                    indicatorColor: colors.primary,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(text: 'Semua'),
+                      Tab(text: 'Listing'),
+                      Tab(text: 'Buylist'),
+                      Tab(text: 'Toko'),
+                    ],
+                  ),
+                  if (bucket != MarketBucket.toko) const _SortFilterBar(),
+                  const SizedBox(height: 8),
                 ],
+              ),
+            ),
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onScroll,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: const [
+                    _ListingGrid(),
+                    _ListingGrid(),
+                    _ListingGrid(),
+                    _StoreDirectory(),
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The web mobile header renders `<CartIcon />` twice — once in the title
+/// row, once beside the search — and morphs between the two copies. This is
+/// that icon, badge included.
+class _CartButton extends ConsumerWidget {
+  const _CartButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    final cartCount = ref.watch(cartProvider).length;
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.shopping_cart_outlined),
+          onPressed: () => context.push(Routes.cart),
+        ),
+        if (cartCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: colors.primary,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$cartCount',
+                style: AppTypography.badge(colors.onPrimary).copyWith(fontSize: 9),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -507,7 +648,12 @@ class _ListingGrid extends ConsumerWidget {
           );
         }
         return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            AppBottomNav.reservedSpace(context) + 12,
+          ),
           itemCount: listings.length,
 
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -540,7 +686,12 @@ class _StoreDirectory extends ConsumerWidget {
           );
         }
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            AppBottomNav.reservedSpace(context) + 12,
+          ),
           itemCount: stores.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (context, i) {

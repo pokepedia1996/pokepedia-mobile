@@ -59,22 +59,60 @@ class TransparentAppBar extends StatelessWidget implements PreferredSizeWidget {
 /// Body wrapper for the `extendBodyBehindAppBar: true` scaffolds that pair with
 /// [TransparentAppBar].
 ///
-/// Scaffold hands such a body a top padding covering the *whole* app bar, so a
-/// plain [SafeArea] would just re-insert the gap the transparent bar was meant
-/// to remove. This restores the real status bar inset instead: content starts
-/// right below the status bar and slides underneath the floating back button.
+/// The page still paints edge to edge — backgrounds and artwork run under the
+/// status bar and the transparent bar — but its content is inset past both,
+/// clearing the floating back button and any [TransparentAppBar.actions]
+/// instead of starting underneath them.
+///
+/// The inset has to come from the view rather than the ambient [MediaQuery]:
+/// Scaffold builds the body with `removeTopPadding: appBar != null`, and
+/// [MediaQueryData.removePadding] zeroes `viewPadding.top` along with
+/// `padding.top` — so inside the body both read 0 and any [SafeArea] here is
+/// a no-op. [MediaQueryData.fromView] is unaffected by those removals. The
+/// toolbar strip is then added on top, since Scaffold has already taken it
+/// out of the body's padding as well.
 class AppBarOverlayBody extends StatelessWidget {
-  const AppBarOverlayBody({super.key, required this.child});
+  const AppBarOverlayBody({
+    super.key,
+    required this.child,
+    this.reserveToolbar,
+    this.appBarBottomHeight = 0,
+  });
 
   final Widget child;
+
+  /// Whether to clear the toolbar row. Defaults to reserving it exactly when
+  /// [TransparentAppBar] would draw its back button — a root page with a
+  /// bare bar has nothing up there to collide with, and reserving anyway
+  /// would open a 56dp hole at the top of the screen.
+  ///
+  /// Pass true explicitly for a page whose bar carries actions but cannot
+  /// pop, and false for one that genuinely wants content behind the bar.
+  final bool? reserveToolbar;
+
+  /// Height of [TransparentAppBar.bottom], when the page gives its bar a tab
+  /// strip. The body can't see the bar's own widgets, so a page with a
+  /// `bottom` has to declare its height here to be cleared too.
+  final double appBarBottomHeight;
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final statusBarHeight =
+        MediaQueryData.fromView(View.of(context)).padding.top;
+
+    // Mirrors `TransparentAppBar._canPop`. `onBack` forces a back button on a
+    // route that can't pop; such a page passes [reserveToolbar] itself.
+    final reserve =
+        reserveToolbar ?? (ModalRoute.of(context)?.canPop ?? false);
+    final topInset =
+        statusBarHeight +
+        (reserve ? kToolbarHeight + appBarBottomHeight : 0);
+
     return MediaQuery(
-      data: media.copyWith(
-        padding: media.padding.copyWith(top: media.viewPadding.top),
-      ),
+      data: media.copyWith(padding: media.padding.copyWith(top: topInset)),
+      // Consumes the corrected top inset, and keeps whatever bottom/side
+      // insets the scaffold handed down (home indicator, notches).
       child: SafeArea(child: child),
     );
   }

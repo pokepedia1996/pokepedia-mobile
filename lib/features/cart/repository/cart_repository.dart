@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import 'models/cart_item.dart';
+import 'models/checkout_session_models.dart';
 
 /// A business-rule rejection from `add_to_cart`/`remove_from_cart`, mirroring
 /// the RPC error codes documented in `pokepedia-web/docs/reference/api/cart.md`
@@ -166,5 +167,78 @@ class CartRepository {
             as Map<String, dynamic>?;
     final error = result?['error'] as String?;
     if (error != null) throw CartException(error);
+  }
+
+  /// Quotes a promo code against the cart subtotal through the same
+  /// `apply_coupon` RPC the web's `/api/coupons/apply` wraps. This only
+  /// validates and prices the discount — the coupon is actually redeemed
+  /// server-side when the invoice is created.
+  Future<CouponResult> applyCoupon({
+    required String code,
+    required int itemsSubtotal,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      return const CouponResult(error: 'Masuk dulu untuk pakai promo.');
+    }
+    try {
+      final result = await _client.rpc(
+        'apply_coupon',
+        params: {
+          'p_code': code.trim().toUpperCase(),
+          'p_user_id': userId,
+          'p_items_subtotal': itemsSubtotal,
+          // The gateway fee depends on the payment channel, which is only
+          // chosen at the payment step — quote against zero so a
+          // fee-waiving coupon reads as "no discount yet" rather than a
+          // number that later changes.
+          'p_gateway_fee': 0,
+        },
+      );
+      return CouponResult.fromRpc(result as Map<String, dynamic>?);
+    } on PostgrestException {
+      return const CouponResult(error: 'Gagal memeriksa kode promo.');
+    }
+  }
+
+  /// Runs the same `validate_cart` RPC the web checkout route calls first,
+  /// so a listing that sold out or was cancelled is caught in the app
+  /// instead of failing inside the payment WebView. Returns one message per
+  /// unusable line, empty when the cart is good to go.
+  /// [only] limits the check to those `cart_items.id`s. The RPC always
+  /// validates the whole cart, but a line the buyer didn't select isn't
+  /// their problem right now — blocking checkout because something they
+  /// left behind sold out would be nonsense.
+  Future<List<String>> validate({Set<int>? only}) async {
+    final result =
+        await _client.rpc('validate_cart') as Map<String, dynamic>?;
+    if (result == null) return const [];
+    if (result['error'] != null) return const ['Masuk dulu untuk checkout.'];
+
+    final invalid = (result['invalid_items'] as List?) ?? const [];
+    return invalid.whereType<Map<String, dynamic>>().where((item) {
+      if (only == null) return true;
+      final id = (item['cart_item_id'] as num?)?.toInt();
+      return id != null && only.contains(id);
+    }).map((item) {
+      switch (item['reason'] as String?) {
+        case 'order_not_found':
+        case 'listing_cancelled':
+          return 'Satu listing sudah dibatalkan penjual.';
+        case 'listing_expired':
+          return 'Satu listing sudah kedaluwarsa.';
+        case 'listing_matched':
+          return 'Satu listing sudah terjual.';
+        case 'not_an_ask_order':
+          return 'Satu item bukan listing yang bisa dibeli.';
+        case 'seller_on_vacation':
+          return 'Penjual sedang libur, satu item tidak bisa diproses.';
+        case 'insufficient_quantity':
+          final available = (item['available'] as num?)?.toInt() ?? 0;
+          return 'Stok satu listing tinggal $available.';
+        default:
+          return 'Satu item di keranjang tidak bisa diproses.';
+      }
+    }).toList();
   }
 }

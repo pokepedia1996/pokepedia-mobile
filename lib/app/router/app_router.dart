@@ -3,12 +3,13 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/account/presentation/account_page.dart';
+import '../../features/account/presentation/addresses_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/auth/presentation/signup_page.dart';
 import '../../features/cart/presentation/cart_page.dart';
-import '../../features/cart/presentation/checkout_webview_page.dart';
+import '../../features/cart/presentation/checkout_page.dart';
 import '../../features/chat/presentation/chat_inbox_page.dart';
 import '../../features/chat/presentation/chat_thread_page.dart';
 import '../../features/content/presentation/support_page.dart';
@@ -27,12 +28,17 @@ import '../../features/orders/presentation/order_detail_page.dart';
 import '../../features/orders/presentation/order_dispute_page.dart';
 import '../../features/orders/presentation/orders_page.dart';
 import '../../features/portfolio/presentation/deck_detail_page.dart';
+import '../../features/portfolio/presentation/deck_page.dart';
+import '../../features/portfolio/presentation/inventory_page.dart';
 import '../../features/portfolio/presentation/list_detail_page.dart';
 import '../../features/portfolio/presentation/lists_page.dart';
 import '../../features/portfolio/presentation/portfolio_page.dart';
 import '../../features/proposals/presentation/proposals_page.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
+import '../../features/seller/presentation/seller_dashboard_page.dart';
+import '../../features/seller/presentation/seller_products_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
+import '../../features/user/presentation/following_page.dart';
 import '../../features/user/presentation/user_profile_page.dart';
 import '../../features/user/presentation/users_search_page.dart';
 import '../../features/wallet/presentation/wallet_page.dart';
@@ -168,14 +174,14 @@ final appRouter = GoRouter(
 
     // Commerce.
     GoRoute(path: Routes.cart, builder: (_, __) => const CartPage()),
-    // Address, shipping, coupon, payment, and the post-payment success page
-    // all live on pokepedia-web (cookie-authenticated) — embedded here via
-    // WebView rather than a native flow. The web app's own
-    // `/cart/checkout/success` redirect happens inside this same WebView,
-    // so there's no separate native success route to register.
+    // Review, delivery address and promo code are native; the page itself
+    // pushes the WebView for courier choice and payment, which need the
+    // Biteship and Xendit secrets plus `service_role` RPCs. The web app's
+    // own `/cart/checkout/success` redirect happens inside that WebView, so
+    // there's no separate native success route to register.
     GoRoute(
       path: Routes.checkout,
-      builder: (_, __) => const CheckoutWebViewPage(),
+      builder: (_, __) => const CheckoutPage(),
     ),
     GoRoute(
       path: Routes.orders,
@@ -206,6 +212,16 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
 
+    // Seller.
+    GoRoute(
+      path: Routes.seller,
+      builder: (_, __) => const SellerDashboardPage(),
+    ),
+    GoRoute(
+      path: Routes.sellerProducts,
+      builder: (_, __) => const SellerProductsPage(),
+    ),
+
     // Social / account.
     GoRoute(
       path: Routes.chat,
@@ -224,6 +240,14 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: Routes.settings, builder: (_, __) => const SettingsPage()),
     GoRoute(
+      path: Routes.addresses,
+      builder: (_, __) => const AddressesPage(),
+    ),
+    GoRoute(
+      path: Routes.accountFollowing,
+      builder: (_, __) => const FollowingPage(),
+    ),
+    GoRoute(
       path: Routes.users,
       builder: (_, __) => const UsersSearchPage(),
     ),
@@ -231,6 +255,11 @@ final appRouter = GoRouter(
       path: '/user/:username',
       builder: (_, state) =>
           UserProfilePage(username: state.pathParameters['username']!),
+    ),
+    GoRoute(path: Routes.decks, builder: (_, __) => const DeckPage()),
+    GoRoute(
+      path: Routes.inventory,
+      builder: (_, __) => const InventoryPage(),
     ),
     GoRoute(
       path: '/portfolio/deck/:id',
@@ -243,7 +272,7 @@ final appRouter = GoRouter(
         GoRoute(
           path: ':id',
           builder: (_, state) =>
-              ListDetailPage(listId: int.parse(state.pathParameters['id']!)),
+              ListDetailPage(listId: state.pathParameters['id']!),
         ),
       ],
     ),

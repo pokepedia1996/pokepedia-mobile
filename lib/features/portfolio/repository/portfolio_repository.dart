@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../shared/data/dummy_catalog.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/deck_model.dart';
 import 'models/deck_card_entry.dart';
@@ -16,11 +15,31 @@ const _deckSelect = 'id, name, description, share_code, created_at, updated_at, 
 const _cardColumns =
     'id, name_id, expansion_code, collector_number, rarity, category, image_url, illustrator, regulation_mark, language, variant, details';
 
+/// Mirrors the `lists` columns `features/list/api/lists.ts` selects.
+const _listColumns =
+    'id, name, description, share_code, created_at, updated_at, list_cards(count)';
+
+/// `MAX_NAME_LEN` / `MAX_DESC_LEN` from that same module.
+const listNameMaxLength = 100;
+const listDescriptionMaxLength = 500;
+
+/// Ports `generateShareCode` — nine characters from an alphabet with the
+/// ambiguous glyphs (I, l, O, 0, 1) left out, hyphenated in the middle.
+String generateShareCode() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  final random = Random.secure();
+  final buffer = StringBuffer();
+  for (var i = 0; i < 9; i++) {
+    if (i == 4) buffer.write('-');
+    buffer.write(chars[random.nextInt(chars.length)]);
+  }
+  return buffer.toString();
+}
+
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
-/// `fetchUserDecks` / `lib/products/wishlist.ts` on the web. `fetchLists`/
-/// `fetchListCards` (the separate "List"/wantlist feature, not shown on
-/// this tab bar) still return dummy data pending their own pass.
+/// `fetchUserDecks` / `lib/products/wishlist.ts` / `features/list/api/lists.ts`
+/// on the web.
 class PortfolioRepository {
   PortfolioRepository(this._client);
 
@@ -387,16 +406,140 @@ class PortfolioRepository {
     return rows.map((r) => CardModel.fromRow((r as Map<String, dynamic>)['card'] as Map<String, dynamic>)).toList();
   }
 
-  Future<List<WantlistModel>> fetchLists() async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    return const [
-      WantlistModel(id: 1, name: 'Buruan Beli', cardCount: 12, updatedAt: '1 hari lalu'),
-      WantlistModel(id: 2, name: 'Grail List', cardCount: 5, updatedAt: '2 minggu lalu'),
-    ];
+  /// Ports `fetchUserLists` — the user's lists, most recently touched first,
+  /// with their card counts from the embedded `list_cards(count)`.
+  ///
+  /// `lists` and `list_cards` are own-row under RLS ("Users can manage own
+  /// lists"), so this and every mutation below run on the user's own session
+  /// without a server route.
+  Future<List<WantlistModel>> fetchLists(String userId) async {
+    final rows = await _client
+        .from('lists')
+        .select(_listColumns)
+        .eq('user_id', userId)
+        .order('updated_at', ascending: false);
+    return rows.map(WantlistModel.fromRow).toList();
   }
 
-  Future<List<CardModel>> fetchListCards(int listId) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    return DummyCatalog.allCards.skip(listId * 5).take(listId == 1 ? 12 : 5).toList();
+  /// Ports `fetchListCards`, in list order (`created_at` ascending).
+  Future<List<CardModel>> fetchListCards(String listId) async {
+    final rows = await _client
+        .from('list_cards')
+        .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
+        .eq('list_id', listId)
+        .order('created_at', ascending: true);
+    return rows.map((r) {
+      final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
+      // The list's own quantity, not an ownership count — the detail grid
+      // reads it the same way the collection shows copies held.
+      return card.copyWith(owned: (r['quantity'] as num?)?.toInt() ?? 1);
+    }).toList();
+  }
+
+  /// Ports `createList`. The share code is generated client-side there too,
+  /// with the same retry when one collides.
+  Future<({WantlistModel? list, String? error})> createList({
+    required String userId,
+    required String name,
+    String description = '',
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return (list: null, error: 'Nama list wajib diisi');
+    if (trimmed.length > listNameMaxLength) {
+      return (list: null, error: 'Nama list terlalu panjang');
+    }
+    if (description.length > listDescriptionMaxLength) {
+      return (list: null, error: 'Deskripsi terlalu panjang');
+    }
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final row = await _client
+            .from('lists')
+            .insert({
+              'user_id': userId,
+              'name': trimmed,
+              'description': description.trim(),
+              'share_code': generateShareCode(),
+            })
+            .select(_listColumns)
+            .single();
+        return (list: WantlistModel.fromRow(row), error: null);
+      } on PostgrestException catch (e) {
+        // 23505 is a share-code collision; anything else is real.
+        if (e.code == '23505' && attempt < 2) continue;
+        return (list: null, error: e.message);
+      }
+    }
+    return (list: null, error: 'Gagal membuat kode berbagi yang unik');
+  }
+
+  /// Ports `updateList`.
+  Future<String?> updateList({
+    required String listId,
+    required String userId,
+    required String name,
+    required String description,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Nama list wajib diisi';
+    if (trimmed.length > listNameMaxLength) return 'Nama list terlalu panjang';
+    if (description.length > listDescriptionMaxLength) {
+      return 'Deskripsi terlalu panjang';
+    }
+    try {
+      await _client
+          .from('lists')
+          .update({'name': trimmed, 'description': description.trim()})
+          .eq('id', listId)
+          .eq('user_id', userId);
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Ports `deleteList`. The list's cards go with it on the cascade.
+  Future<String?> deleteList({
+    required String listId,
+    required String userId,
+  }) async {
+    try {
+      await _client
+          .from('lists')
+          .delete()
+          .eq('id', listId)
+          .eq('user_id', userId);
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Ports `duplicateList` — the `duplicate_list` RPC copies the row and its
+  /// cards server-side and hands back the new id.
+  Future<({WantlistModel? list, String? error})> duplicateList(
+    String sourceListId,
+  ) async {
+    try {
+      final newId = await _client.rpc(
+        'duplicate_list',
+        params: {'p_source_list_id': sourceListId},
+      );
+      if (newId is! String || newId.isEmpty) {
+        return (list: null, error: 'Respons tidak dikenali dari server');
+      }
+      final row = await _client
+          .from('lists')
+          .select(_listColumns)
+          .eq('id', newId)
+          .maybeSingle();
+      if (row == null) {
+        return (list: null, error: 'List dibuat tapi gagal dimuat');
+      }
+      return (list: WantlistModel.fromRow(row), error: null);
+    } on PostgrestException catch (e) {
+      return (list: null, error: e.message);
+    }
   }
 }

@@ -22,11 +22,13 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
+import '../../../shared/widgets/remote_image.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/repository/cart_repository.dart';
 import '../../cart/usecase/cart_notifier.dart';
 import '../../expansions/presentation/widgets/card_details_section.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
+import '../../proposals/presentation/widgets/make_offer_sheet.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
 
@@ -93,8 +95,11 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        content: const Text('Ditambahkan ke keranjang'),
+        content: const Text('Kartu telah ditambahkan ke keranjang'),
         duration: const Duration(seconds: 2),
+        // A SnackBar with an action defaults to `persist: true`, which
+        // ignores `duration` and waits for a tap — opt back into timing out.
+        persist: false,
         action: SnackBarAction(
           label: 'Lihat',
           onPressed: () => context.push(Routes.cart),
@@ -103,7 +108,13 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     );
   }
 
-  void _makeOffer() => _comingSoon('Fitur penawaran segera hadir');
+  Future<void> _makeOffer(ListingModel listing) async {
+    if (!listing.acceptsOffers) {
+      _comingSoon('Penjual tidak menerima penawaran untuk listing ini');
+      return;
+    }
+    await showMakeOfferSheet(context, listing: listing);
+  }
 
   void _reportListing() => _comingSoon('Fitur laporan segera hadir');
 
@@ -201,17 +212,6 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                _Breadcrumb(
-                  items: [
-                    (label: 'Market', href: Routes.market),
-                    (
-                      label: store.storeName,
-                      href: Routes.storeDetail(store.handle),
-                    ),
-                    (label: card.name, href: null),
-                  ],
-                ),
-                const SizedBox(height: 10),
                 _PackRow(pack: pack, card: card),
                 const SizedBox(height: 16),
 
@@ -296,7 +296,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                     _photoIndex = 0;
                   }),
                   onAddToCart: (qty) => _addToCart(active, qty),
-                  onMakeOffer: _makeOffer,
+                  onMakeOffer: () => _makeOffer(active),
                   onReport: _reportListing,
                   onToggleFollow: () => _toggleFollow(store.storeName),
                   onContact: () => context.push(Routes.chatThread(store.handle)),
@@ -322,50 +322,6 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
           icon: Icons.error_outline,
           title: 'Gagal memuat listing',
         ),
-      ),
-    );
-  }
-}
-
-/// Ports `components/ui/breadcrumb.tsx` — caption-sized trail with chevron
-/// separators, scrolling sideways rather than wrapping.
-class _Breadcrumb extends StatelessWidget {
-  const _Breadcrumb({required this.items});
-
-  final List<({String label, String? href})> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(
-                  Icons.chevron_right,
-                  size: 14,
-                  color: context.mutedForeground,
-                ),
-              ),
-            if (items[i].href == null || i == items.length - 1)
-              Text(
-                items[i].label,
-                style: AppTypography.captionSemibold(colors.onSurface),
-              )
-            else
-              InkWell(
-                onTap: () => context.push(items[i].href!),
-                child: Text(
-                  items[i].label,
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-              ),
-          ],
-        ],
       ),
     );
   }
@@ -416,11 +372,7 @@ class _PackRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         if (pack?.setSymbolUrl != null)
-          Image.network(
-            pack!.setSymbolUrl!,
-            height: 24,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          )
+          RemoteImage(url: pack!.setSymbolUrl!, height: 24)
         else if (pack != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

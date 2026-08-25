@@ -15,6 +15,12 @@ class CartItem {
 
   int get subtotal => listing.price * quantity;
 
+  /// Ports `isAvailable` from `lib/cart/shared.ts` — a line can still be in
+  /// the cart after the listing closed or sold out underneath the buyer, and
+  /// those can't be checked out.
+  bool get isAvailable =>
+      listing.status == ListingStatus.open && listing.available > 0;
+
   CartItem copyWith({int? quantity}) => CartItem(
     cartItemId: cartItemId,
     listing: listing,

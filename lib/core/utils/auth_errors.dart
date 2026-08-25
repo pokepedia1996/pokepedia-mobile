@@ -14,6 +14,13 @@ String translateAuthError(String raw) {
   if (raw.contains('should be different from the old password')) {
     return 'Password baru harus berbeda dari password lama';
   }
+  // Supabase answers an OAuth attempt for a provider that isn't turned on
+  // in the project with this. It's a configuration gap, not the user's
+  // mistake, so say so rather than showing the raw string.
+  if (raw.contains('provider is not enabled') ||
+      raw.contains('Unsupported provider')) {
+    return 'Login dengan Google belum tersedia. Coba masuk dengan email.';
+  }
   if (raw.contains('Failed to fetch') || raw.contains('SocketException')) {
     return 'Koneksi gagal. Periksa koneksi internet atau coba lagi.';
   }
