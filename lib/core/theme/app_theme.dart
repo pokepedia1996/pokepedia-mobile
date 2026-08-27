@@ -184,8 +184,7 @@ extension BuildContextTheme on BuildContext {
   ColorScheme get appColors => Theme.of(this).colorScheme;
   AppSemanticColors get appSemantic =>
       Theme.of(this).extension<AppSemanticColors>()!;
-  Color get mutedForeground =>
-      Theme.of(this).brightness == Brightness.light
+  Color get mutedForeground => Theme.of(this).brightness == Brightness.light
       ? AppColors.black40
       : AppColors.black20;
   Color get borderColor => Theme.of(this).dividerColor;

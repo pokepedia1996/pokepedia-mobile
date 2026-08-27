@@ -1,6 +1,7 @@
 import '../models/card_model.dart';
 import '../models/pokemon_type.dart';
-import '../../features/expansions/repository/expansions_repository.dart' show compareNatural;
+import '../../features/expansions/repository/expansions_repository.dart'
+    show compareNatural;
 
 /// Ports `CardFilters`/`applyFilters`/`deriveFilterOptions` from
 /// `components/card/card-filters.tsx`.
@@ -65,7 +66,9 @@ List<CardModel> applyCardFilters(List<CardModel> cards, CardFilters filters) {
     }).toList();
   }
   if (filters.categories.isNotEmpty) {
-    result = result.where((c) => filters.categories.contains(c.category)).toList();
+    result = result
+        .where((c) => filters.categories.contains(c.category))
+        .toList();
   }
   if (filters.types.isNotEmpty) {
     result = result.where((c) {
@@ -80,17 +83,29 @@ List<CardModel> applyCardFilters(List<CardModel> cards, CardFilters filters) {
   }
   if (filters.evolutionStages.isNotEmpty) {
     result = result
-        .where((c) => c.details.evolutionStage != null && filters.evolutionStages.contains(c.details.evolutionStage))
+        .where(
+          (c) =>
+              c.details.evolutionStage != null &&
+              filters.evolutionStages.contains(c.details.evolutionStage),
+        )
         .toList();
   }
   if (filters.trainerSubtypes.isNotEmpty) {
     result = result
-        .where((c) => c.details.trainerSubtype != null && filters.trainerSubtypes.contains(c.details.trainerSubtype))
+        .where(
+          (c) =>
+              c.details.trainerSubtype != null &&
+              filters.trainerSubtypes.contains(c.details.trainerSubtype),
+        )
         .toList();
   }
   if (filters.regulationMarks.isNotEmpty) {
     result = result
-        .where((c) => c.regulationMark != null && filters.regulationMarks.contains(c.regulationMark))
+        .where(
+          (c) =>
+              c.regulationMark != null &&
+              filters.regulationMarks.contains(c.regulationMark),
+        )
         .toList();
   }
   return result;
@@ -130,21 +145,26 @@ CardFilterOptions deriveCardFilterOptions(List<CardModel> cards) {
       types.addAll(c.details.pokemonTypes);
     }
     rarities.add(c.rarity ?? 'Tanpa tanda');
-    if (c.details.evolutionStage != null) evolutionStages.add(c.details.evolutionStage!);
-    if (c.details.trainerSubtype != null) trainerSubtypes.add(c.details.trainerSubtype!);
+    if (c.details.evolutionStage != null)
+      evolutionStages.add(c.details.evolutionStage!);
+    if (c.details.trainerSubtype != null)
+      trainerSubtypes.add(c.details.trainerSubtype!);
     if (c.regulationMark != null && c.regulationMark!.isNotEmpty) {
       regulationMarks.add(c.regulationMark!);
     }
   }
 
-  final sortedRarities = rarities.toList()..sort((a, b) => rarityRank(a).compareTo(rarityRank(b)));
+  final sortedRarities = rarities.toList()
+    ..sort((a, b) => rarityRank(a).compareTo(rarityRank(b)));
 
   return CardFilterOptions(
     categories: categories.toList()..sort((a, b) => a.name.compareTo(b.name)),
     types: types.toList()..sort((a, b) => a.name.compareTo(b.name)),
     rarities: sortedRarities,
-    evolutionStages: evolutionStages.toList()..sort((a, b) => a.index.compareTo(b.index)),
-    trainerSubtypes: trainerSubtypes.toList()..sort((a, b) => a.index.compareTo(b.index)),
+    evolutionStages: evolutionStages.toList()
+      ..sort((a, b) => a.index.compareTo(b.index)),
+    trainerSubtypes: trainerSubtypes.toList()
+      ..sort((a, b) => a.index.compareTo(b.index)),
     regulationMarks: regulationMarks.toList()..sort(),
   );
 }
@@ -219,9 +239,13 @@ List<CardModel> sortCards(List<CardModel> cards, CardSortOption sortBy) {
       case CardSortOption.numberDesc:
         return compareNatural(b.collectorNumber, a.collectorNumber);
       case CardSortOption.rarityAsc:
-        return rarityRank(a.rarity ?? 'Tanpa tanda').compareTo(rarityRank(b.rarity ?? 'Tanpa tanda'));
+        return rarityRank(
+          a.rarity ?? 'Tanpa tanda',
+        ).compareTo(rarityRank(b.rarity ?? 'Tanpa tanda'));
       case CardSortOption.rarityDesc:
-        return rarityRank(b.rarity ?? 'Tanpa tanda').compareTo(rarityRank(a.rarity ?? 'Tanpa tanda'));
+        return rarityRank(
+          b.rarity ?? 'Tanpa tanda',
+        ).compareTo(rarityRank(a.rarity ?? 'Tanpa tanda'));
       case CardSortOption.priceAsc:
         return _comparePrice(a, b, 1);
       case CardSortOption.priceDesc:

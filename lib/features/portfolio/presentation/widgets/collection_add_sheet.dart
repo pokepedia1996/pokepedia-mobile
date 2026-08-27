@@ -291,10 +291,7 @@ class _QuantitySheetState extends State<_QuantitySheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              widget.card.name,
-              style: AppTypography.h3(colors.onSurface),
-            ),
+            Text(widget.card.name, style: AppTypography.h3(colors.onSurface)),
             Text(
               '${widget.card.expansionCode.toUpperCase()} · '
               '${widget.card.collectorNumber}',

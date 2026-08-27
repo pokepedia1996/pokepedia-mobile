@@ -245,7 +245,11 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     }
   }
 
-  Future<SignUpResult> signUp(String username, String email, String password) async {
+  Future<SignUpResult> signUp(
+    String username,
+    String email,
+    String password,
+  ) async {
     final client = ref.read(supabaseClientProvider);
     try {
       final response = await client.auth
@@ -275,7 +279,8 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     } on TimeoutException {
       return const SignUpResult(
         SignUpOutcome.error,
-        errorMessage: 'Waktu koneksi habis. Periksa koneksi internet atau coba lagi.',
+        errorMessage:
+            'Waktu koneksi habis. Periksa koneksi internet atau coba lagi.',
       );
     }
   }
@@ -318,4 +323,6 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
   }
 }
 
-final authProvider = AsyncNotifierProvider<AuthNotifier, AppUser?>(AuthNotifier.new);
+final authProvider = AsyncNotifierProvider<AuthNotifier, AppUser?>(
+  AuthNotifier.new,
+);

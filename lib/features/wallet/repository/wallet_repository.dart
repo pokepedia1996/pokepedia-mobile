@@ -2,9 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/wallet_models.dart';
 
-/// Data access for the Wallet feature, backed by `public.wallets` for the
-/// balance (real — needed by checkout's wallet-payment gating). Activity
-/// (`public.wallet_ledger`) is still dummy data pending a dedicated pass.
+/// Data access for the Wallet feature: `public.wallets` for the balance and
+/// `get_wallet_activity` for the ledger.
+///
+/// The activity RPC rather than a direct `wallet_ledger` read: it already
+/// buckets each row (penghasilan / refund / penarikan) and applies the
+/// caller scoping, so the two clients agree on what a row means.
 class WalletRepository {
   WalletRepository(this._client);
 
@@ -21,37 +24,16 @@ class WalletRepository {
     return (row?['balance'] as num?)?.toInt() ?? 0;
   }
 
-  Future<List<WalletActivity>> fetchActivity() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    var balance = 1250000;
-    final entries = const [
-      (WalletReason.escrowRelease, 'Penjualan Charizard ex #199', 480000),
-      (WalletReason.withdrawalDebit, 'Penarikan ke BCA ****1234', 300000),
-      (WalletReason.escrowRelease, 'Penjualan Pikachu VMAX #044', 220000),
-      (WalletReason.disputePartialRefund, 'Refund sebagian ke pembeli', 15000),
-      (WalletReason.buyerCancelRefund, 'Refund pembatalan pembeli', 25000),
-    ];
-    // wallet_ledger.balance_after walks backwards from the current
-    // balance since these entries are listed newest-first.
-    final result = <WalletActivity>[];
-    for (var i = 0; i < entries.length; i++) {
-      final (reason, description, amount) = entries[i];
-      result.add(
-        WalletActivity(
-          id: i + 1,
-          reason: reason,
-          description: description,
-          amount: amount,
-          balanceAfter: balance,
-          date: switch (i) {
-            0 => 'Hari ini, 09:12',
-            1 => 'Kemarin, 18:40',
-            _ => '$i hari lalu',
-          },
-        ),
-      );
-      balance = reason.isCredit ? balance - amount : balance + amount;
-    }
-    return result;
+  Future<List<WalletActivity>> fetchActivity({int limit = 30}) async {
+    if (_client.auth.currentUser == null) return const [];
+    final rows =
+        await _client.rpc(
+              'get_wallet_activity',
+              params: {'p_limit': limit, 'p_bucket': 'all'},
+            )
+            as List;
+    return rows
+        .map((r) => WalletActivity.fromRow(r as Map<String, dynamic>))
+        .toList();
   }
 }

@@ -126,10 +126,7 @@ class DashboardPayload {
   );
 
   /// Ports `mapRowToPayload` over one `get_seller_performance` row.
-  factory DashboardPayload.fromRow(
-    Map<String, dynamic> row,
-    int windowDays,
-  ) {
+  factory DashboardPayload.fromRow(Map<String, dynamic> row, int windowDays) {
     int asInt(Object? v) => switch (v) {
       final int i => i,
       final num n => n.round(),

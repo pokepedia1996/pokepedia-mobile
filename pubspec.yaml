@@ -43,12 +43,17 @@ dependencies:
   supabase_flutter: ^2.16.0
   flutter_svg: ^2.3.0
   url_launcher: ^6.3.1
+  # Renders the QRIS payload as a scannable code, on-device.
+  qr_flutter: ^4.1.0
   webview_flutter: ^4.10.0
   image_picker: ^1.2.3
   google_sign_in: ^7.2.0
   shared_preferences: ^2.5.5
   share_plus: ^13.3.0
   path_provider: ^2.1.6
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
+  image: ^4.9.2
 
 
 dev_dependencies:
@@ -77,8 +82,11 @@ flutter:
   assets:
     - assets/images/
     - assets/images/elements/
+    - assets/images/flags/
     - assets/animation/
     - assets/data/
+    - assets/tutorials/
+    - assets/legal/
 
   fonts:
     - family: CalSans

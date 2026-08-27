@@ -72,8 +72,7 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
   /// different image size per handset for the same design.
   Future<Uint8List?> _capture() async {
     final boundary =
-        _posterKey.currentContext?.findRenderObject()
-            as RenderRepaintBoundary?;
+        _posterKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null) return null;
 
     // A frame may not have painted yet on the first tap.

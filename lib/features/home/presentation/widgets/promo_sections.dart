@@ -18,11 +18,27 @@ const _deckFeatures = [
 
 const _tournamentSlugs = ['pbl', 'gbl', 'ubl', 'mbl', 'wc'];
 
-List<String> _heroCards(List<int> indices) =>
-    [for (final i in indices) '$_cdn/hero/sm/$i.webp'];
+List<String> _heroCards(List<int> indices) => [
+  for (final i in indices) '$_cdn/hero/sm/$i.webp',
+];
 
 final _collectionCards = _heroCards(const [
-  12, 13, 14, 15, 16, 17, 18, 19, 33, 34, 35, 36, 37, 38, 39, 20,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  20,
 ]);
 
 class _PromoCard extends StatelessWidget {
@@ -205,7 +221,8 @@ class DeckbuilderPromoSection extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => context.go('${Routes.portfolio}?tab=deck'),
+                        onPressed: () =>
+                            context.go('${Routes.portfolio}?tab=deck'),
                         style: ElevatedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(AppRadius.full),
@@ -242,10 +259,7 @@ class _HighlightLine extends StatelessWidget {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      child: Text(
-        text,
-        style: AppTypography.h2(const Color(0xFF18181B)),
-      ),
+      child: Text(text, style: AppTypography.h2(const Color(0xFF18181B))),
     );
   }
 }
@@ -329,7 +343,10 @@ class CollectionPromoSection extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      colors: [colors.surface, colors.surface.withValues(alpha: 0.0)],
+                      colors: [
+                        colors.surface,
+                        colors.surface.withValues(alpha: 0.0),
+                      ],
                     ),
                   ),
                 ),
@@ -344,7 +361,10 @@ class CollectionPromoSection extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.centerRight,
                       end: Alignment.centerLeft,
-                      colors: [colors.surface, colors.surface.withValues(alpha: 0.0)],
+                      colors: [
+                        colors.surface,
+                        colors.surface.withValues(alpha: 0.0),
+                      ],
                     ),
                   ),
                 ),

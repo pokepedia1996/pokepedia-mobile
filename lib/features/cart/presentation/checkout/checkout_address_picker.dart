@@ -182,10 +182,7 @@ class _AddressListSheet extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              'Pilih Alamat',
-              style: AppTypography.h3(colors.onSurface),
-            ),
+            Text('Pilih Alamat', style: AppTypography.h3(colors.onSurface)),
             const SizedBox(height: 12),
             for (final address in CheckoutDummyData.addresses) ...[
               InkWell(
@@ -258,7 +255,11 @@ class _AddressListSheet extends StatelessWidget {
                         ),
                       ),
                       if (address.id == selectedId)
-                        Icon(Icons.check_circle, color: colors.primary, size: 20),
+                        Icon(
+                          Icons.check_circle,
+                          color: colors.primary,
+                          size: 20,
+                        ),
                     ],
                   ),
                 ),
@@ -267,7 +268,9 @@ class _AddressListSheet extends StatelessWidget {
             OutlinedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Fitur tambah alamat segera hadir')),
+                  const SnackBar(
+                    content: Text('Fitur tambah alamat segera hadir'),
+                  ),
                 );
               },
               child: const Text('+ Tambah Alamat Baru'),

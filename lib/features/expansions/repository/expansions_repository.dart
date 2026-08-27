@@ -71,7 +71,10 @@ class ExpansionsRepository {
     return row == null ? null : PackModel.fromRow(row);
   }
 
-  Future<List<CardModel>> fetchCardsForPack(String slug, {String language = 'id'}) async {
+  Future<List<CardModel>> fetchCardsForPack(
+    String slug, {
+    String language = 'id',
+  }) async {
     final rows = await _client
         .from('cards')
         .select(_cardColumns)
@@ -84,7 +87,11 @@ class ExpansionsRepository {
   }
 
   Future<CardModel?> fetchCard(int id) async {
-    final row = await _client.from('cards').select(_cardColumns).eq('id', id).maybeSingle();
+    final row = await _client
+        .from('cards')
+        .select(_cardColumns)
+        .eq('id', id)
+        .maybeSingle();
     return row == null ? null : CardModel.fromRow(row);
   }
 
@@ -133,7 +140,10 @@ class ExpansionsRepository {
   /// filter runs *before* the `DISTINCT ON`.
   Future<List<CardModel>> fetchEvolutionPool(List<String> seedNames) async {
     if (seedNames.isEmpty) return const [];
-    final rows = await _client.rpc('get_evolution_pool', params: {'seed_names': seedNames});
+    final rows = await _client.rpc(
+      'get_evolution_pool',
+      params: {'seed_names': seedNames},
+    );
     return (rows as List)
         .map((r) => CardModel.fromRow(r as Map<String, dynamic>))
         .toList();
@@ -209,11 +219,7 @@ class ExpansionsRepository {
       cardIds,
       (batch) => _client.rpc(
         'bulk_upsert_user_cards',
-        params: {
-          'p_user_id': userId,
-          'p_card_ids': batch,
-          'p_delta': delta,
-        },
+        params: {'p_user_id': userId, 'p_card_ids': batch, 'p_delta': delta},
       ),
     );
   }
@@ -461,9 +467,7 @@ int compareNatural(String a, String b) {
 }
 
 List<Object> _naturalParts(String s) {
-  return RegExp(
-    r'(\d+)|(\D+)',
-  ).allMatches(s).map<Object>((m) {
+  return RegExp(r'(\d+)|(\D+)').allMatches(s).map<Object>((m) {
     final numStr = m.group(1);
     if (numStr != null) return int.parse(numStr);
     return (m.group(2) ?? '').toLowerCase();

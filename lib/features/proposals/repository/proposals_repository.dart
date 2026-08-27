@@ -11,13 +11,15 @@ const _cardColumns =
     'id, name_id, expansion_code, collector_number, rarity, category, image_url, '
     'illustrator, regulation_mark, language, variant, details';
 
-const _offerColumns = '''
+const _offerColumns =
+    '''
 slug, condition, quantity, listing_price, current_price, last_actor, status,
 buyer_counter_count, seller_counter_count, message, created_at, expires_at,
 seller_id, card:cards!inner($_cardColumns)
 ''';
 
-const _proposalColumns = '''
+const _proposalColumns =
+    '''
 slug, status, proposed_quantity, proposed_price, condition, message,
 created_at, expires_at, seller_id,
 bid:listings!inner(id, price, user_id, card:cards!inner($_cardColumns))
@@ -157,8 +159,7 @@ class ProposalsRepository {
         card: card,
         condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
         proposedQuantity: (row['proposed_quantity'] as num?)?.toInt() ?? 1,
-        sellerStoreName:
-            storeNames[row['seller_id'] as String] ?? 'Penjual',
+        sellerStoreName: storeNames[row['seller_id'] as String] ?? 'Penjual',
         status: _proposalStatus(row['status'] as String?),
         createdAt: _date(row['created_at']),
         expiresAt: _date(row['expires_at']),

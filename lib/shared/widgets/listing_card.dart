@@ -25,6 +25,47 @@ import 'seller_avatar.dart';
 /// selector / "Tambah ke Keranjang" button web shows for buyable listings
 /// is intentionally omitted, mirroring how the web marketplace grid itself
 /// renders this component with `buyable={false}`.
+/// The grid geometry [ListingCard] needs, computed from the cell width
+/// rather than set as an aspect ratio.
+///
+/// A card is artwork (a fixed 245:342) plus rows of text whose height does
+/// not scale with the screen. One `childAspectRatio` therefore can't be
+/// right on more than one device: tight on a 390pt phone, it overflows on a
+/// 360pt one, and loose enough to be safe there it leaves a gap on tablets.
+///
+/// The constants come from measuring the card, in
+/// `test/listing_card_height_test.dart`, which fails if the layout grows
+/// past them.
+SliverGridDelegate listingGridDelegate(
+  BuildContext context, {
+  required bool showSeller,
+  int columns = 2,
+  double spacing = 12,
+  double horizontalPadding = 16,
+}) {
+  final width = MediaQuery.sizeOf(context).width;
+  final cell =
+      (width - horizontalPadding * 2 - spacing * (columns - 1)) / columns;
+
+  // The artwork sits inside the card's 8pt padding on each side.
+  final art = (cell - 16) * 342 / 245;
+
+  return SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: columns,
+    mainAxisSpacing: spacing,
+    crossAxisSpacing: spacing,
+    mainAxisExtent:
+        art + (showSeller ? listingCardChrome : listingCardChromeNoSeller),
+  );
+}
+
+/// Everything in the card that isn't artwork: the four text rows, the
+/// card's padding, and the seller strip.
+const listingCardChrome = 149.0;
+
+/// The same without the seller strip (`showSeller: false`).
+const listingCardChromeNoSeller = 119.0;
+
 class ListingCard extends ConsumerStatefulWidget {
   const ListingCard({
     super.key,
@@ -56,11 +97,19 @@ class _ListingCardState extends ConsumerState<ListingCard> {
       return;
     }
     setState(() => _wishlistToggling = true);
-    await ref
+    final error = await ref
         .read(cardOwnershipControllerProvider)
         .setWishlisted(widget.listing.card.id, !wishlisted);
     if (!mounted) return;
     setState(() => _wishlistToggling = false);
+
+    // Without this the heart just snaps back on the next rebuild, which
+    // reads as the tap not registering rather than the write failing.
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(error), persist: false));
+    }
   }
 
   void _handleTap(BuildContext context) {
@@ -108,8 +157,8 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                 ),
                 if (listing.isFeatured)
                   Positioned(
-                    left: 6,
-                    top: 6,
+                    left: 0,
+                    top: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
@@ -129,8 +178,13 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                     ),
                   ),
                 Positioned(
-                  left: 6,
-                  top: listing.isFeatured ? 34 : 6,
+                  // Flush with the artwork's corner, which is where web's
+                  // `left-2 top-2` puts it: that offset is measured from the
+                  // card, whose 8px padding is exactly where the image
+                  // starts. Dropping to the image's own corner instead of
+                  // insetting again is what closes the gap.
+                  left: 0,
+                  top: listing.isFeatured ? 36 : 0,
                   child: _WishlistBadge(
                     wishlisted: wishlisted,
                     loading: _wishlistToggling,
@@ -142,71 +196,86 @@ class _ListingCardState extends ConsumerState<ListingCard> {
               ],
             ),
             const SizedBox(height: 8),
+            // Row 1 — the card's name, on a line of its own.
+            Text(
+              listing.card.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+            const SizedBox(height: 4),
+
+            // Row 2 — where the card is from: language, expansion, number.
             Row(
               children: [
                 CardLanguageBadge(language: listing.card.language),
                 const SizedBox(width: 4),
-                Expanded(
+                // _setSymbol(context, listing),
+                Flexible(
                   child: Text(
-                    listing.card.name,
+                    listing.card.expansionCode.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                    style: AppTypography.caption(context.mutedForeground),
                   ),
                 ),
-
-                const SizedBox(width: 6),
-                Text(
-                  listing.card.collectorNumber,
-                  style: AppTypography.caption(context.mutedForeground),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    listing.card.collectorNumber,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
+
+            // Row 3 — which side of the book, and how many.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 4,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isBid ? semantic.bid : semantic.ask,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        isBid ? 'BID (WTB)' : 'ASK (WTS)',
-                        style: AppTypography.badge(Colors.white),
-                      ),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
                     ),
-                    Text(
-                      '${listing.available} ${isBid ? "Dicari" : "Tersedia"}',
+                    decoration: BoxDecoration(
+                      color: isBid ? semantic.bid : semantic.ask,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isBid ? 'BID (WTB)' : 'ASK (WTS)',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTypography.caption(context.mutedForeground),
+                      style: AppTypography.badge(Colors.white),
                     ),
-                  ],
+                  ),
                 ),
-
-                _buildSetSymbol(context, listing),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    '${listing.available} ${isBid ? "Dicari" : "Tersedia"}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 4),
+            // Takes up whatever the grid cell has left over, so the price
+            // and seller strip sit on the tile's bottom edge instead of a
+            // gap sitting under them — the cells are a fixed aspect ratio
+            // and most tiles don't fill one.
+            const SizedBox(height: 6),
+
+            // Row 4 — the price.
             Row(
               children: [
                 Text(
                   formatRupiah(listing.price),
                   style: AppTypography.bodySemibold(colors.onSurface),
-                ),
-                const Spacer(),
-                Text(
-                  formatRelativeId(listing.createdAt),
-                  style: AppTypography.caption(context.mutedForeground),
                 ),
               ],
             ),
@@ -260,29 +329,29 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                         ReputationStar(score: listing.sellerFeedbackScore),
                       ],
                     ),
-                    if (listing.cityName.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.location_on_outlined,
-                            size: 11,
-                            color: context.mutedForeground,
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              listing.cityName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.caption(
-                                context.mutedForeground,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    // if (listing.cityName.isNotEmpty) ...[
+                    //   const SizedBox(height: 2),
+                    //   Row(
+                    //     children: [
+                    //       Icon(
+                    //         Icons.location_on_outlined,
+                    //         size: 11,
+                    //         color: context.mutedForeground,
+                    //       ),
+                    //       const SizedBox(width: 2),
+                    //       Expanded(
+                    //         child: Text(
+                    //           listing.cityName,
+                    //           maxLines: 1,
+                    //           overflow: TextOverflow.ellipsis,
+                    //           style: AppTypography.caption(
+                    //             context.mutedForeground,
+                    //           ),
+                    //         ),
+                    //       ),
+                    //     ],
+                    //   ),
+                    // ],
                   ],
                 ),
               ),
@@ -293,25 +362,20 @@ class _ListingCardState extends ConsumerState<ListingCard> {
     );
   }
 
-  Widget _buildSetSymbol(BuildContext context, ListingModel listing) {
+  /// The expansion's set symbol, when it has one. The code beside it names
+  /// the expansion either way, so a missing symbol draws nothing rather than
+  /// repeating that code.
+  Widget _setSymbol(BuildContext context, ListingModel listing) {
     final url = listing.expansionSetSymbolUrl;
-    if (url != null && url.isNotEmpty) {
-      return SvgPicture.network(
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: SvgPicture.network(
         url,
-        height: 20,
+        height: 14,
         fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) =>
-            _expansionCodeText(context, listing),
-      );
-    }
-    return _expansionCodeText(context, listing);
-  }
-
-  Widget _expansionCodeText(BuildContext context, ListingModel listing) {
-    if (listing.card.expansionCode.isEmpty) return const SizedBox.shrink();
-    return Text(
-      listing.card.expansionCode.toUpperCase(),
-      style: AppTypography.caption(context.mutedForeground),
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+      ),
     );
   }
 }
@@ -368,4 +432,3 @@ class _WishlistBadge extends StatelessWidget {
     );
   }
 }
-

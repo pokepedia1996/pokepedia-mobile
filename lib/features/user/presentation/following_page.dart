@@ -199,9 +199,8 @@ class _ListingThumb extends StatelessWidget {
                 Image.network(
                   listing.photoUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => ColoredBox(
-                    color: colors.secondary,
-                  ),
+                  errorBuilder: (_, __, ___) =>
+                      ColoredBox(color: colors.secondary),
                 ),
               Positioned(
                 left: 0,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,8 +17,10 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/fly_to_cart.dart';
 import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
@@ -28,9 +32,11 @@ import 'widgets/more_from_seller_section.dart';
 import 'widgets/store_share_sheet.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/repository/cart_repository.dart';
+import '../../chat/repository/models/chat_models.dart';
+import '../../chat/usecase/chat_notifier.dart';
+import '../../user/usecase/user_notifier.dart';
 import '../../cart/usecase/cart_notifier.dart';
 import '../../expansions/presentation/widgets/card_details_section.dart';
-import '../../expansions/usecase/expansions_notifier.dart';
 import '../../proposals/presentation/widgets/make_offer_sheet.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
@@ -82,10 +88,20 @@ class StoreCardListingPage extends ConsumerStatefulWidget {
 class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
   CardCondition? _selectedCondition;
   bool _following = false;
+  bool _followSeeded = false;
   bool _wishlistToggling = false;
   int _photoIndex = 0;
 
-  Future<void> _addToCart(ListingModel listing, int quantity) async {
+  /// The two ends of the add-to-cart flight: the artwork it leaves and the
+  /// app bar cart it lands on.
+  final _artworkKey = GlobalKey();
+  final _cartIconKey = GlobalKey();
+
+  Future<void> _addToCart(
+    ListingModel listing,
+    int quantity,
+    String? imageUrl,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(cartProvider.notifier).add(listing.id, quantity);
@@ -95,6 +111,18 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       return;
     }
     if (!mounted) return;
+
+    // Says where the card went, before the snack bar says it in words. Not
+    // awaited: the confirmation shouldn't wait on the animation.
+    unawaited(
+      flyToCart(
+        context: context,
+        from: _artworkKey,
+        to: _cartIconKey,
+        child: CardArt(imageUrl: imageUrl, borderRadius: AppRadius.md),
+      ),
+    );
+
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
@@ -117,6 +145,44 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       return;
     }
     await showMakeOfferSheet(context, listing: listing);
+  }
+
+  /// Opens the conversation with this seller, reusing the existing room when
+  /// there is one. A room with nobody in it yet isn't created here — the
+  /// first message does that, via `ensure_direct_room`.
+  Future<void> _contactSeller(StoreModel store, ListingModel listing) async {
+    if (ref.read(authProvider).valueOrNull == null) {
+      context.push(Routes.login);
+      return;
+    }
+    final sellerId = store.userId;
+    if (sellerId == null) {
+      _comingSoon('Penjual ini belum bisa dihubungi');
+      return;
+    }
+
+    final arg = await ref
+        .read(chatOpenerProvider)
+        .withUser(
+          otherUserId: sellerId,
+          title: store.storeName,
+          listingId: listing.id,
+        );
+    if (!mounted) return;
+
+    final slug = arg.slug;
+    if (slug != null) {
+      context.push(Routes.chatThread(slug));
+    } else {
+      context.push(
+        Routes.chatNew,
+        extra: ChatTarget(
+          otherUserId: sellerId,
+          title: store.storeName,
+          listingId: listing.id,
+        ),
+      );
+    }
   }
 
   void _reportListing() => _comingSoon('Fitur laporan segera hadir');
@@ -146,15 +212,35 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     }
   }
 
-  void _toggleFollow(String storeName) {
-    setState(() => _following = !_following);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
+  /// Same write as the storefront's own button — `follow_shop` /
+  /// `unfollow_shop` — flipped optimistically and put back if it fails.
+  Future<void> _toggleFollow(StoreModel store) async {
+    if (ref.read(authProvider).valueOrNull == null) {
+      context.push(Routes.login);
+      return;
+    }
+    final shopUserId = store.userId;
+    if (shopUserId == null) return;
+
+    final next = !_following;
+    setState(() => _following = next);
+
+    final error = await ref
+        .read(followControllerProvider)
+        .setFollowing(shopUserId: shopUserId, following: next);
+    if (!mounted) return;
+    if (error != null) setState(() => _following = !next);
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          _following ? 'Mengikuti $storeName' : 'Berhenti mengikuti $storeName',
+          error ??
+              (next
+                  ? 'Mengikuti ${store.storeName}'
+                  : 'Berhenti mengikuti ${store.storeName}'),
         ),
+        persist: false,
       ),
     );
   }
@@ -170,7 +256,9 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      appBar: TransparentAppBar(
+        actions: [CartAppBarButton(iconKey: _cartIconKey)],
+      ),
       body: async.when(
         data: (data) {
           if (data == null || data.listings.isEmpty) {
@@ -200,16 +288,26 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
               cheapestByCondition[activeCondition] ?? data.listings.first;
           final card = active.card;
           final store = data.store;
-          final pack = ref.watch(packDetailProvider(card.packSlug)).valueOrNull;
           final wishlisted = ref.watch(isWishlistedProvider(widget.cardId));
+
+          // Seeded once from the server; after that this page owns the flag
+          // so the button doesn't snap back while the write is in flight.
+          final sellerId = store.userId;
+          if (!_followSeeded && sellerId != null) {
+            final known = ref
+                .watch(isFollowingShopProvider(sellerId))
+                .valueOrNull;
+            if (known != null) {
+              _followSeeded = true;
+              _following = known;
+            }
+          }
 
           // The seller's own photos of this copy stand in for the catalog
           // artwork, exactly like `heroPhotos`/`heroImage` on the web.
           final photos = active.photoUrls;
           final photoIndex = _photoIndex < photos.length ? _photoIndex : 0;
-          final heroImage = photos.isEmpty
-              ? card.imageUrl
-              : photos[photoIndex];
+          final heroImage = photos.isEmpty ? card.imageUrl : photos[photoIndex];
 
           return AppBarOverlayBody(
             child: ListView(
@@ -240,6 +338,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                           child: Hero(
                             tag: 'card-image-${card.id}',
                             child: Container(
+                              key: _artworkKey,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(
                                   AppRadius.lg,
@@ -280,7 +379,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                 const SizedBox(height: 14),
                 // "Nama kartu — Nomor — Ekspansi", the heading the sketch
                 // puts directly under the image and above the price.
-                _CardTitle(card: card, pack: pack),
+                CardTitleLine(card: card),
                 const SizedBox(height: 14),
 
                 // Buy block.
@@ -297,35 +396,41 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                     _selectedCondition = c;
                     _photoIndex = 0;
                   }),
-                  onAddToCart: (qty) => _addToCart(active, qty),
+                  onAddToCart: (qty) => _addToCart(active, qty, heroImage),
                   onMakeOffer: () => _makeOffer(active),
                   onReport: _reportListing,
-                  onToggleFollow: () => _toggleFollow(store.storeName),
-                  onContact: () => context.push(Routes.chatThread(store.handle)),
+                  onToggleFollow: () => _toggleFollow(store),
+                  onContact: () => _contactSeller(store, active),
                   onShare: () => showStoreShareSheet(context, store: store),
                 ),
                 const SizedBox(height: 20),
 
-                // The card's own info, below the buy block like the web's
-                // `order-4` column.
-                _CardHeader(
-                  card: card,
-                  wishlisted: wishlisted,
-                  toggling: _wishlistToggling,
-                  onToggleWishlist: () => _toggleWishlist(wishlisted),
-                ),
-                const SizedBox(height: 12),
-                CardDetailsSection(card: card),
+                // "Histori Transaksi" then the price chart — web's
+                // `order-3`, directly under the buy block, and the same two
+                // widgets the catalog (WTB) card page stacks in the same
+                // order. The market data is per card, not per listing, so a
+                // buyer comparing this seller's price against the market
+                // sees exactly what the WTB page shows.
+                SalesHistorySection(cardId: card.id),
+                const SizedBox(height: 16),
+                MarketActivitySection(cardId: card.id),
 
                 const SizedBox(height: 20),
                 Divider(height: 1, color: context.borderColor),
                 const SizedBox(height: 16),
-                // Price chart and "Histori Transaksi", as sketched. This is
-                // the same widget the catalog card page uses rather than a
-                // second implementation — the market data is per card, not
-                // per listing, so a buyer comparing this seller's price
-                // against the market sees exactly what the catalog shows.
-                MarketActivitySection(cardId: card.id),
+                // The card's own info last, like web's `order-4` column —
+                // the market history is what a buyer weighs the price
+                // against, so it comes first.
+                CardDetailsHeader(
+                  card: card,
+                  trailing: _WishlistButton(
+                    wishlisted: wishlisted,
+                    toggling: _wishlistToggling,
+                    onPressed: () => _toggleWishlist(wishlisted),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CardDetailsSection(card: card),
 
                 MoreFromSellerSection(
                   storeHandle: store.handle,
@@ -345,44 +450,20 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
   }
 }
 
-/// The expansion row above the artwork: pack image + name on the left, set
-/// symbol and collector number on the right.
-/// "Nama kartu — Nomor — Ekspansi" under the artwork, per the design.
-class _CardTitle extends StatelessWidget {
-  const _CardTitle({required this.card, required this.pack});
-
-  final CardModel card;
-  final PackModel? pack;
-
-  @override
-  Widget build(BuildContext context) {
-    // The expansion's real name when it has loaded; its code is the honest
-    // stand-in rather than a blank while it does.
-    final expansion = pack?.name ?? card.expansionCode.toUpperCase();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${card.name} — ${card.collectorNumber} — $expansion',
-          style: AppTypography.h2(context.appColors.onSurface),
-        ),
-      ],
-    );
-  }
-}
-
 /// The store-and-card line above the artwork.
-class _TitleLine extends StatelessWidget {
+class _TitleLine extends ConsumerWidget {
   const _TitleLine({required this.store, required this.card});
 
   final StoreModel store;
   final CardModel card;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The same "Nama - Nomor - Ekspansi (KODE)" the card pages use, behind
+    // the store this copy belongs to.
     return Text(
-      '${store.storeName} › ${card.name} — ${card.collectorNumber}',
+      '${store.storeName} › ${card.name} - ${card.collectorNumber} - '
+      '${expansionLabelOf(ref, card)}',
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: AppTypography.caption(context.mutedForeground),
@@ -547,7 +628,7 @@ class _PurchasePanel extends StatefulWidget {
   final int feedbackScore;
   final bool following;
   final void Function(CardCondition) onSelectCondition;
-  final void Function(int quantity) onAddToCart;
+  final Future<void> Function(int quantity) onAddToCart;
   final VoidCallback onMakeOffer;
   final VoidCallback onReport;
   final VoidCallback onToggleFollow;
@@ -560,6 +641,19 @@ class _PurchasePanel extends StatefulWidget {
 
 class _PurchasePanelState extends State<_PurchasePanel> {
   int _qty = 1;
+  bool _adding = false;
+
+  /// Holds the button until the row is really in the cart — a second tap
+  /// while the first is in flight would add the quantity twice.
+  Future<void> _add() async {
+    if (_adding) return;
+    setState(() => _adding = true);
+    try {
+      await widget.onAddToCart(_qty);
+    } finally {
+      if (mounted) setState(() => _adding = false);
+    }
+  }
 
   int get _maxQty => widget.active.available.clamp(0, 99);
 
@@ -669,16 +763,6 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                             formatRupiah(active.price),
                             style: AppTypography.h2(colors.onSurface),
                           ),
-                          if (widget.otherSellersCount > 0)
-                            InkWell(
-                              onTap: () => context.push(widget.globalCardHref),
-                              child: Text(
-                                'Lihat ${widget.otherSellersCount} listing lain →',
-                                style: AppTypography.captionSemibold(
-                                  colors.primary,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -691,33 +775,83 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                _OtherListingsCta(
+                  count: widget.otherSellersCount,
+                  href: widget.globalCardHref,
+                ),
                 if (store.onVacation) ...[
                   const SizedBox(height: 12),
                   _VacationNotice(store: store),
                 ],
-                if (active.acceptsOffers && active.available > 0) ...[
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    onPressed: widget.onMakeOffer,
-                    icon: const Icon(Icons.handshake_outlined, size: 15),
-                    label: const Text('Buat Penawaran'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: context.appSemantic.success,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: active.available <= 0 || vacationHard
-                      ? null
-                      : () => widget.onAddToCart(_qty),
-                  icon: const Icon(Icons.shopping_cart_outlined, size: 15),
-                  label: const Text('Keranjang'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.onSurface,
-                    foregroundColor: colors.surface,
-                  ),
+                // Offer and cart share a row. Both are fixed-height and
+                // single-line so the pair stays level whichever label is
+                // showing; "Tawar" rather than web's "Buat Penawaran"
+                // because half a phone's width can't hold the long form
+                // without ellipsing it.
+                Row(
+                  spacing: 10,
+                  children: [
+                    if (active.acceptsOffers && active.available > 0)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onMakeOffer,
+                          icon: const Icon(Icons.handshake_outlined, size: 15),
+                          label: const Text(
+                            'Tawar',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: context.appSemantic.success,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(44),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            active.available <= 0 || vacationHard || _adding
+                            ? null
+                            : _add,
+                        icon: _adding
+                            ? SizedBox(
+                                width: 15,
+                                height: 15,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.surface,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.shopping_cart_outlined,
+                                size: 15,
+                              ),
+                        label: Text(
+                          _adding ? 'Menambahkan...' : 'Keranjang',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.onSurface,
+                          foregroundColor: colors.surface,
+                          minimumSize: const Size.fromHeight(44),
+                          // A button disabled because it is *working* keeps
+                          // its fill, just dimmed — the default disabled grey
+                          // would read as "unavailable" and hide the white
+                          // spinner.
+                          disabledBackgroundColor: _adding
+                              ? colors.onSurface.withValues(alpha: 0.75)
+                              : null,
+                          disabledForegroundColor: _adding
+                              ? colors.surface
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -754,6 +888,53 @@ class _PurchasePanelState extends State<_PurchasePanel> {
 
 /// The seller's vacation notice, in the slot `store-purchase-panel.tsx`
 /// keeps for it between the price row and the buy buttons.
+/// "Lihat listing lain" — the way off this seller's page to every seller's
+/// price for the same card, under the price it is meant to be compared with.
+class _OtherListingsCta extends StatelessWidget {
+  const _OtherListingsCta({required this.count, required this.href});
+
+  /// How many listings for this card belong to *other* sellers.
+  final int count;
+  final String href;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return InkWell(
+      onTap: () => context.push(href),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: colors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.storefront_outlined, size: 16, color: colors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                // When nobody else lists the card the page is still worth
+                // the trip — it carries the order book and the WTB side —
+                // but naming a count of zero listings would be a promise of
+                // nothing.
+                count > 0
+                    ? 'Lihat $count listing lain'
+                    : 'Lihat semua listing kartu ini',
+                style: AppTypography.bodySmSemibold(colors.primary),
+              ),
+            ),
+            Icon(Icons.arrow_forward, size: 15, color: colors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VacationNotice extends StatelessWidget {
   const _VacationNotice({required this.store});
 
@@ -977,66 +1158,6 @@ class _SellerStrip extends StatelessWidget {
   }
 }
 
-/// Card name, wishlist toggle and the identity chips — the top of the web's
-/// info column, which sits below the buy block on narrow screens.
-class _CardHeader extends StatelessWidget {
-  const _CardHeader({
-    required this.card,
-    required this.wishlisted,
-    required this.toggling,
-    required this.onToggleWishlist,
-  });
-
-  final CardModel card;
-  final bool wishlisted;
-  final bool toggling;
-  final VoidCallback onToggleWishlist;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Text(
-                'Detail kartu',
-                style: AppTypography.h3(colors.onSurface),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // The name itself now lives under the artwork, so this row keeps
-            // only what it uniquely offers — the wishlist toggle.
-            _WishlistButton(
-              wishlisted: wishlisted,
-              toggling: toggling,
-              onPressed: onToggleWishlist,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Divider(height: 1, color: context.borderColor),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            CardInfoChip(text: card.language.labelId),
-            CardInfoChip(text: card.category.labelId),
-            if (card.rarity != null) CardInfoChip(text: card.rarity!),
-            CardInfoChip(
-              text: '${card.expansionCode.toUpperCase()} · ${card.collectorNumber}',
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
 class _WishlistButton extends StatelessWidget {
   const _WishlistButton({
     required this.wishlisted,
@@ -1056,10 +1177,7 @@ class _WishlistButton extends StatelessWidget {
             height: 15,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        : Icon(
-            wishlisted ? Icons.favorite : Icons.favorite_border,
-            size: 15,
-          );
+        : Icon(wishlisted ? Icons.favorite : Icons.favorite_border, size: 15);
     final label = Text(wishlisted ? 'Tersimpan' : 'Wishlist');
     return wishlisted
         ? ElevatedButton.icon(

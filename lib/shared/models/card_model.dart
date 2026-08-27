@@ -251,7 +251,9 @@ class CardDetails {
     return CardDetails(
       hp: json['hp'] as int?,
       pokemonTypes: pokemonTypesFromRaw(cardType),
-      evolutionStage: EvolutionStageX.fromRaw(json['evolution_stage'] as String?),
+      evolutionStage: EvolutionStageX.fromRaw(
+        json['evolution_stage'] as String?,
+      ),
       evolvesFrom: json['evolves_from'] as String?,
       ability: abilityName == null || abilityName.isEmpty
           ? null
@@ -268,7 +270,9 @@ class CardDetails {
                   (a) => AttackModel(
                     name: a['name'] as String? ?? '',
                     cost: pokemonTypesFromRaw(
-                      (a['energy_cost'] as List<dynamic>?)?.whereType<String>().join('/'),
+                      (a['energy_cost'] as List<dynamic>?)
+                          ?.whereType<String>()
+                          .join('/'),
                     ),
                     damage: a['damage'] as String? ?? '',
                     effect: a['description'] as String?,
@@ -292,7 +296,9 @@ class CardDetails {
               value: resistanceJson['modifier'] as String? ?? '',
             ),
       retreatCost: json['retreat_cost'] as int?,
-      trainerSubtype: TrainerSubtypeX.fromRaw(json['trainer_subtype'] as String?),
+      trainerSubtype: TrainerSubtypeX.fromRaw(
+        json['trainer_subtype'] as String?,
+      ),
       energyType: pokemonTypeFromRaw(cardType),
       pokedexNumber: pokedexJson?['number'] as int?,
       pokedexHeight: pokedexJson?['height'] as String?,
@@ -375,7 +381,9 @@ class CardModel {
       expansionCode: expansionCode,
       packSlug: expansionCode.toLowerCase(),
       collectorNumber: row['collector_number'] as String? ?? '',
-      rarity: (rarityRaw == null || rarityRaw.isEmpty) ? 'Tanpa tanda' : rarityRaw,
+      rarity: (rarityRaw == null || rarityRaw.isEmpty)
+          ? 'Tanpa tanda'
+          : rarityRaw,
       regulationMark: row['regulation_mark'] as String?,
       illustrator: row['illustrator'] as String?,
       language: CardLanguageX.fromRaw(row['language'] as String?),

@@ -128,9 +128,8 @@ class _DashboardScroll extends ConsumerWidget {
               if (identity.storeHandle != null) ...[
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  onPressed: () => context.push(
-                    Routes.storeDetail(identity.storeHandle!),
-                  ),
+                  onPressed: () =>
+                      context.push(Routes.storeDetail(identity.storeHandle!)),
                   icon: const Icon(Icons.open_in_new, size: 14),
                   label: const Text('Toko'),
                 ),
@@ -145,29 +144,6 @@ class _DashboardScroll extends ConsumerWidget {
             ),
           ],
 
-          const SizedBox(height: 16),
-          // The workspace nav. Only Produk is built so far; the rest of the
-          // seller area still lives on the web.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => context.push(Routes.sellerProducts),
-                  icon: const Icon(Icons.inventory_2_outlined, size: 16),
-                  label: const Text('Produk'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => context.push(Routes.orders),
-                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                  label: const Text('Pesanan'),
-                ),
-              ),
-            ],
-          ),
-
           const SizedBox(height: 20),
           Text(
             'Penting hari ini',
@@ -175,6 +151,12 @@ class _DashboardScroll extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           _KpiStrip(kpi: payload.kpi),
+
+          const SizedBox(height: 20),
+          // Web puts these behind a nav bar across the top of every seller
+          // page; on a phone that bar would compete with the app's own
+          // chrome, so the same destinations live here as a section.
+          const _SellerTools(),
 
           const SizedBox(height: 20),
           _WindowSwitcher(
@@ -246,11 +228,7 @@ class _WalletPill extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward,
-              size: 16,
-              color: context.mutedForeground,
-            ),
+            Icon(Icons.arrow_forward, size: 16, color: context.mutedForeground),
           ],
         ),
       ),
@@ -366,9 +344,7 @@ class _KpiCell extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: active
-                  ? accent.withValues(alpha: 0.12)
-                  : colors.secondary,
+              color: active ? accent.withValues(alpha: 0.12) : colors.secondary,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(
@@ -558,9 +534,7 @@ class _MetricCard extends StatelessWidget {
                 Icon(
                   positive ? Icons.trending_up : Icons.trending_down,
                   size: 13,
-                  color: positive
-                      ? context.appSemantic.success
-                      : colors.error,
+                  color: positive ? context.appSemantic.success : colors.error,
                 ),
                 const SizedBox(width: 3),
                 Text(
@@ -660,6 +634,116 @@ class _SummaryRow extends StatelessWidget {
             style: AppTypography.bodySmSemibold(colors.onSurface),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The seller workspace's other sections — web's `SECTIONS` in
+/// `lib/seller/workspace-nav.ts`, minus Beranda, which is this page.
+class _SellerTools extends StatelessWidget {
+  const _SellerTools();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Alat penjual',
+          style: AppTypography.bodySmSemibold(colors.onSurface),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: context.borderColor),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              _ToolRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'Listing',
+                description: 'Kelola produk, stok, dan arsip',
+                onTap: () => context.push(Routes.sellerProducts),
+              ),
+              Divider(height: 1, color: context.borderColor),
+              _ToolRow(
+                icon: Icons.receipt_long_outlined,
+                label: 'Pesanan',
+                description: 'Pesanan masuk dan pengiriman',
+                onTap: () => context.push(Routes.sellerOrders),
+              ),
+              Divider(height: 1, color: context.borderColor),
+              _ToolRow(
+                icon: Icons.storefront_outlined,
+                label: 'Toko',
+                description: 'Profil toko, kurir, dan chat pembeli',
+                onTap: () => context.push(Routes.sellerStore),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ToolRow extends StatelessWidget {
+  const _ToolRow({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String description;
+
+  /// Null where the destination doesn't exist yet — the row says so rather
+  /// than sending the seller somewhere that isn't what it promises.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final enabled = onTap != null;
+    final foreground = enabled ? colors.onSurface : context.mutedForeground;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: context.mutedForeground),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTypography.bodySmSemibold(foreground)),
+                  const SizedBox(height: 1),
+                  Text(
+                    enabled ? description : 'Segera hadir',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+            if (enabled)
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: context.mutedForeground,
+              ),
+          ],
+        ),
       ),
     );
   }

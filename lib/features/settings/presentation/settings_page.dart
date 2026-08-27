@@ -129,9 +129,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _saveUsername(String userId) async {
     setState(() => _savingUsername = true);
-    final error = await ref
-        .read(userRepositoryProvider)
-        .updateProfile(userId, {'username': _username.text.trim()});
+    final error = await ref.read(userRepositoryProvider).updateProfile(userId, {
+      'username': _username.text.trim(),
+    });
     if (!mounted) return;
     setState(() => _savingUsername = false);
     if (error != null) {
@@ -148,13 +148,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _saveBio(String userId) async {
     setState(() => _savingBio = true);
     final value = _bio.text.trim();
-    final error = await ref
-        .read(userRepositoryProvider)
-        .updateProfile(userId, {'bio': value.isEmpty ? null : value});
+    final error = await ref.read(userRepositoryProvider).updateProfile(userId, {
+      'bio': value.isEmpty ? null : value,
+    });
     if (!mounted) return;
     setState(() => _savingBio = false);
     ref.invalidate(myProfileProvider);
-    _toast(error == null ? 'Deskripsi profil disimpan' : 'Gagal menyimpan deskripsi');
+    _toast(
+      error == null ? 'Deskripsi profil disimpan' : 'Gagal menyimpan deskripsi',
+    );
   }
 
   Future<void> _saveSocial(String userId) async {
@@ -241,9 +243,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
 
-    final error = await ref
-        .read(authProvider.notifier)
-        .updatePassword(next);
+    final error = await ref.read(authProvider.notifier).updatePassword(next);
     if (!mounted) return;
     setState(() => _savingPassword = false);
     if (error != null) {
@@ -275,9 +275,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required void Function(bool) setSaving,
   }) async {
     setState(() => setSaving(true));
-    final error = await ref
-        .read(userRepositoryProvider)
-        .updateProfile(userId, {column: value});
+    final error = await ref.read(userRepositoryProvider).updateProfile(userId, {
+      column: value,
+    });
     if (!mounted) return;
     setState(() => setSaving(false));
     if (error != null) {
@@ -552,11 +552,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           hint: 'Username TikTok',
         ),
         const SizedBox(height: 10),
-        _SocialField(
-          controller: _x,
-          icon: Icons.close,
-          hint: 'Username X',
-        ),
+        _SocialField(controller: _x, icon: Icons.close, hint: 'Username X'),
         const SizedBox(height: 10),
         _SaveButton(
           label: 'Simpan',
@@ -655,10 +651,7 @@ class SettingsSection extends StatelessWidget {
               if (trailing != null) trailing!,
             ],
           ),
-          if (children.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            ...children,
-          ],
+          if (children.isNotEmpty) ...[const SizedBox(height: 14), ...children],
         ],
       ),
     );
@@ -723,7 +716,9 @@ class _PasswordFieldState extends State<_PasswordField> {
         suffixIcon: IconButton(
           onPressed: () => setState(() => _obscure = !_obscure),
           icon: Icon(
-            _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+            _obscure
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
             size: 18,
           ),
         ),

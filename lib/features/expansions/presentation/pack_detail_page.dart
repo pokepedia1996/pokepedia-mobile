@@ -53,7 +53,10 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
     setState(() => _bulkLoading = true);
     final controller = ref.read(cardOwnershipControllerProvider);
     final result = add
-        ? await controller.bulkAddToCollection(userId: user.id, cardIds: cardIds)
+        ? await controller.bulkAddToCollection(
+            userId: user.id,
+            cardIds: cardIds,
+          )
         : await controller.bulkRemoveFromCollection(
             userId: user.id,
             cardIds: cardIds,
@@ -131,7 +134,9 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
             // it. Stamping them onto the models is what lights up the owned
             // badges in the grid/list items and drives the counts below.
             final quantities =
-                ref.watch(packOwnedQuantitiesProvider(widget.packSlug)).valueOrNull ??
+                ref
+                    .watch(packOwnedQuantitiesProvider(widget.packSlug))
+                    .valueOrNull ??
                 const <int, int>{};
             final owned = [
               for (final card in cards)
@@ -178,7 +183,8 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                           : notOwnedIds.isEmpty
                           ? null
                           : () => _confirmBulkAdd(notOwnedIds),
-                      onRemoveAll: _bulkLoading || user == null || ownedIds.isEmpty
+                      onRemoveAll:
+                          _bulkLoading || user == null || ownedIds.isEmpty
                           ? null
                           : () => _confirmBulkRemove(ownedIds),
                     ),
@@ -330,15 +336,15 @@ class _PackHeader extends StatelessWidget {
                   onPressed: bulkLoading ? null : onRemoveAll,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colors.error,
-                    side: BorderSide(color: colors.error.withValues(alpha: 0.5)),
-                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2)
+                    side: BorderSide(
+                      color: colors.error.withValues(alpha: 0.5),
+                    ),
+                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
                   ),
                   child: const Text(
                     'Hapus Semua dari Koleksi',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14
-                    ),
+                    style: TextStyle(fontSize: 14),
                   ),
                 ),
               ),
@@ -349,14 +355,12 @@ class _PackHeader extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: context.appSemantic.success,
                     foregroundColor: Colors.white,
-                           padding: EdgeInsets.fromLTRB(2, 2, 2, 2)
+                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
                   ),
                   child: const Text(
                     'Tambah Semua ke Koleksi',
                     textAlign: TextAlign.center,
-                      style: TextStyle(
-                      fontSize: 14
-                    ),
+                    style: TextStyle(fontSize: 14),
                   ),
                 ),
               ),

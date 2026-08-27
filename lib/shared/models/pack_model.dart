@@ -55,7 +55,8 @@ class PackModel {
 
   static Map<String, dynamic>? _flattenEmbed(dynamic raw) {
     if (raw == null) return null;
-    if (raw is List) return raw.isEmpty ? null : raw.first as Map<String, dynamic>;
+    if (raw is List)
+      return raw.isEmpty ? null : raw.first as Map<String, dynamic>;
     return raw as Map<String, dynamic>;
   }
 
@@ -77,9 +78,7 @@ class PackModel {
       sortOrder: (row['sort_order'] as num?)?.toInt() ?? 0,
       image: proxyImageUrl(row['pack_image_url'] as String?),
       setSymbolUrl: proxyImageUrl(row['set_symbol_url'] as String?),
-      seriesImageUrl: proxyImageUrl(
-        seriesData?['series_image_url'] as String?,
-      ),
+      seriesImageUrl: proxyImageUrl(seriesData?['series_image_url'] as String?),
     );
   }
 }

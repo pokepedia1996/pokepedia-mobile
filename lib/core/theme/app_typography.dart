@@ -26,19 +26,11 @@ class AppTypography {
     color: color,
   );
 
-  static TextStyle h2(Color color) => TextStyle(
-    fontFamily: _heading,
-    fontSize: 25,
-    height: 1.25,
-    color: color,
-  );
+  static TextStyle h2(Color color) =>
+      TextStyle(fontFamily: _heading, fontSize: 25, height: 1.25, color: color);
 
-  static TextStyle h3(Color color) => TextStyle(
-    fontFamily: _heading,
-    fontSize: 20,
-    height: 1.3,
-    color: color,
-  );
+  static TextStyle h3(Color color) =>
+      TextStyle(fontFamily: _heading, fontSize: 20, height: 1.3, color: color);
 
   static TextStyle body(Color color) =>
       GoogleFonts.urbanist(fontSize: 16, height: 1.5, color: color);

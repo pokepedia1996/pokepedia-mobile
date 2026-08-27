@@ -158,7 +158,9 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
-        SnackBar(content: Text(_isEdit ? 'Alamat diperbarui' : 'Alamat disimpan')),
+        SnackBar(
+          content: Text(_isEdit ? 'Alamat diperbarui' : 'Alamat disimpan'),
+        ),
       );
   }
 
@@ -252,7 +254,8 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
                       options: _city == null
                           ? const []
                           : catalog.districtsOf(_city!.code),
-                      onSelected: (option) => setState(() => _district = option),
+                      onSelected: (option) =>
+                          setState(() => _district = option),
                     ),
                   ],
                 );

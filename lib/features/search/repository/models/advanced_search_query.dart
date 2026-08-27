@@ -148,10 +148,12 @@ class AdvancedSearchQuery {
       hpMax: hpMax == null ? this.hpMax : hpMax(),
       retreatMin: retreatMin == null ? this.retreatMin : retreatMin(),
       retreatMax: retreatMax == null ? this.retreatMax : retreatMax(),
-      attackCostMin:
-          attackCostMin == null ? this.attackCostMin : attackCostMin(),
-      attackCostMax:
-          attackCostMax == null ? this.attackCostMax : attackCostMax(),
+      attackCostMin: attackCostMin == null
+          ? this.attackCostMin
+          : attackCostMin(),
+      attackCostMax: attackCostMax == null
+          ? this.attackCostMax
+          : attackCostMax(),
       sort: sort ?? this.sort,
       ownership: ownership ?? this.ownership,
       language: language ?? this.language,

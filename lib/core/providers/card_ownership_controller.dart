@@ -77,7 +77,9 @@ class CardOwnershipController {
   }
 
   Future<String?> setWishlisted(int cardId, bool wishlisted) async {
-    final error = await _ref.read(portfolioRepositoryProvider).setWishlisted(cardId, wishlisted);
+    final error = await _ref
+        .read(portfolioRepositoryProvider)
+        .setWishlisted(cardId, wishlisted);
     if (error == null) _revalidateWishlist(cardId);
     return error;
   }
@@ -153,11 +155,9 @@ class CardOwnershipController {
     required String name,
     String description = '',
   }) async {
-    final result = await _ref.read(portfolioRepositoryProvider).createDeck(
-      userId: userId,
-      name: name,
-      description: description,
-    );
+    final result = await _ref
+        .read(portfolioRepositoryProvider)
+        .createDeck(userId: userId, name: name, description: description);
     if (result.error == null) _ref.invalidate(decksProvider);
     return result;
   }
@@ -170,26 +170,44 @@ class CardOwnershipController {
   }) async {
     final error = await _ref
         .read(portfolioRepositoryProvider)
-        .updateDeck(deckId: deckId, userId: userId, name: name, description: description);
+        .updateDeck(
+          deckId: deckId,
+          userId: userId,
+          name: name,
+          description: description,
+        );
     if (error == null) _ref.invalidate(decksProvider);
     return error;
   }
 
-  Future<String?> deleteDeck({required String deckId, required String userId}) async {
-    final error = await _ref.read(portfolioRepositoryProvider).deleteDeck(deckId: deckId, userId: userId);
+  Future<String?> deleteDeck({
+    required String deckId,
+    required String userId,
+  }) async {
+    final error = await _ref
+        .read(portfolioRepositoryProvider)
+        .deleteDeck(deckId: deckId, userId: userId);
     if (error == null) _ref.invalidate(decksProvider);
     return error;
   }
 
-  Future<({DeckModel? deck, String? error})> duplicateDeck(String sourceDeckId) async {
-    final result = await _ref.read(portfolioRepositoryProvider).duplicateDeck(sourceDeckId);
+  Future<({DeckModel? deck, String? error})> duplicateDeck(
+    String sourceDeckId,
+  ) async {
+    final result = await _ref
+        .read(portfolioRepositoryProvider)
+        .duplicateDeck(sourceDeckId);
     if (result.error == null) _ref.invalidate(decksProvider);
     return result;
   }
 
   /// Adds/removes/adjusts a card in a deck. Refreshes both the deck's own
   /// card list and the deck list's card-count badge.
-  Future<String?> upsertDeckCard({required String deckId, required int cardId, required int delta}) async {
+  Future<String?> upsertDeckCard({
+    required String deckId,
+    required int cardId,
+    required int delta,
+  }) async {
     final error = await _ref
         .read(portfolioRepositoryProvider)
         .upsertDeckCard(deckId: deckId, cardId: cardId, delta: delta);
@@ -201,4 +219,6 @@ class CardOwnershipController {
   }
 }
 
-final cardOwnershipControllerProvider = Provider((ref) => CardOwnershipController(ref));
+final cardOwnershipControllerProvider = Provider(
+  (ref) => CardOwnershipController(ref),
+);

@@ -69,9 +69,7 @@ class _DailyGmvChartState extends State<DailyGmvChart> {
                 onTapDown: (details) {
                   final index = (details.localPosition.dx / slot).floor();
                   if (index < 0 || index >= data.length) return;
-                  setState(
-                    () => _selected = _selected == index ? null : index,
-                  );
+                  setState(() => _selected = _selected == index ? null : index);
                 },
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -147,8 +145,18 @@ class _DailyGmvChartState extends State<DailyGmvChart> {
     final parsed = DateTime.tryParse(iso);
     if (parsed == null) return iso;
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
     ];
     return '${parsed.day} ${months[parsed.month - 1]}';
   }

@@ -14,6 +14,7 @@ import '../../../../shared/models/card_model.dart';
 import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../repository/models/market_models.dart';
 import '../../usecase/expansions_notifier.dart';
+import 'order_book_widget.dart';
 
 /// Ports `features/card-detail/components/market/card-mobile-header.tsx` —
 /// the card's name and wishlist toggle over the headline price: the latest
@@ -43,26 +44,21 @@ class CardMarketHeader extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  card.name,
-                  style: AppTypography.h3(colors.onSurface),
+              if (headlineAsync.isLoading || fallbackAsync.isLoading)
+                const _HeadlinePlaceholder()
+              else
+                _Headline(
+                  headline: headlineAsync.valueOrNull,
+                  fallback: fallbackAsync.valueOrNull,
                 ),
-              ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               WishlistButton(cardId: card.id),
             ],
           ),
-          const SizedBox(height: 12),
-          Divider(color: context.borderColor, height: 1),
-          const SizedBox(height: 12),
-          if (headlineAsync.isLoading || fallbackAsync.isLoading)
-            const _HeadlinePlaceholder()
-          else
-            _Headline(
-              headline: headlineAsync.valueOrNull,
-              fallback: fallbackAsync.valueOrNull,
-            ),
+          const SizedBox(width: 12),
+          // Inside the same box as the price: bidding or asking is a
+          // response to that number, not a separate piece of furniture.
+          PlaceOrderButtons(card: card),
         ],
       ),
     );
@@ -126,7 +122,10 @@ class _Headline extends StatelessWidget {
               color: context.mutedForeground,
             ),
           if (fallback.source == CardPriceSource.bid)
-            _SourceTag(label: 'Penawaran tertinggi', color: context.appSemantic.gold),
+            _SourceTag(
+              label: 'Penawaran tertinggi',
+              color: context.appSemantic.gold,
+            ),
         ],
       );
     }
@@ -204,11 +203,7 @@ class _HeadlinePlaceholder extends StatelessWidget {
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        bar(120, 12),
-        const SizedBox(height: 8),
-        bar(160, 24),
-      ],
+      children: [bar(120, 12), const SizedBox(height: 8), bar(160, 24)],
     );
   }
 }
@@ -281,8 +276,6 @@ class _WishlistButtonState extends ConsumerState<WishlistButton> {
                 size: 14,
                 color: color,
               ),
-            const SizedBox(width: 6),
-            Text('Wishlist', style: AppTypography.captionSemibold(color)),
           ],
         ),
       ),

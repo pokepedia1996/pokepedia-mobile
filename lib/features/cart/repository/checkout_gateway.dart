@@ -71,6 +71,33 @@ class CheckoutProgress {
   bool get isSettled => status != CheckoutStatus.pending;
 }
 
+/// A checkout's QRIS code, as the gateway reports it.
+class QrisCharge {
+  const QrisCharge({
+    required this.qrString,
+    required this.amount,
+    this.expiresAt,
+    this.paidAt,
+  });
+
+  /// Null once the checkout is already paid — there's nothing left to scan.
+  final String? qrString;
+  final int amount;
+  final DateTime? expiresAt;
+  final DateTime? paidAt;
+
+  bool get isPaid => paidAt != null;
+}
+
+/// The QR couldn't be produced. Carries the hosted invoice, which can still
+/// take the payment, so the caller has somewhere to send the buyer.
+class QrisUnavailableException extends ApiException {
+  const QrisUnavailableException({required String message, this.invoiceUrl})
+    : super(message);
+
+  final String? invoiceUrl;
+}
+
 /// The three checkout steps that cannot run in the app.
 ///
 /// Everything else — cart review, address, insurance rules, coupons, the fee
@@ -100,9 +127,7 @@ class CheckoutGateway {
           .select('phone_verified_at')
           .eq('id', userId)
           .maybeSingle();
-      return CheckoutContext(
-        phoneVerified: row?['phone_verified_at'] != null,
-      );
+      return CheckoutContext(phoneVerified: row?['phone_verified_at'] != null);
     } on PostgrestException catch (e) {
       throw ApiException(e.message);
     }
@@ -170,7 +195,8 @@ class CheckoutGateway {
           statusCode: e.status,
         );
       }
-      final message = details['error'] as String? ?? 'Gagal mengambil tarif kurir';
+      final message =
+          details['error'] as String? ?? 'Gagal mengambil tarif kurir';
       final detail = details['detail'] as String?;
       throw ApiException(
         detail == null ? message : '$message — $detail',
@@ -223,6 +249,47 @@ class CheckoutGateway {
       droppedItems: dropped is List
           ? dropped.map((e) => e.toString()).toList()
           : const [],
+    );
+  }
+
+  /// The QRIS payload for a checkout, so the app can draw the code itself
+  /// rather than hand the buyer to Xendit's hosted page.
+  ///
+  /// Reads the QR off the invoice `/api/cart/checkout` already opened — the
+  /// invoice webhook is the only settlement path this project implements, so
+  /// a code charged through any other channel would be money taken against
+  /// an order nothing marks paid. When the invoice exposes no QR the
+  /// function says so, and [QrisCharge.invoiceUrl] is the way to finish.
+  Future<QrisCharge> fetchQris(String externalId) async {
+    final response = await _client.functions.invoke(
+      'qris-payment',
+      body: {'externalId': externalId},
+    );
+
+    final data = response.data;
+    if (data is! Map) {
+      throw const ApiException('Respons pembayaran tidak dikenali.');
+    }
+    if (response.status >= 400) {
+      throw QrisUnavailableException(
+        message: switch (data['error']) {
+          'qr_unavailable' => 'QRIS belum tersedia untuk pesanan ini.',
+          'invoice_missing' => 'Tagihan pembayaran belum dibuat.',
+          'gateway_unreachable' => 'Gateway pembayaran tidak merespons.',
+          'checkout_not_found' => 'Pesanan tidak ditemukan.',
+          _ => 'Gagal memuat QRIS.',
+        },
+        invoiceUrl: data['invoiceUrl'] as String?,
+      );
+    }
+
+    return QrisCharge(
+      qrString: data['qrString'] as String?,
+      amount: (data['amount'] as num?)?.toInt() ?? 0,
+      expiresAt: DateTime.tryParse(
+        data['expiresAt'] as String? ?? '',
+      )?.toLocal(),
+      paidAt: DateTime.tryParse(data['paidAt'] as String? ?? '')?.toLocal(),
     );
   }
 

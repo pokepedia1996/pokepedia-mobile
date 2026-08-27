@@ -10,11 +10,7 @@ import '../models/pack_model.dart';
 /// an expansion takes in the list view: pack art in a muted tile, then the
 /// set symbol, name, release date and card count.
 class ExpansionListItem extends StatelessWidget {
-  const ExpansionListItem({
-    super.key,
-    required this.pack,
-    required this.onTap,
-  });
+  const ExpansionListItem({super.key, required this.pack, required this.onTap});
 
   final PackModel pack;
   final VoidCallback onTap;

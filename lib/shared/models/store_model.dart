@@ -2,6 +2,19 @@ import '../../core/utils/image_url.dart';
 
 /// A seller storefront, mirroring `public.seller_profiles` in
 /// `supabase/migrations/00000000000000_baseline.sql`.
+/// The first value that is neither null nor blank, or `''` when there is
+/// none.
+///
+/// A blank `store_slug` is not null, so a plain `??` chain would let it win
+/// and produce a handle that builds `/market/` — a path with no `:handle`
+/// segment for the route to read.
+String _firstPresent(List<String?> values) {
+  for (final value in values) {
+    if (value != null && value.trim().isNotEmpty) return value;
+  }
+  return '';
+}
+
 class StoreModel {
   const StoreModel({
     required this.handle,
@@ -18,6 +31,10 @@ class StoreModel {
     this.vacationMessage,
     this.userId,
     this.logoUrl,
+    this.bannerUrl,
+    this.aboutMarkdown,
+    this.memberSince,
+    this.isFollowing = false,
   });
 
   final String handle;
@@ -48,6 +65,18 @@ class StoreModel {
 
   final String? logoUrl;
 
+  /// `seller_profiles.store_banner_url` — the cover image the storefront
+  /// leads with on the web.
+  final String? bannerUrl;
+
+  /// `about_md` — the seller's own description, markdown.
+  final String? aboutMarkdown;
+
+  /// When they joined, and whether the viewer already follows them. Both
+  /// come back from `get_seller_storefront_by_slug`.
+  final DateTime? memberSince;
+  final bool isFollowing;
+
   bool get onVacation => vacationMode != null;
 
   /// Ports the `search_stores` RPC row (`lib/storefront/store-directory.ts`)
@@ -55,7 +84,10 @@ class StoreModel {
   /// only ever shows on the detail page (`fromDetailRow`), same as web.
   factory StoreModel.fromDirectoryRow(Map<String, dynamic> row) {
     return StoreModel(
-      handle: row['store_slug'] as String? ?? row['handle'] as String? ?? '',
+      handle: _firstPresent([
+        row['store_slug'] as String?,
+        row['handle'] as String?,
+      ]),
       storeName: row['store_name'] as String? ?? 'Toko',
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: (row['active_listing_count'] as num?)?.toInt() ?? 0,
@@ -70,11 +102,21 @@ class StoreModel {
     );
   }
 
-  /// Ports the `get_seller_storefront_by_slug` RPC row — a single store's
-  /// full profile.
-  factory StoreModel.fromDetailRow(Map<String, dynamic> row, {required int activeListingCount}) {
+  /// Ports the `get_seller_storefront_by_slug` /
+  /// `get_seller_storefront_by_username` RPC row — a single store's full
+  /// profile. Both return the same columns.
+  factory StoreModel.fromDetailRow(
+    Map<String, dynamic> row, {
+    required int activeListingCount,
+  }) {
     return StoreModel(
-      handle: row['store_slug'] as String? ?? '',
+      // Falls through to the username: a store resolved that way has no
+      // slug, and an empty handle here would make every link back to this
+      // store point at nothing.
+      handle: _firstPresent([
+        row['store_slug'] as String?,
+        row['username'] as String?,
+      ]),
       storeName: row['store_name'] as String? ?? 'Toko',
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: activeListingCount,
@@ -88,6 +130,10 @@ class StoreModel {
       vacationMessage: row['vacation_message'] as String?,
       userId: row['user_id'] as String?,
       logoUrl: proxyImageUrl(row['store_logo_url'] as String?),
+      bannerUrl: proxyImageUrl(row['store_banner_url'] as String?),
+      aboutMarkdown: row['about_md'] as String?,
+      memberSince: DateTime.tryParse(row['member_since'] as String? ?? ''),
+      isFollowing: row['is_following'] as bool? ?? false,
     );
   }
 }

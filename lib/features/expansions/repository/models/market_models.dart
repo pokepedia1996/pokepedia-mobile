@@ -23,7 +23,8 @@ class MarketPricePoint {
   factory MarketPricePoint.fromRow(Map<String, dynamic> row) {
     return MarketPricePoint(
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
-      day: DateTime.tryParse(row['day'] as String? ?? '')?.toLocal() ??
+      day:
+          DateTime.tryParse(row['day'] as String? ?? '')?.toLocal() ??
           DateTime.now(),
       rawPrice: (row['raw_price'] as num?)?.toInt() ?? 0,
       avgPrice: (row['avg_price'] as num?)?.toInt(),
@@ -207,10 +208,12 @@ class CardSale {
           ? SaleSource.external
           : SaleSource.internal,
       price: (row['price'] as num?)?.toInt() ?? 0,
-      date: DateTime.tryParse(row['stamped_at'] as String? ?? '')?.toLocal() ??
+      date:
+          DateTime.tryParse(row['stamped_at'] as String? ?? '')?.toLocal() ??
           DateTime.now(),
-      condition:
-          conditionRaw == null ? null : CardConditionX.fromRaw(conditionRaw),
+      condition: conditionRaw == null
+          ? null
+          : CardConditionX.fromRaw(conditionRaw),
       facebookUrl: row['facebook_url'] as String?,
       photoUrls: photos is List
           ? photos

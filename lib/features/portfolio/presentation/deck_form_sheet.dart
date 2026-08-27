@@ -34,7 +34,9 @@ class DeckFormSheet extends StatefulWidget {
 
 class _DeckFormSheetState extends State<DeckFormSheet> {
   late final _nameController = TextEditingController(text: widget.initialName);
-  late final _descController = TextEditingController(text: widget.initialDescription);
+  late final _descController = TextEditingController(
+    text: widget.initialDescription,
+  );
 
   @override
   void dispose() {
@@ -46,12 +48,20 @@ class _DeckFormSheetState extends State<DeckFormSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.title, style: AppTypography.h3(context.appColors.onSurface)),
+          Text(
+            widget.title,
+            style: AppTypography.h3(context.appColors.onSurface),
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _nameController,
@@ -63,7 +73,9 @@ class _DeckFormSheetState extends State<DeckFormSheet> {
             controller: _descController,
             maxLength: maxDeckDescLen,
             maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Deskripsi (opsional)'),
+            decoration: const InputDecoration(
+              labelText: 'Deskripsi (opsional)',
+            ),
           ),
           const SizedBox(height: 8),
           ValueListenableBuilder(

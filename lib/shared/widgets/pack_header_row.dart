@@ -36,7 +36,8 @@ class PackHeaderRow extends StatelessWidget {
                       ? Image.network(
                           pack!.image!,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => _PackFallback(pack: pack),
+                          errorBuilder: (_, __, ___) =>
+                              _PackFallback(pack: pack),
                         )
                       : _PackFallback(pack: pack),
                 ),
@@ -55,10 +56,7 @@ class PackHeaderRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         if (pack?.setSymbolUrl != null)
-          RemoteImage(
-            url: pack!.setSymbolUrl!,
-            height: 24,
-          )
+          RemoteImage(url: pack!.setSymbolUrl!, height: 24)
         else if (pack != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

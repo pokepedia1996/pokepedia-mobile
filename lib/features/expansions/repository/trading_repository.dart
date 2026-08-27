@@ -175,7 +175,10 @@ class TradingRepository {
     // Store names come from a separate table (`listings.user_id` and
     // `seller_profiles.user_id` both point at `auth.users`, so PostgREST
     // can't embed them), same two-step the listings query uses.
-    final sellerIds = matches.map((r) => r['user_id'] as String).toSet().toList();
+    final sellerIds = matches
+        .map((r) => r['user_id'] as String)
+        .toSet()
+        .toList();
     final stores = await _client
         .from('seller_profiles')
         .select('user_id, store_slug, store_name')

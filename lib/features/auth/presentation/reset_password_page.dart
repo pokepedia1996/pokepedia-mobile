@@ -33,7 +33,8 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final hasSession = ref.read(supabaseClientProvider).auth.currentSession != null;
+      final hasSession =
+          ref.read(supabaseClientProvider).auth.currentSession != null;
       if (!hasSession) context.go(Routes.login);
     });
   }
@@ -51,7 +52,9 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
       _submitting = true;
       _error = null;
     });
-    final error = await ref.read(authProvider.notifier).updatePassword(_password.text);
+    final error = await ref
+        .read(authProvider.notifier)
+        .updatePassword(_password.text);
     if (!mounted) return;
     if (error != null) {
       setState(() {

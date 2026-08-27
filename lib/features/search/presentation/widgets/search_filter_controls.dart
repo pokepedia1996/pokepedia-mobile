@@ -193,10 +193,7 @@ class FilterTrigger extends StatelessWidget {
             if (active) ...[
               const SizedBox(width: 4),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 1,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: colors.primary,
                   borderRadius: BorderRadius.circular(AppRadius.full),
@@ -667,7 +664,9 @@ class ExpansionFilterControl extends StatelessWidget {
         isScrollControlled: true,
         backgroundColor: Theme.of(context).cardColor,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
         ),
         builder: (_) => _ExpansionSheet(
           expansions: expansions,
@@ -773,7 +772,9 @@ class _ExpansionSheetState extends State<_ExpansionSheet> {
                           setState(() {
                             final all = codes.every(_selected.contains);
                             for (final code in codes) {
-                              all ? _selected.remove(code) : _selected.add(code);
+                              all
+                                  ? _selected.remove(code)
+                                  : _selected.add(code);
                             }
                           });
                         },
@@ -1017,11 +1018,7 @@ class OptionsErrorRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.info_outline,
-            size: 14,
-            color: context.mutedForeground,
-          ),
+          Icon(Icons.info_outline, size: 14, color: context.mutedForeground),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1044,11 +1041,7 @@ class OptionsErrorRow extends StatelessWidget {
 
 /// Occupies the last grid cell so paging needs no separate footer.
 class LoadMoreTile extends StatelessWidget {
-  const LoadMoreTile({
-    super.key,
-    required this.loading,
-    required this.onTap,
-  });
+  const LoadMoreTile({super.key, required this.loading, required this.onTap});
 
   final bool loading;
   final VoidCallback onTap;

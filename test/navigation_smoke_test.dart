@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pokepedia_mobile/app/app.dart';
 import 'package:pokepedia_mobile/app/router/app_router.dart';
-import 'package:pokepedia_mobile/features/orders/repository/orders_repository.dart';
 import 'package:pokepedia_mobile/shared/data/dummy_catalog.dart';
 
 void main() {
@@ -17,8 +16,10 @@ void main() {
     final pack = DummyCatalog.packs.first;
     final card = DummyCatalog.allCards.first;
     final store = DummyCatalog.stores.first;
-    final orders = await OrdersRepository().fetchOrders();
-    final issueOrder = orders.firstWhere((o) => o.status.name == 'issue', orElse: () => orders.first);
+    // Orders are per-account server data now, and this test runs signed out,
+    // so the order routes are exercised with a slug that resolves to nothing:
+    // what's under test here is that the route builds, not what it finds.
+    const orderSlug = '00000000-0000-4000-8000-000000000000';
 
     final routes = <String>[
       '/expansions',
@@ -37,13 +38,13 @@ void main() {
       '/cart/checkout',
       '/cart/checkout/success',
       '/orders',
-      '/orders/${orders.first.slug}',
-      '/orders/${orders.first.slug}/open-dispute',
-      '/orders/${issueOrder.slug}/dispute',
+      '/orders/$orderSlug',
+      '/orders/$orderSlug/open-dispute',
+      '/orders/$orderSlug/dispute',
       '/proposals',
       '/wallet',
       '/chat',
-      '/chat/cardvault-id',
+      '/chat/$orderSlug',
       '/notifications',
       '/settings',
       '/users',

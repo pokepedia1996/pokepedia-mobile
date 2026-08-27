@@ -42,26 +42,31 @@ class _ListsPageState extends ConsumerState<ListsPage> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
 
-    final result = await showModalBottomSheet<({String name, String description})>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (_) => const DeckFormSheet(
-        title: 'Buat List Baru',
-        submitLabel: 'Buat',
-        nameLabel: 'Nama list',
-      ),
-    );
+    final result =
+        await showModalBottomSheet<({String name, String description})>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Theme.of(context).cardColor,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
+          ),
+          builder: (_) => const DeckFormSheet(
+            title: 'Buat List Baru',
+            submitLabel: 'Buat',
+            nameLabel: 'Nama list',
+          ),
+        );
     if (result == null) return;
 
-    final created = await ref.read(portfolioRepositoryProvider).createList(
-      userId: user.id,
-      name: result.name,
-      description: result.description,
-    );
+    final created = await ref
+        .read(portfolioRepositoryProvider)
+        .createList(
+          userId: user.id,
+          name: result.name,
+          description: result.description,
+        );
     if (created.error != null) {
       _toast(created.error!);
       return;
@@ -74,29 +79,34 @@ class _ListsPageState extends ConsumerState<ListsPage> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
 
-    final result = await showModalBottomSheet<({String name, String description})>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (_) => DeckFormSheet(
-        title: 'Edit List',
-        submitLabel: 'Simpan',
-        nameLabel: 'Nama list',
-        initialName: list.name,
-        initialDescription: list.description,
-      ),
-    );
+    final result =
+        await showModalBottomSheet<({String name, String description})>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Theme.of(context).cardColor,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
+          ),
+          builder: (_) => DeckFormSheet(
+            title: 'Edit List',
+            submitLabel: 'Simpan',
+            nameLabel: 'Nama list',
+            initialName: list.name,
+            initialDescription: list.description,
+          ),
+        );
     if (result == null) return;
 
-    final error = await ref.read(portfolioRepositoryProvider).updateList(
-      listId: list.id,
-      userId: user.id,
-      name: result.name,
-      description: result.description,
-    );
+    final error = await ref
+        .read(portfolioRepositoryProvider)
+        .updateList(
+          listId: list.id,
+          userId: user.id,
+          name: result.name,
+          description: result.description,
+        );
     if (error != null) {
       _toast(error);
       return;
@@ -117,10 +127,9 @@ class _ListsPageState extends ConsumerState<ListsPage> {
       confirmLabel: 'Hapus',
       loadingLabel: 'Menghapus...',
       onConfirm: () async {
-        final error = await ref.read(portfolioRepositoryProvider).deleteList(
-          listId: list.id,
-          userId: user.id,
-        );
+        final error = await ref
+            .read(portfolioRepositoryProvider)
+            .deleteList(listId: list.id, userId: user.id);
         if (error != null) {
           _toast(error);
           return;
@@ -133,8 +142,9 @@ class _ListsPageState extends ConsumerState<ListsPage> {
 
   Future<void> _duplicate(WantlistModel list) async {
     setState(() => _duplicatingId = list.id);
-    final result =
-        await ref.read(portfolioRepositoryProvider).duplicateList(list.id);
+    final result = await ref
+        .read(portfolioRepositoryProvider)
+        .duplicateList(list.id);
     if (!mounted) return;
     setState(() => _duplicatingId = null);
 
@@ -302,9 +312,7 @@ class _ListCard extends StatelessWidget {
                           list.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySmSemibold(
-                            colors.onSurface,
-                          ),
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
                         ),
                         if (list.description.isNotEmpty) ...[
                           const SizedBox(height: 2),
@@ -320,17 +328,12 @@ class _ListCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(
                           _metaLine(list),
-                          style: AppTypography.caption(
-                            context.mutedForeground,
-                          ),
+                          style: AppTypography.caption(context.mutedForeground),
                         ),
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.chevron_right,
-                    color: context.mutedForeground,
-                  ),
+                  Icon(Icons.chevron_right, color: context.mutedForeground),
                 ],
               ),
             ),
@@ -380,10 +383,7 @@ class _ListCard extends StatelessWidget {
         : '${created.day.toString().padLeft(2, '0')}/'
               '${created.month.toString().padLeft(2, '0')}/'
               '${created.year}';
-    return [
-      '${list.cardCount} kartu',
-      if (date != null) date,
-    ].join(' · ');
+    return ['${list.cardCount} kartu', if (date != null) date].join(' · ');
   }
 }
 
@@ -404,8 +404,9 @@ class _ListAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        destructive ? context.appColors.error : context.mutedForeground;
+    final color = destructive
+        ? context.appColors.error
+        : context.mutedForeground;
 
     return InkWell(
       onTap: busy ? null : onTap,

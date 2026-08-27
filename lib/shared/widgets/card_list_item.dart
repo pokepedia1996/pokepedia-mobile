@@ -8,8 +8,8 @@ import '../models/card_model.dart';
 import 'card_art.dart';
 
 /// Ports the list-mode branch of `components/card/card-item.tsx` — a
-/// compact row (thumbnail, name/number, price) used when `ViewToggle` is
-/// set to list.
+/// compact row (thumbnail, name/number, price and the quantity held) used
+/// when `ViewToggle` is set to list.
 class CardListItem extends StatelessWidget {
   const CardListItem({super.key, required this.card, required this.onTap});
 
@@ -35,24 +35,9 @@ class CardListItem extends StatelessWidget {
           children: [
             SizedBox(
               width: 48,
-              child: Stack(
-                children: [
-                  CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.sm),
-                  if (owned)
-                    Positioned(
-                      top: 2,
-                      left: 2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: context.appSemantic.success,
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                          border: Border.all(color: Colors.white, width: 1),
-                        ),
-                        child: Text('×${card.owned}', style: AppTypography.badge(Colors.white)),
-                      ),
-                    ),
-                ],
+              child: CardArt(
+                imageUrl: card.imageUrl,
+                borderRadius: AppRadius.sm,
               ),
             ),
             const SizedBox(width: 12),
@@ -67,11 +52,26 @@ class CardListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
-                  Text(card.collectorNumber, style: AppTypography.caption(context.mutedForeground)),
-                  const SizedBox(height: 2),
                   Text(
-                    card.marketPrice != null ? formatRupiah(card.marketPrice!) : 'Rp-',
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                    card.collectorNumber,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        card.marketPrice != null
+                            ? formatRupiah(card.marketPrice!)
+                            : 'Rp-',
+                        style: AppTypography.bodySmSemibold(colors.onSurface),
+                      ),
+                      const Spacer(),
+                      if (owned)
+                        Text(
+                          'Qty: ${card.owned}',
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                    ],
                   ),
                 ],
               ),

@@ -1,33 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../models/card_model.dart';
 
 /// Ports web's `CardLanguageBadge` — the flag marking which language's print
 /// a card is.
 ///
-/// Uses the flag glyph rather than the two-letter code it used to show: the
-/// code needed reading, a flag is recognised at badge size. Emoji flags also
-/// mean no per-language image assets to bundle or proxy.
+/// A flag rather than the two-letter code it used to show: the code needed
+/// reading, a flag is recognised at badge size. The artwork is the same set
+/// of SVGs the web serves, so the two clients show the same flags.
 class CardLanguageBadge extends StatelessWidget {
   const CardLanguageBadge({super.key, required this.language, this.size = 16});
 
   final CardLanguage language;
   final double size;
 
+  /// The same four files the web serves from `/public/flags`.
+  String get _asset => switch (language) {
+    CardLanguage.en => 'assets/images/flags/gb.svg',
+    CardLanguage.jp => 'assets/images/flags/jp.svg',
+    CardLanguage.id => 'assets/images/flags/id.svg',
+  };
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    // `rounded-full ring-1 ring-border object-cover` on the web: a circular
+    // crop of a rectangular flag, with a hairline ring so a white edge (JP,
+    // ID) still reads against a light surface.
+    return Container(
       width: size,
       height: size,
-      child: Center(
-        child: Text(
-          language.flag,
-          // The glyph carries its own colour, so it only needs sizing.
-          // `height: 1` keeps it centred — flag emoji have generous default
-          // line metrics that otherwise push them off-centre in a tight box.
-          style: TextStyle(fontSize: size * 0.92, height: 1),
-          semanticsLabel: language.labelId,
-        ),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: context.borderColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SvgPicture.asset(
+        _asset,
+        fit: BoxFit.cover,
+        semanticsLabel: language.labelId,
       ),
     );
   }

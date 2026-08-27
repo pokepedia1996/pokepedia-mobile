@@ -167,8 +167,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     error: _passwordError,
                     obscure: _obscure,
                     submitting: _submitting,
-                    onToggleObscure: () =>
-                        setState(() => _obscure = !_obscure),
+                    onToggleObscure: () => setState(() => _obscure = !_obscure),
                     onChanged: () {
                       if (_passwordError != null) {
                         setState(() => _passwordError = null);
@@ -230,10 +229,7 @@ class _EmailStep extends StatelessWidget {
           autofocus: true,
           onChanged: (_) => onChanged(),
           onSubmitted: (_) => onContinue(),
-          decoration: InputDecoration(
-            labelText: 'Email',
-            errorText: error,
-          ),
+          decoration: InputDecoration(labelText: 'Email', errorText: error),
         ),
         const SizedBox(height: 16),
         ElevatedButton(
@@ -286,11 +282,7 @@ class _PasswordStep extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.arrow_back,
-                size: 14,
-                color: context.mutedForeground,
-              ),
+              Icon(Icons.arrow_back, size: 14, color: context.mutedForeground),
               const SizedBox(width: 6),
               Text(
                 'Kembali',

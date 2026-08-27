@@ -9,6 +9,16 @@ import '../repository/models/inventory_entry.dart';
 import '../repository/models/wantlist_model.dart';
 import '../repository/portfolio_repository.dart';
 
+/// The collection's search query. Lifted out of the filter bar because the
+/// box now sits at the top of the page, above the scrolling grid that owns
+/// the rest of the filters.
+final collectionSearchProvider = StateProvider<String>((ref) => '');
+
+/// Whether Koleksi is showing the wishlist instead of the collection. The
+/// heart beside the search box flips it — a switch rather than a trip to
+/// another page, since the search box and filters serve both.
+final showWishlistProvider = StateProvider<bool>((ref) => false);
+
 final portfolioRepositoryProvider = Provider((ref) {
   return PortfolioRepository(ref.read(supabaseClientProvider));
 });
@@ -84,13 +94,17 @@ final inventoryDraftsProvider = FutureProvider<List<InventoryEntry>>((ref) {
   return ref.read(portfolioRepositoryProvider).fetchDraftRecords(user.id);
 });
 
-final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((ref) {
+final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((
+  ref,
+) {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return Future.value(const []);
   return ref.read(portfolioRepositoryProvider).fetchInventoryActivity(user.id);
 });
 
 /// Catalog search for the "Tambahkan" tab's card picker.
-final cardSearchPickerProvider = FutureProvider.family<List<CardModel>, String>((ref, query) {
-  return ref.read(portfolioRepositoryProvider).searchCardsPicker(query);
-});
+final cardSearchPickerProvider = FutureProvider.family<List<CardModel>, String>(
+  (ref, query) {
+    return ref.read(portfolioRepositoryProvider).searchCardsPicker(query);
+  },
+);

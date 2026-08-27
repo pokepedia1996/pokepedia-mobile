@@ -7,14 +7,14 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/utils/formatters.dart';
-import '../../../shared/widgets/card_art.dart';
-import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import 'widgets/add_listing_sheet.dart';
+import 'widgets/listing_table.dart';
 import '../repository/models/seller_listing.dart';
+import '../repository/seller_listings_repository.dart';
 import '../usecase/seller_listings_notifier.dart';
 
 /// Ports `app/seller/products` — the seller's listings, bucketed, with the
@@ -115,9 +115,18 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     if (quantity == null) return;
 
     await _run(
-      () => ref.read(sellerListingActionsProvider).restock(listing.slug, quantity),
+      () => ref
+          .read(sellerListingActionsProvider)
+          .restock(listing.slug, quantity),
       'Stok ditambahkan',
     );
+  }
+
+  /// Web's "Tambah listing": pick a card, then post the ask through the
+  /// same form the catalog page uses.
+  Future<void> _addListing() async {
+    final posted = await showAddListingSheet(context);
+    if (posted == true) ref.invalidate(sellerListingsProvider);
   }
 
   @override
@@ -151,24 +160,11 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text('Produk', style: AppTypography.h2(colors.onSurface)),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              child: TextField(
-                controller: _search,
-                onChanged: (v) =>
-                    ref.read(sellerListingQueryProvider.notifier).state = v,
-                decoration: const InputDecoration(
-                  hintText: 'Cari nama, nomor, atau ekspansi...',
-                  prefixIcon: Icon(Icons.search, size: 20),
-                ),
-              ),
-            ),
+            // Web's order: the tabs come first, then the heading and the
+            // line that explains the tab you're on, then the one primary
+            // action.
             SizedBox(
-              height: 38,
+              height: 32,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -180,68 +176,76 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                       onTap: () =>
                           ref.read(sellerBucketProvider.notifier).state = b,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: async.when(
-                loading: () => const PikachuLoader(),
-                error: (_, __) => Center(
-                  child: Text(
-                    'Gagal memuat listing',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kelola Listing',
+                    style: AppTypography.h1(colors.onSurface),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    bucket.description,
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
-                ),
-                data: (listings) {
-                  if (listings.isEmpty) {
-                    return EmptyState(
-                      icon: Icons.inventory_2_outlined,
-                      title: _emptyTitle(bucket),
-                      description: bucket == SellerListingBucket.active
-                          ? 'Listing baru dibuat lewat pokepedia.id untuk '
-                                'sekarang.'
-                          : null,
-                    );
-                  }
-                  return RefreshIndicator(
-                    onRefresh: () async {
-                      ref.invalidate(sellerListingsProvider);
-                      await ref.read(sellerListingsProvider.future);
-                    },
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                      itemCount: listings.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) => _ListingCard(
-                        listing: listings[i],
-                        onArchive: () => _confirmArchive(listings[i]),
-                        onUnarchive: () => _run(
-                          () => ref
-                              .read(sellerListingActionsProvider)
-                              .unarchive(listings[i].slug),
-                          'Listing dikembalikan',
-                        ),
-                        onRestock: () => _restock(listings[i]),
-                        onToggleOffers: (v) => _run(
-                          () => ref
-                              .read(sellerListingActionsProvider)
-                              .setAcceptsOffers(listings[i].slug, v),
-                          v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
-                        ),
-                        onToggleAutoRelist: (v) => _run(
-                          () => ref
-                              .read(sellerListingActionsProvider)
-                              .setAutoRelist(listings[i].slug, v),
-                          v ? 'Auto-relist aktif' : 'Auto-relist mati',
+                  if (bucket != SellerListingBucket.preferences) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ElevatedButton.icon(
+                        onPressed: _addListing,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Tambahkan Listing'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, 42),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                         ),
                       ),
                     ),
-                  );
-                },
+                  ],
+                ],
               ),
+            ),
+            if (bucket.isListingBucket)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: TextField(
+                  controller: _search,
+                  onChanged: (v) =>
+                      ref.read(sellerListingQueryProvider.notifier).state = v,
+                  style: AppTypography.bodySm(colors.onSurface),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
+                    hintText: 'Cari nama, ekspansi, nomor, kondisi...',
+                    hintStyle: AppTypography.bodySm(context.mutedForeground),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    // Without this the icon claims a 48dp box and sets the
+                    // field's height on its own.
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 0,
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: switch (bucket) {
+                SellerListingBucket.preferences => const _PreferencesPanel(),
+                SellerListingBucket.draft => _DraftList(onChanged: _refresh),
+                _ => _listingBody(bucket, async),
+              },
             ),
           ],
         ),
@@ -249,12 +253,129 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     );
   }
 
+  void _refresh() {
+    ref.invalidate(sellerListingsProvider);
+    ref.invalidate(sellerDraftsProvider);
+  }
+
+  Widget _listingBody(
+    SellerListingBucket bucket,
+    AsyncValue<List<SellerListing>> async,
+  ) {
+    return async.when(
+      loading: () => const PikachuLoader(),
+      error: (_, __) => Center(
+        child: Text(
+          'Gagal memuat listing',
+          style: AppTypography.bodySm(context.mutedForeground),
+        ),
+      ),
+      data: (listings) {
+        if (listings.isEmpty) {
+          return _EmptyCard(
+            title: _emptyTitle(bucket),
+            description: _emptyDescription(bucket),
+          );
+        }
+        return ListingTable(
+          listings: listings,
+          sort: ref.watch(sellerSortProvider),
+          onSort: (col) => ref
+              .read(sellerSortProvider.notifier)
+              .update((s) => s.toggled(col)),
+          onArchive: _confirmArchive,
+          onUnarchive: (l) => _run(
+            () => ref.read(sellerListingActionsProvider).unarchive(l.slug),
+            'Listing dikembalikan',
+          ),
+          onRestock: _restock,
+          onToggleOffers: (l, v) => _run(
+            () => ref
+                .read(sellerListingActionsProvider)
+                .setAcceptsOffers(l.slug, v),
+            v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
+          ),
+          onToggleAutoRelist: (l, v) => _run(
+            () =>
+                ref.read(sellerListingActionsProvider).setAutoRelist(l.slug, v),
+            v ? 'Auto-relist aktif' : 'Auto-relist mati',
+          ),
+          onRefresh: () async {
+            ref.invalidate(sellerListingsProvider);
+            await ref.read(sellerListingsProvider.future);
+          },
+        );
+      },
+    );
+  }
+
   static String _emptyTitle(SellerListingBucket bucket) => switch (bucket) {
     SellerListingBucket.active => 'Belum ada listing aktif',
-    SellerListingBucket.sold => 'Belum ada yang terjual',
-    SellerListingBucket.expired => 'Tidak ada listing kedaluwarsa',
+    SellerListingBucket.inactive => 'Tidak ada listing inaktif',
     SellerListingBucket.archived => 'Arsip kosong',
+    SellerListingBucket.draft => 'Belum ada draft',
+    SellerListingBucket.preferences => 'Preferensi',
   };
+
+  static String? _emptyDescription(SellerListingBucket bucket) =>
+      switch (bucket) {
+        SellerListingBucket.active =>
+          'Buat draft baru di tab Draft untuk mulai memasang listing.',
+        SellerListingBucket.inactive =>
+          'Listing yang terjual atau kedaluwarsa akan muncul di sini.',
+        SellerListingBucket.archived =>
+          'Listing yang kamu arsipkan akan muncul di sini.',
+        _ => null,
+      };
+}
+
+/// Web's empty state is a bordered card, not bare centred text.
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.title, this.description});
+
+  final String title;
+  final String? description;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final description = this.description;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.borderColor),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 32,
+              color: context.mutedForeground,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySemibold(colors.onSurface),
+            ),
+            if (description != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                description,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySm(context.mutedForeground),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _BucketChip extends StatelessWidget {
@@ -268,245 +389,210 @@ class _BucketChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  static IconData _icon(SellerListingBucket bucket) => switch (bucket) {
+    SellerListingBucket.active => Icons.check_circle_outline,
+    SellerListingBucket.inactive => Icons.pause_circle_outline,
+    SellerListingBucket.archived => Icons.archive_outlined,
+    SellerListingBucket.draft => Icons.edit_note,
+    SellerListingBucket.preferences => Icons.tune,
+  };
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final foreground = selected ? colors.primary : context.mutedForeground;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: selected ? colors.primary : colors.secondary,
+          // Web tints the selected tab rather than inverting it, so the
+          // label stays the same colour family across the row.
+          color: selected
+              ? colors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          border: Border.all(
+            color: selected ? colors.primary : context.borderColor,
+          ),
           borderRadius: BorderRadius.circular(999),
         ),
-        alignment: Alignment.center,
-        child: Text(
-          bucket.label,
-          style: selected
-              ? AppTypography.captionSemibold(colors.onPrimary)
-              : AppTypography.caption(context.mutedForeground),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_icon(bucket), size: 13, color: foreground),
+            const SizedBox(width: 4),
+            Text(
+              bucket.label,
+              // `badge` is already bold; the unselected tab just carries
+              // the muted colour, the way web separates them.
+              style: AppTypography.badge(foreground),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ListingCard extends StatelessWidget {
-  const _ListingCard({
-    required this.listing,
-    required this.onArchive,
-    required this.onUnarchive,
-    required this.onRestock,
-    required this.onToggleOffers,
-    required this.onToggleAutoRelist,
-  });
+/// The Draft tab. `listing_drafts` is own-row CRUD under RLS, so this reads
+/// and deletes straight from the table.
+class _DraftList extends ConsumerWidget {
+  const _DraftList({required this.onChanged});
 
-  final SellerListing listing;
-  final VoidCallback onArchive;
-  final VoidCallback onUnarchive;
-  final VoidCallback onRestock;
-  final ValueChanged<bool> onToggleOffers;
-  final ValueChanged<bool> onToggleAutoRelist;
+  final VoidCallback onChanged;
+
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    SellerDraft draft,
+  ) async {
+    await showConfirmDialog(
+      context,
+      title: 'Hapus draft?',
+      description: '${draft.card.name} akan dihapus dari daftar draft.',
+      confirmLabel: 'Hapus',
+      loadingLabel: 'Menghapus...',
+      onConfirm: () async {
+        final error = await ref
+            .read(sellerListingsRepositoryProvider)
+            .deleteDraft(draft.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(content: Text(error ?? 'Draft dihapus'), persist: false),
+          );
+        if (error == null) onChanged();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(sellerDraftsProvider);
+
+    return async.when(
+      loading: () => const PikachuLoader(),
+      error: (_, __) => Center(
+        child: Text(
+          'Gagal memuat draft',
+          style: AppTypography.bodySm(context.mutedForeground),
+        ),
+      ),
+      data: (drafts) {
+        if (drafts.isEmpty) {
+          return const _EmptyCard(
+            title: 'Belum ada draft',
+            description:
+                'Draft yang kamu simpan tapi belum dipasang akan muncul di '
+                'sini.',
+          );
+        }
+        return DraftTable(
+          drafts: drafts,
+          onDelete: (draft) => _delete(context, ref, draft),
+          onRefresh: () async {
+            ref.invalidate(sellerDraftsProvider);
+            await ref.read(sellerDraftsProvider.future);
+          },
+        );
+      },
+    );
+  }
+}
+
+/// The Preferensi tab — defaults stamped onto new listings. Saved on toggle
+/// rather than behind a Simpan button, matching the rest of the app's
+/// switches.
+class _PreferencesPanel extends ConsumerStatefulWidget {
+  const _PreferencesPanel();
+
+  @override
+  ConsumerState<_PreferencesPanel> createState() => _PreferencesPanelState();
+}
+
+class _PreferencesPanelState extends ConsumerState<_PreferencesPanel> {
+  bool _saving = false;
+
+  Future<void> _save(ListingDefaults next) async {
+    setState(() => _saving = true);
+    final error = await ref
+        .read(sellerListingsRepositoryProvider)
+        .saveListingDefaults(next);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(error ?? 'Preferensi disimpan'), persist: false),
+      );
+    if (error == null) ref.invalidate(listingDefaultsProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final async = ref.watch(listingDefaultsProvider);
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
+    return async.when(
+      loading: () => const PikachuLoader(),
+      error: (_, __) => Center(
+        child: Text(
+          'Gagal memuat preferensi',
+          style: AppTypography.bodySm(context.mutedForeground),
+        ),
       ),
-      child: Column(
+      data: (defaults) => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: context.borderColor),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Column(
               children: [
-                SizedBox(
-                  width: 46,
-                  child: CardArt(
-                    imageUrl: listing.card.imageUrl,
-                    borderRadius: AppRadius.sm,
+                SwitchListTile.adaptive(
+                  value: defaults.autoRelist,
+                  onChanged: _saving
+                      ? null
+                      : (v) => _save(defaults.copyWith(autoRelist: v)),
+                  title: Text(
+                    'Otomatis Perpanjang',
+                    style: AppTypography.bodySemibold(colors.onSurface),
+                  ),
+                  subtitle: Text(
+                    'Pasang ulang otomatis saat listing kedaluwarsa.',
+                    style: AppTypography.bodySm(context.mutedForeground),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        listing.card.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.bodySmSemibold(colors.onSurface),
-                      ),
-                      Text(
-                        '${listing.card.collectorNumber} · '
-                        '${listing.card.expansionCode.toUpperCase()}',
-                        style: AppTypography.caption(context.mutedForeground),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          ConditionBadge(
-                            condition: listing.condition,
-                            dense: true,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            listing.isOutOfStock
-                                ? 'Stok habis'
-                                : 'Stok ${listing.available}',
-                            style: AppTypography.caption(
-                              listing.isOutOfStock
-                                  ? colors.error
-                                  : context.mutedForeground,
-                            ),
-                          ),
-                          if (listing.qtyLocked > 0) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              '· ${listing.qtyLocked} dikunci',
-                              style: AppTypography.caption(
-                                context.appSemantic.gold,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                Divider(height: 1, color: context.borderColor),
+                SwitchListTile.adaptive(
+                  value: defaults.acceptsOffers,
+                  onChanged: _saving
+                      ? null
+                      : (v) => _save(defaults.copyWith(acceptsOffers: v)),
+                  title: Text(
+                    'Terima tawaran',
+                    style: AppTypography.bodySemibold(colors.onSurface),
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatRupiah(listing.price),
-                      style: AppTypography.bodySmSemibold(colors.onSurface),
-                    ),
-                    Text(
-                      '${listing.viewCount} dilihat',
-                      style: AppTypography.caption(context.mutedForeground),
-                    ),
-                  ],
+                  subtitle: Text(
+                    'Pembeli bisa mengajukan harga di listing barumu.',
+                    style: AppTypography.bodySm(context.mutedForeground),
+                  ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: context.borderColor),
-          // Toggles only make sense on a live listing; an archived or sold
-          // one gets the action that applies to it instead.
-          if (listing.isArchived)
-            _ActionRow(
-              children: [
-                _Action(
-                  icon: Icons.unarchive_outlined,
-                  label: 'Kembalikan',
-                  onTap: onUnarchive,
-                ),
-              ],
-            )
-          else ...[
-            _ToggleRow(
-              label: 'Terima tawaran',
-              value: listing.acceptsOffers,
-              onChanged: onToggleOffers,
-            ),
-            Divider(height: 1, color: context.borderColor),
-            _ToggleRow(
-              label: 'Auto-relist saat kedaluwarsa',
-              value: listing.autoRelist,
-              onChanged: onToggleAutoRelist,
-            ),
-            Divider(height: 1, color: context.borderColor),
-            _ActionRow(
-              children: [
-                if (listing.isOutOfStock)
-                  _Action(
-                    icon: Icons.add_box_outlined,
-                    label: 'Tambah stok',
-                    onTap: onRestock,
-                  ),
-                _Action(
-                  icon: Icons.archive_outlined,
-                  label: 'Arsipkan',
-                  onTap: onArchive,
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 2, 6, 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTypography.bodySm(context.appColors.onSurface),
-            ),
+          const SizedBox(height: 8),
+          Text(
+            'Berlaku untuk listing yang kamu buat setelah ini. Listing yang '
+            'sudah ada bisa diubah satu per satu di tab Aktif.',
+            style: AppTypography.caption(context.mutedForeground),
           ),
-          Switch(value: value, onChanged: onChanged),
         ],
       ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      child: Row(children: children),
-    );
-  }
-}
-
-class _Action extends StatelessWidget {
-  const _Action({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-      style: TextButton.styleFrom(foregroundColor: context.mutedForeground),
     );
   }
 }

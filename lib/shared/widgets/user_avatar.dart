@@ -28,7 +28,10 @@ class UserAvatar extends StatelessWidget {
     final colors = context.appColors;
     final initials = username.trim().isEmpty
         ? '?'
-        : username.trim().substring(0, username.trim().length >= 2 ? 2 : 1).toUpperCase();
+        : username
+              .trim()
+              .substring(0, username.trim().length >= 2 ? 2 : 1)
+              .toUpperCase();
 
     Widget avatar = Container(
       width: size,
@@ -70,7 +73,10 @@ class UserAvatar extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: colors.primary.withValues(alpha: 0.2), width: 3),
+        border: Border.all(
+          color: colors.primary.withValues(alpha: 0.2),
+          width: 3,
+        ),
       ),
       child: avatar,
     );

@@ -34,22 +34,6 @@ class OrderBookWidget extends ConsumerStatefulWidget {
 class _OrderBookWidgetState extends ConsumerState<OrderBookWidget> {
   CardCondition? _condition;
 
-  /// Opens the order form, then refreshes the ladder if it wrote anything.
-  Future<void> _place(String side, int? bestPrice) async {
-    final placed = await showPlaceOrderSheet(
-      context,
-      card: widget.card,
-      side: side,
-      bestPrice: bestPrice,
-    );
-    if (placed == true) {
-      ref.invalidate(
-        orderBookProvider((cardId: widget.card.id, condition: _condition)),
-      );
-      ref.invalidate(cardListingsProvider(widget.card.id));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -108,45 +92,81 @@ class _OrderBookWidgetState extends ConsumerState<OrderBookWidget> {
             )
           else
             _Ladder(book: book),
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: context.borderColor)),
-            ),
-            child: isUntradeableExpansion(widget.card.expansionCode)
-                ? Text(
-                    'Kartu ini belum bisa diperdagangkan.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.caption(context.mutedForeground),
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _place('bid', book?.bestBid),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: context.appSemantic.success,
-                            minimumSize: const Size(0, 40),
-                          ),
-                          child: const Text('Pasang Bid (WTB)'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _place('ask', book?.bestAsk),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colors.error,
-                            minimumSize: const Size(0, 40),
-                          ),
-                          child: const Text('Pasang Ask (WTS)'),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// "Pasang Bid (WTB)" / "Pasang Ask (WTS)" — the two ways onto the book.
+///
+/// Lives beside the price rather than at the foot of the ladder: the price
+/// is what someone is reacting to when they decide to bid or ask.
+class PlaceOrderButtons extends ConsumerWidget {
+  const PlaceOrderButtons({super.key, required this.card});
+
+  final CardModel card;
+
+  Future<void> _place(
+    BuildContext context,
+    WidgetRef ref,
+    String side,
+    int? bestPrice,
+  ) async {
+    final placed = await showPlaceOrderSheet(
+      context,
+      card: card,
+      side: side,
+      bestPrice: bestPrice,
+    );
+    if (placed == true) {
+      // Family-wide: the ladder below may be filtered to one grade, and
+      // this doesn't know which.
+      ref.invalidate(orderBookProvider);
+      ref.invalidate(cardListingsProvider(card.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (isUntradeableExpansion(card.expansionCode)) {
+      return Text(
+        'Kartu ini belum bisa diperdagangkan.',
+        textAlign: TextAlign.center,
+        style: AppTypography.caption(context.mutedForeground),
+      );
+    }
+
+    // The unfiltered book, purely to prefill the form — the sheet asks for
+    // a condition itself.
+    final book = ref
+        .watch(orderBookProvider((cardId: card.id, condition: null)))
+        .valueOrNull;
+
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _place(context, ref, 'bid', book?.bestBid),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.appSemantic.success,
+              minimumSize: const Size(0, 40),
+            ),
+            child: const Text('Pasang Bid (WTB)'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _place(context, ref, 'ask', book?.bestAsk),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.appColors.error,
+              minimumSize: const Size(0, 40),
+            ),
+            child: const Text('Pasang Ask (WTS)'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -416,9 +436,7 @@ class _DepthCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (quantity == null) return const SizedBox(height: 18);
-    final alignment = alignRight
-        ? Alignment.centerRight
-        : Alignment.centerLeft;
+    final alignment = alignRight ? Alignment.centerRight : Alignment.centerLeft;
     return SizedBox(
       height: 18,
       child: Stack(

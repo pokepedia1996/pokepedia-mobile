@@ -5,6 +5,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../usecase/market_filters.dart';
+import 'models/store_feedback.dart';
 
 enum MarketBucket { all, listing, buylist, toko }
 
@@ -43,18 +44,23 @@ class MarketRepository {
                 'p_sort': sort.raw,
                 if (filters.conditions.isNotEmpty)
                   'p_conditions': filters.conditions.map((c) => c.raw).toList(),
-                if (filters.rarities.isNotEmpty) 'p_rarities': filters.rarities.toList(),
+                if (filters.rarities.isNotEmpty)
+                  'p_rarities': filters.rarities.toList(),
                 if (filters.categories.isNotEmpty)
                   'p_categories': filters.categories.map((c) => c.raw).toList(),
                 if (filters.trainerSubtypes.isNotEmpty)
-                  'p_trainer_subtypes': filters.trainerSubtypes.map((s) => s.labelId).toList(),
+                  'p_trainer_subtypes': filters.trainerSubtypes
+                      .map((s) => s.labelId)
+                      .toList(),
                 if (filters.verifiedOnly) 'p_verified_only': true,
                 if (filters.minPrice != null) 'p_min_price': filters.minPrice,
                 if (filters.maxPrice != null) 'p_max_price': filters.maxPrice,
               },
             )
             as List;
-    return rows.map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>)).toList();
+    return rows
+        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<StoreModel>> fetchStores({String query = ''}) async {
@@ -69,11 +75,36 @@ class MarketRepository {
               },
             )
             as List;
-    return rows.map((r) => StoreModel.fromDirectoryRow(r as Map<String, dynamic>)).toList();
+    return rows
+        .map((r) => StoreModel.fromDirectoryRow(r as Map<String, dynamic>))
+        .toList();
   }
 
+  /// A storefront by its handle, which may be either a store slug or a
+  /// username.
+  ///
+  /// Web has two routes and so knows which it holds — `/market/[slug]` calls
+  /// `get_seller_storefront_by_slug`, `/usr/[username]` calls
+  /// `get_seller_storefront_by_username`. The app has one route reached from
+  /// both kinds of link (the market list and a listing card carry slugs; the
+  /// account page, a user profile and the seller dashboard carry usernames),
+  /// so it tries the slug and falls back to the username — the same thing
+  /// web's `market/[slug]/card/[cardId]` page does.
   Future<StoreModel?> fetchStore(String handle) async {
-    final rows = await _client.rpc('get_seller_storefront_by_slug', params: {'p_slug': handle}) as List;
+    var rows =
+        await _client.rpc(
+              'get_seller_storefront_by_slug',
+              params: {'p_slug': handle},
+            )
+            as List;
+    if (rows.isEmpty) {
+      rows =
+          await _client.rpc(
+                'get_seller_storefront_by_username',
+                params: {'p_username': handle},
+              )
+              as List;
+    }
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
     final sellerId = row['user_id'] as String?;
@@ -84,14 +115,25 @@ class MarketRepository {
       final listingRows =
           await _client.rpc(
                 'get_recent_marketplace_listings',
-                params: {'p_seller_user_id': sellerId, 'p_window_hours': 0, 'p_limit': 1, 'p_offset': 0},
+                params: {
+                  'p_seller_user_id': sellerId,
+                  'p_window_hours': 0,
+                  'p_limit': 1,
+                  'p_offset': 0,
+                },
               )
               as List;
       if (listingRows.isNotEmpty) {
-        activeListingCount = ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)?.toInt() ?? 0;
+        activeListingCount =
+            ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
+                ?.toInt() ??
+            0;
       }
     }
-    return StoreModel.fromDetailRow(row, activeListingCount: activeListingCount);
+    return StoreModel.fromDetailRow(
+      row,
+      activeListingCount: activeListingCount,
+    );
   }
 
   Future<List<ListingModel>> fetchStoreListings(String handle) async {
@@ -100,14 +142,23 @@ class MarketRepository {
     return fetchStoreListingsByUserId(store!.userId!);
   }
 
-  Future<List<ListingModel>> fetchStoreListingsByUserId(String sellerUserId) async {
+  Future<List<ListingModel>> fetchStoreListingsByUserId(
+    String sellerUserId,
+  ) async {
     final rows =
         await _client.rpc(
               'get_recent_marketplace_listings',
-              params: {'p_seller_user_id': sellerUserId, 'p_window_hours': 0, 'p_limit': 100, 'p_offset': 0},
+              params: {
+                'p_seller_user_id': sellerUserId,
+                'p_window_hours': 0,
+                'p_limit': 100,
+                'p_offset': 0,
+              },
             )
             as List;
-    return rows.map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>)).toList();
+    return rows
+        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
+        .toList();
   }
 
   /// One seller's open asks (WTS) for a single card, plus how many *other*
@@ -116,12 +167,14 @@ class MarketRepository {
   /// Unlike [fetchStoreListingsByUserId] this RPC doesn't join card/store
   /// info onto each row, so [card] and [store] (already resolved by the
   /// caller) are threaded through [ListingModel.fromRow] instead.
-  Future<({List<ListingModel> listings, int otherSellersCount})> fetchCardListingsForSeller({
+  Future<({List<ListingModel> listings, int otherSellersCount})>
+  fetchCardListingsForSeller({
     required int cardId,
     required CardModel card,
     required StoreModel store,
   }) async {
-    if (store.userId == null) return (listings: <ListingModel>[], otherSellersCount: 0);
+    if (store.userId == null)
+      return (listings: <ListingModel>[], otherSellersCount: 0);
     final sellerRows =
         await _client.rpc(
               'get_card_listings',
@@ -134,18 +187,29 @@ class MarketRepository {
               },
             )
             as List;
-    if (sellerRows.isEmpty) return (listings: <ListingModel>[], otherSellersCount: 0);
+    if (sellerRows.isEmpty)
+      return (listings: <ListingModel>[], otherSellersCount: 0);
 
-    final sellerTotal = ((sellerRows.first as Map<String, dynamic>)['total_count'] as num?)?.toInt() ?? 0;
+    final sellerTotal =
+        ((sellerRows.first as Map<String, dynamic>)['total_count'] as num?)
+            ?.toInt() ??
+        0;
     final globalRows =
         await _client.rpc(
               'get_card_listings',
-              params: {'p_card_id': cardId, 'p_sort': 'price_asc', 'p_limit': 1, 'p_offset': 0},
+              params: {
+                'p_card_id': cardId,
+                'p_sort': 'price_asc',
+                'p_limit': 1,
+                'p_offset': 0,
+              },
             )
             as List;
     final globalTotal = globalRows.isEmpty
         ? sellerTotal
-        : ((globalRows.first as Map<String, dynamic>)['total_count'] as num?)?.toInt() ?? sellerTotal;
+        : ((globalRows.first as Map<String, dynamic>)['total_count'] as num?)
+                  ?.toInt() ??
+              sellerTotal;
 
     final listings = sellerRows
         .map(
@@ -160,14 +224,80 @@ class MarketRepository {
           ),
         )
         .toList();
-    return (listings: listings, otherSellersCount: (globalTotal - sellerTotal).clamp(0, globalTotal));
+    return (
+      listings: listings,
+      otherSellersCount: (globalTotal - sellerTotal).clamp(0, globalTotal),
+    );
+  }
+
+  /// The seller's feedback summary, bucketed by period server-side.
+  Future<StoreFeedbackSummary> fetchFeedbackSummary(String userId) async {
+    final result = await _client.rpc(
+      'get_feedback_counts_matrix',
+      params: {'p_user_id': userId},
+    );
+    if (result is! Map) {
+      return const StoreFeedbackSummary(positive: 0, neutral: 0, negative: 0);
+    }
+    return StoreFeedbackSummary.fromMatrix(Map<String, dynamic>.from(result));
+  }
+
+  /// The reviews themselves, newest first.
+  ///
+  /// Read straight from `trade_ratings` (`ratings_select_public`) rather
+  /// than through `get_feedback_list`: that RPC is in the web repo but isn't
+  /// deployed to this project, and PostgREST answers PGRST202 for it.
+  Future<List<StoreFeedback>> fetchFeedback(
+    String userId, {
+    int limit = 20,
+  }) async {
+    final rows =
+        await _client
+                .from('trade_ratings')
+                .select(
+                  'id, rater_id, feedback, comment, reply, created_at, is_auto',
+                )
+                .eq('rated_id', userId)
+                .order('created_at', ascending: false)
+                .limit(limit)
+            as List;
+    if (rows.isEmpty) return const [];
+
+    // Two queries rather than an embed: `trade_ratings.rater_id` references
+    // `auth.users`, not `profiles`, so PostgREST has no relationship to
+    // traverse (PGRST200).
+    final raterIds = rows
+        .map((r) => (r as Map<String, dynamic>)['rater_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    final profiles =
+        await _client
+                .from('profiles')
+                .select('id, username')
+                .inFilter('id', raterIds)
+            as List;
+    final usernames = {
+      for (final row in profiles.cast<Map<String, dynamic>>())
+        row['id'] as String: row['username'] as String?,
+    };
+
+    return rows.map((r) {
+      final row = r as Map<String, dynamic>;
+      return StoreFeedback.fromRow(
+        row,
+        raterUsername: usernames[row['rater_id']],
+      );
+    }).toList();
   }
 
   /// `user_reputation`'s precomputed positive-feedback percentage and
   /// (positive − negative) score, mirroring `fetchReputation` in
   /// `lib/user/reputation.ts`. Returns nulls for a seller with no trade
   /// history yet rather than throwing.
-  Future<({double? positivePct, int feedbackScore})> fetchReputation(String userId) async {
+  Future<({double? positivePct, int feedbackScore})> fetchReputation(
+    String userId,
+  ) async {
     final row = await _client
         .from('user_reputation')
         .select('positive_pct, positive_count_total, negative_count_total')

@@ -101,8 +101,9 @@ class _SignupPageState extends ConsumerState<SignupPage> {
             TextFormField(
               controller: _username,
               decoration: const InputDecoration(labelText: 'Username'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Username wajib diisi' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Username wajib diisi'
+                  : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -117,9 +118,8 @@ class _SignupPageState extends ConsumerState<SignupPage> {
               controller: _password,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Password'),
-              validator: (v) => (v == null || v.length < 8)
-                  ? 'Minimal 8 karakter'
-                  : null,
+              validator: (v) =>
+                  (v == null || v.length < 8) ? 'Minimal 8 karakter' : null,
             ),
             const SizedBox(height: 16),
             if (_error != null) ...[

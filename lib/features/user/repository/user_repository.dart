@@ -103,17 +103,19 @@ class UserRepository {
         ),
       );
 
-      cardsByKey.putIfAbsent(key, () => []).add(
-        CollectionCardEntry(
-          cardId: (row['card_id'] as num).toInt(),
-          name: card['name_id'] as String? ?? '',
-          number: card['collector_number'] as String? ?? '',
-          quantity: (row['quantity'] as num?)?.toInt() ?? 0,
-          imageUrl: proxyImageUrl(card['image_url'] as String?),
-          rarity: card['rarity'] as String?,
-          variantKey: row['variant_key'] as String?,
-        ),
-      );
+      cardsByKey
+          .putIfAbsent(key, () => [])
+          .add(
+            CollectionCardEntry(
+              cardId: (row['card_id'] as num).toInt(),
+              name: card['name_id'] as String? ?? '',
+              number: card['collector_number'] as String? ?? '',
+              quantity: (row['quantity'] as num?)?.toInt() ?? 0,
+              imageUrl: proxyImageUrl(card['image_url'] as String?),
+              rarity: card['rarity'] as String?,
+              variantKey: row['variant_key'] as String?,
+            ),
+          );
     }
 
     final result = <CollectionExpansionGroup>[];
@@ -198,6 +200,29 @@ class UserRepository {
           ),
         )
         .toList();
+  }
+
+  /// Follows a shop. `follow_shop` is idempotent server-side and refuses a
+  /// self-follow, so this doesn't have to check either.
+  Future<String?> followShop(String shopUserId) async {
+    try {
+      await _client.rpc('follow_shop', params: {'p_shop_user_id': shopUserId});
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  Future<String?> unfollowShop(String shopUserId) async {
+    try {
+      await _client.rpc(
+        'unfollow_shop',
+        params: {'p_shop_user_id': shopUserId},
+      );
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
   }
 
   /// Ports `app/account/following/page.tsx`' `get_followed_shops` call.

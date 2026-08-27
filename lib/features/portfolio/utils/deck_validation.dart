@@ -7,9 +7,11 @@ const deckMaxCopies = 4;
 const _basicEnergyPrefix = 'Energi Dasar';
 
 bool isBasicEnergy(CardModel card) =>
-    card.category == CardCategory.energy && card.name.startsWith(_basicEnergyPrefix);
+    card.category == CardCategory.energy &&
+    card.name.startsWith(_basicEnergyPrefix);
 
-String stripCardNameBrackets(String name) => name.replaceAll(RegExp(r'\s*\[[^\]]*\]'), '').trim();
+String stripCardNameBrackets(String name) =>
+    name.replaceAll(RegExp(r'\s*\[[^\]]*\]'), '').trim();
 
 sealed class DeckValidationError {
   const DeckValidationError();
@@ -69,7 +71,8 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
     switch (e.card.category) {
       case CardCategory.pokemon:
         pokemonCount += e.quantity;
-        if (e.card.details.evolutionStage == EvolutionStage.basic) hasBasicPokemon = true;
+        if (e.card.details.evolutionStage == EvolutionStage.basic)
+          hasBasicPokemon = true;
       case CardCategory.trainer:
         trainerCount += e.quantity;
       case CardCategory.energy:
@@ -85,7 +88,8 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
   if (totalCards != deckMaxCards) errors.add(DeckErrorNot60Cards(totalCards));
   if (!hasBasicPokemon) errors.add(const DeckErrorNoBasicPokemon());
   for (final entry in nameQuantities.entries) {
-    if (entry.value > deckMaxCopies) errors.add(DeckErrorOver4Copies(entry.key, entry.value));
+    if (entry.value > deckMaxCopies)
+      errors.add(DeckErrorOver4Copies(entry.key, entry.value));
   }
   if (aceCount > 1) errors.add(DeckErrorOverAce(aceCount));
 
@@ -99,11 +103,13 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
 }
 
 String deckValidationErrorMessage(DeckValidationError error) => switch (error) {
-  DeckErrorNot60Cards(:final total) => total < deckMaxCards
-      ? 'Butuh ${deckMaxCards - total} kartu lagi'
-      : 'Kartu lebih dari $deckMaxCards tidak valid ($total)',
+  DeckErrorNot60Cards(:final total) =>
+    total < deckMaxCards
+        ? 'Butuh ${deckMaxCards - total} kartu lagi'
+        : 'Kartu lebih dari $deckMaxCards tidak valid ($total)',
   DeckErrorNoBasicPokemon() => 'Butuh minimal 1 Pokemon Basic',
-  DeckErrorOver4Copies(:final cardName, :final count) => '"$cardName" melebihi batas 4 salinan ($count)',
+  DeckErrorOver4Copies(:final cardName, :final count) =>
+    '"$cardName" melebihi batas 4 salinan ($count)',
   DeckErrorOverAce(:final count) => 'Hanya boleh 1 kartu ACE per dek ($count)',
 };
 

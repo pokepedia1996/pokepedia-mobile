@@ -41,7 +41,11 @@ class ReputationStar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(tier.isNew ? Icons.star_border : Icons.star, size: size, color: tier.color),
+        Icon(
+          tier.isNew ? Icons.star_border : Icons.star,
+          size: size,
+          color: tier.color,
+        ),
         const SizedBox(width: 2),
         Text('$score', style: AppTypography.caption(context.mutedForeground)),
       ],

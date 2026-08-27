@@ -45,7 +45,9 @@ final userProfileProvider = FutureProvider.family<PublicProfile?, String>((
   if (viewer == null) return profile;
 
   final whatsapp = await repository.fetchSellerContact(profile.userId);
-  return whatsapp == null ? profile : profile.copyWith(socialWhatsapp: () => whatsapp);
+  return whatsapp == null
+      ? profile
+      : profile.copyWith(socialWhatsapp: () => whatsapp);
 });
 
 /// The profile owner's collection. Guests and non-owners only get it when
@@ -74,10 +76,57 @@ final userContributionsProvider =
     ) async {
       final profile = await ref.watch(userProfileProvider(username).future);
       if (profile == null || profile.contributionCount == 0) return const [];
-      return ref.read(userRepositoryProvider).fetchContributions(profile.userId);
+      return ref
+          .read(userRepositoryProvider)
+          .fetchContributions(profile.userId);
     });
 
 /// Shops the signed-in user follows — the `/account/following` list.
+/// Whether the signed-in user follows a shop, and the two writes that
+/// change it.
+///
+/// Keyed by the shop's `user_id` rather than its handle: that's what
+/// `shop_follows` stores and what the RPCs take.
+class FollowController {
+  const FollowController(this._ref);
+
+  final Ref _ref;
+
+  Future<String?> setFollowing({
+    required String shopUserId,
+    required bool following,
+  }) async {
+    final repository = _ref.read(userRepositoryProvider);
+    final error = following
+        ? await repository.followShop(shopUserId)
+        : await repository.unfollowShop(shopUserId);
+    if (error == null) {
+      // The Akun → "Toko yang Diikuti" list and the storefront's own
+      // follower count both read from the server.
+      _ref.invalidate(followedShopsProvider);
+      _ref.invalidate(isFollowingShopProvider(shopUserId));
+    }
+    return error;
+  }
+}
+
+final followControllerProvider = Provider(FollowController.new);
+
+/// The server's answer for one shop. The storefront seeds its button from
+/// the storefront row's `is_following`, and falls back to this after a
+/// write so a reopened page doesn't disagree with the database.
+final isFollowingShopProvider = FutureProvider.family<bool, String>((
+  ref,
+  shopUserId,
+) async {
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return false;
+  final result = await ref
+      .read(supabaseClientProvider)
+      .rpc('is_following_shop', params: {'p_shop_user_id': shopUserId});
+  return result == true;
+});
+
 final followedShopsProvider = FutureProvider<List<FollowedShop>>((ref) async {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return const [];

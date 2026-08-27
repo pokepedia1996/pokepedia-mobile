@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
+import '../../../app/router/routes.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -20,6 +24,7 @@ class WalletPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final balanceAsync = ref.watch(walletBalanceProvider);
     final activityAsync = ref.watch(walletActivityProvider);
+    final signedIn = ref.watch(authProvider).valueOrNull != null;
     final colors = context.appColors;
 
     return Scaffold(
@@ -98,26 +103,38 @@ class WalletPage extends ConsumerWidget {
               style: AppTypography.h3(colors.onSurface),
             ),
             const SizedBox(height: 10),
-            activityAsync.when(
-              data: (items) {
-                if (items.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Belum ada aktivitas',
+            if (!signedIn)
+              EmptyState(
+                icon: Icons.account_balance_wallet_outlined,
+                title: 'Masuk untuk melihat saldo',
+                action: ElevatedButton(
+                  onPressed: () => context.push(Routes.login),
+                  child: const Text('Masuk'),
+                ),
+              )
+            else
+              activityAsync.when(
+                data: (items) {
+                  if (items.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Belum ada aktivitas',
+                      description:
+                          'Pencairan escrow, refund dan penarikan tercatat di sini.',
+                    );
+                  }
+                  return Column(
+                    children: [
+                      for (final item in items) _ActivityTile(activity: item),
+                    ],
                   );
-                }
-                return Column(
-                  children: [
-                    for (final item in items) _ActivityTile(activity: item),
-                  ],
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: PikachuLoader(),
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: PikachuLoader(),
+                ),
+                error: (_, __) => const Text('Gagal memuat aktivitas'),
               ),
-              error: (_, __) => const Text('Gagal memuat aktivitas'),
-            ),
           ],
         ),
       ),

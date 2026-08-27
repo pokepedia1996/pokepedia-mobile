@@ -149,8 +149,10 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
   }
 
   int subtotalForSeller(String sellerId) =>
-      (_itemsBySeller[sellerId] ?? const [])
-          .fold(0, (sum, item) => sum + item.subtotal);
+      (_itemsBySeller[sellerId] ?? const []).fold(
+        0,
+        (sum, item) => sum + item.subtotal,
+      );
 
   Future<void> loadContext() async {
     state = state.copyWith(contextLoading: true, clearContextError: true);
@@ -182,10 +184,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     // it fans out to billable Biteship. A four-seller cart is four calls per
     // address change, so settle before spending them.
     _rateDebounce?.cancel();
-    _rateDebounce = Timer(
-      const Duration(milliseconds: 400),
-      _refreshAllRates,
-    );
+    _rateDebounce = Timer(const Duration(milliseconds: 400), _refreshAllRates);
   }
 
   /// Ports `fetchRatesForSeller`.
@@ -200,12 +199,14 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     final subtotal = sellerItems.fold(0, (sum, item) => sum + item.subtotal);
 
     try {
-      final options = await ref.read(checkoutGatewayProvider).fetchRates(
-        sellerId: sellerId,
-        addressSlug: destination.slug,
-        quantity: quantity < 1 ? 1 : quantity,
-        itemValue: subtotal,
-      );
+      final options = await ref
+          .read(checkoutGatewayProvider)
+          .fetchRates(
+            sellerId: sellerId,
+            addressSlug: destination.slug,
+            quantity: quantity < 1 ? 1 : quantity,
+            itemValue: subtotal,
+          );
 
       // Instant couriers need a map pinpoint on the destination; without one
       // they're still listed but never preselected, matching the web.
@@ -270,10 +271,9 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     final trimmed = code.trim();
     if (trimmed.isEmpty) return;
     state = state.copyWith(couponLoading: true, clearCouponError: true);
-    final result = await ref.read(cartRepositoryProvider).applyCoupon(
-      code: trimmed,
-      itemsSubtotal: itemsSubtotal,
-    );
+    final result = await ref
+        .read(cartRepositoryProvider)
+        .applyCoupon(code: trimmed, itemsSubtotal: itemsSubtotal);
     state = state.copyWith(
       couponLoading: false,
       coupon: result.coupon,
@@ -286,11 +286,12 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
   void removeCoupon() =>
       state = state.copyWith(clearCoupon: true, clearCouponError: true);
 
-  int get itemsSubtotal =>
-      _items.fold(0, (sum, item) => sum + item.subtotal);
+  int get itemsSubtotal => _items.fold(0, (sum, item) => sum + item.subtotal);
 
-  int get shippingTotal => state.shippingBySeller.values
-      .fold(0, (sum, shipping) => sum + (shipping.selected?.cost ?? 0));
+  int get shippingTotal => state.shippingBySeller.values.fold(
+    0,
+    (sum, shipping) => sum + (shipping.selected?.cost ?? 0),
+  );
 
   /// Ports `computeInsuranceTotal` — only charged where the buyer asked for
   /// it *and* the chosen service actually supports it.
@@ -361,15 +362,17 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
         );
       }
 
-      return await ref.read(checkoutGatewayProvider).submit(
-        courierChoices: choices,
-        deliveryAddressSlug: state.address!.slug,
-        paymentMethod: state.paymentMethod,
-        paymentChannel: state.paymentChannel,
-        buyerNote: state.buyerNote,
-        couponCode: state.coupon?.code,
-        selectedCartItemIds: [for (final item in _items) item.cartItemId],
-      );
+      return await ref
+          .read(checkoutGatewayProvider)
+          .submit(
+            courierChoices: choices,
+            deliveryAddressSlug: state.address!.slug,
+            paymentMethod: state.paymentMethod,
+            paymentChannel: state.paymentChannel,
+            buyerNote: state.buyerNote,
+            couponCode: state.coupon?.code,
+            selectedCartItemIds: [for (final item in _items) item.cartItemId],
+          );
     } finally {
       state = state.copyWith(submitting: false);
     }

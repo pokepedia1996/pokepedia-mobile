@@ -10,7 +10,8 @@ class AppConfig {
   const AppConfig._();
 
   static final supabaseUrl = 'https://ovbzifwfohqflfsgedsj.supabase.co';
-  static const supabaseAnonKey = 'sb_publishable_hJI-p2MvaiuKQmOq8Tvxkw_vz-Zpgwi';
+  static const supabaseAnonKey =
+      'sb_publishable_hJI-p2MvaiuKQmOq8Tvxkw_vz-Zpgwi';
   // static final supabaseUrl = 'http://192.168.1.5:54321';
   // static const supabaseAnonKey = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 

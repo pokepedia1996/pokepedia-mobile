@@ -34,9 +34,8 @@ class CatalogLanguageToggle extends ConsumerWidget {
             _LanguageButton(
               language: language,
               selected: language == current,
-              onTap: () => ref
-                  .read(catalogLanguageProvider.notifier)
-                  .set(language),
+              onTap: () =>
+                  ref.read(catalogLanguageProvider.notifier).set(language),
             ),
         ],
       ),

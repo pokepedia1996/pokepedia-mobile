@@ -12,6 +12,7 @@ import '../../features/cart/presentation/cart_page.dart';
 import '../../features/cart/presentation/checkout_page.dart';
 import '../../features/chat/presentation/chat_inbox_page.dart';
 import '../../features/chat/presentation/chat_thread_page.dart';
+import '../../features/chat/repository/models/chat_models.dart';
 import '../../features/content/presentation/support_page.dart';
 import '../../features/content/presentation/terms_page.dart';
 import '../../features/content/presentation/tutorial_page.dart';
@@ -36,7 +37,11 @@ import '../../features/portfolio/presentation/portfolio_page.dart';
 import '../../features/proposals/presentation/proposals_page.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
+import '../../features/seller/presentation/seller_orders_page.dart';
+import '../../features/seller/presentation/seller_couriers_page.dart';
 import '../../features/seller/presentation/seller_products_page.dart';
+import '../../features/seller/presentation/seller_store_page.dart';
+import '../../features/seller/presentation/seller_store_profile_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/user/presentation/following_page.dart';
 import '../../features/user/presentation/user_profile_page.dart';
@@ -63,7 +68,8 @@ final appRouter = GoRouter(
   redirect: (context, state) {
     final loggedIn = Supabase.instance.client.auth.currentSession != null;
     final loggingIn =
-        state.matchedLocation == Routes.login || state.matchedLocation == Routes.signup;
+        state.matchedLocation == Routes.login ||
+        state.matchedLocation == Routes.signup;
     if (loggedIn && loggingIn) return Routes.account;
     return null;
   },
@@ -126,15 +132,24 @@ final appRouter = GoRouter(
               routes: [
                 GoRoute(
                   path: ':handle',
+                  // Defaulted rather than asserted: a caller that builds
+                  // `/market/` from an empty handle would otherwise take the
+                  // app down with a null check. An empty handle resolves to
+                  // no store, which the page already renders as "Toko tidak
+                  // ditemukan".
                   builder: (_, state) => StoreDetailPage(
-                    handle: state.pathParameters['handle']!,
+                    handle: state.pathParameters['handle'] ?? '',
                   ),
                   routes: [
                     GoRoute(
                       path: 'card/:cardId',
                       builder: (_, state) => StoreCardListingPage(
-                        storeSlug: state.pathParameters['handle']!,
-                        cardId: int.parse(state.pathParameters['cardId']!),
+                        storeSlug: state.pathParameters['handle'] ?? '',
+                        cardId:
+                            int.tryParse(
+                              state.pathParameters['cardId'] ?? '',
+                            ) ??
+                            0,
                       ),
                     ),
                   ],
@@ -179,10 +194,7 @@ final appRouter = GoRouter(
     // Biteship and Xendit secrets plus `service_role` RPCs. The web app's
     // own `/cart/checkout/success` redirect happens inside that WebView, so
     // there's no separate native success route to register.
-    GoRoute(
-      path: Routes.checkout,
-      builder: (_, __) => const CheckoutPage(),
-    ),
+    GoRoute(path: Routes.checkout, builder: (_, __) => const CheckoutPage()),
     GoRoute(
       path: Routes.orders,
       builder: (_, __) => const OrdersPage(),
@@ -206,10 +218,7 @@ final appRouter = GoRouter(
         ),
       ],
     ),
-    GoRoute(
-      path: Routes.proposals,
-      builder: (_, __) => const ProposalsPage(),
-    ),
+    GoRoute(path: Routes.proposals, builder: (_, __) => const ProposalsPage()),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
 
     // Seller.
@@ -221,16 +230,40 @@ final appRouter = GoRouter(
       path: Routes.sellerProducts,
       builder: (_, __) => const SellerProductsPage(),
     ),
+    GoRoute(
+      path: Routes.sellerOrders,
+      builder: (_, __) => const SellerOrdersPage(),
+    ),
+    GoRoute(
+      path: Routes.sellerStore,
+      builder: (_, __) => const SellerStorePage(),
+    ),
+    GoRoute(
+      path: Routes.sellerStoreProfile,
+      builder: (_, __) => const SellerStoreProfilePage(),
+    ),
+    GoRoute(
+      path: Routes.sellerCouriers,
+      builder: (_, __) => const SellerCouriersPage(),
+    ),
 
     // Social / account.
     GoRoute(
       path: Routes.chat,
       builder: (_, __) => const ChatInboxPage(),
       routes: [
+        // Declared before `:slug` so it isn't matched as a room slug.
+        GoRoute(
+          path: 'new',
+          builder: (_, state) =>
+              ChatThreadPage(target: state.extra as ChatTarget?),
+        ),
         GoRoute(
           path: ':slug',
-          builder: (_, state) =>
-              ChatThreadPage(slug: state.pathParameters['slug']!),
+          builder: (_, state) => ChatThreadPage(
+            slug: state.pathParameters['slug']!,
+            titleHint: state.extra as String?,
+          ),
         ),
       ],
     ),
@@ -239,31 +272,23 @@ final appRouter = GoRouter(
       builder: (_, __) => const NotificationsPage(),
     ),
     GoRoute(path: Routes.settings, builder: (_, __) => const SettingsPage()),
-    GoRoute(
-      path: Routes.addresses,
-      builder: (_, __) => const AddressesPage(),
-    ),
+    GoRoute(path: Routes.addresses, builder: (_, __) => const AddressesPage()),
     GoRoute(
       path: Routes.accountFollowing,
       builder: (_, __) => const FollowingPage(),
     ),
-    GoRoute(
-      path: Routes.users,
-      builder: (_, __) => const UsersSearchPage(),
-    ),
+    GoRoute(path: Routes.users, builder: (_, __) => const UsersSearchPage()),
     GoRoute(
       path: '/user/:username',
       builder: (_, state) =>
           UserProfilePage(username: state.pathParameters['username']!),
     ),
     GoRoute(path: Routes.decks, builder: (_, __) => const DeckPage()),
-    GoRoute(
-      path: Routes.inventory,
-      builder: (_, __) => const InventoryPage(),
-    ),
+    GoRoute(path: Routes.inventory, builder: (_, __) => const InventoryPage()),
     GoRoute(
       path: '/portfolio/deck/:id',
-      builder: (_, state) => DeckDetailPage(deckId: state.pathParameters['id']!),
+      builder: (_, state) =>
+          DeckDetailPage(deckId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: Routes.lists,

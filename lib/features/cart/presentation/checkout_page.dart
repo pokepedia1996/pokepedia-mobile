@@ -25,6 +25,7 @@ import 'checkout/payment_section.dart';
 import 'checkout/seller_group_card.dart';
 import 'checkout_status_page.dart';
 import 'checkout_webview_page.dart';
+import 'qris_payment_page.dart';
 import 'payment_webview_page.dart';
 
 /// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
@@ -80,7 +81,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return fallback;
   }
 
-  Future<void> _pickAddress(List<AddressModel> addresses, int? selectedId) async {
+  Future<void> _pickAddress(
+    List<AddressModel> addresses,
+    int? selectedId,
+  ) async {
     final picked = await showModalBottomSheet<AddressModel>(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
@@ -158,26 +162,65 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (!mounted) return;
 
       final invoiceUrl = result.invoiceUrl;
-      if (invoiceUrl == null) {
-        // Wallet settled it outright — no gateway page, nothing to poll.
+      final externalId = result.externalId;
+      final method = ref.read(checkoutProvider).paymentMethod;
+      final channel = ref.read(checkoutProvider).paymentChannel;
+
+      // Paying from the wallet is settled by the time `submit` returns, so
+      // there's nothing to show and nothing to poll.
+      if (method == PaymentMethod.wallet) {
         await ref.read(cartProvider.notifier).refresh();
         if (mounted) context.go(Routes.orders);
         return;
       }
 
-      // The one non-native screen: Xendit's hosted invoice.
-      await Navigator.of(context).push(
-        MaterialPageRoute<PaymentOutcome>(
-          builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
-        ),
-      );
+      // A `redirect` and no invoice means the server already finished the
+      // job — a wallet settlement, or a repeat submit it recognised and
+      // deduplicated. There's nothing to pay.
+      if (invoiceUrl == null && result.redirect != null) {
+        await ref.read(cartProvider.notifier).refresh();
+        if (mounted) context.go(Routes.orders);
+        return;
+      }
+
+      // QRIS always goes to the native payment page. It asks the gateway
+      // for the code itself, so it doesn't need the hosted invoice URL and
+      // isn't blocked when the checkout didn't return one.
+      if (channel == PaymentChannel.qris && externalId != null) {
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (_) => QrisPaymentPage(
+              externalId: externalId,
+              amount: result.totalAmount ?? 0,
+              invoiceUrl: invoiceUrl,
+            ),
+          ),
+        );
+      } else if (invoiceUrl != null) {
+        // Virtual accounts still use the hosted page — there's no native
+        // screen for an account number yet.
+        await Navigator.of(context).push(
+          MaterialPageRoute<PaymentOutcome>(
+            builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
+          ),
+        );
+      } else {
+        // No QR to draw and no page to open. Name what came back, because
+        // "not available" alone is undiagnosable — this is the branch that
+        // means the checkout response wasn't the shape we expect.
+        _toast(
+          'Halaman pembayaran tidak tersedia '
+          '(channel: ${channel?.code ?? "-"}, '
+          'ref: ${externalId ?? "-"}).',
+        );
+        return;
+      }
       if (!mounted) return;
 
       // Deliberately regardless of how the payment page closed. Returning
       // isn't proof of payment, and dismissing isn't proof it didn't
       // happen — a VA transfer is often paid in a banking app with the
       // page long gone. Only our own backend knows, so go ask it.
-      final externalId = result.externalId;
       if (externalId == null) {
         // No id to poll with; the order still exists server-side.
         await ref.read(cartProvider.notifier).refresh();
@@ -333,8 +376,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
                     onPick: (pick) => switch (pick) {
-                      XenditPick(:final channel) =>
-                        notifier.selectXendit(channel),
+                      XenditPick(:final channel) => notifier.selectXendit(
+                        channel,
+                      ),
                       WalletPick() => notifier.selectWallet(),
                     },
                   ),
@@ -429,7 +473,7 @@ class _ServerUnreachableNotice extends StatelessWidget {
               OutlinedButton(
                 onPressed: onRetry,
                 child: const Text('Coba lagi'),
-              ),             
+              ),
             ],
           ),
         ],

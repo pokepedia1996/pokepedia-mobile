@@ -119,10 +119,7 @@ class StorePoster extends StatelessWidget {
                 'Belanja aman tanpa potongan di ',
                 style: AppTypography.h3(const Color(0xFF5A6270)),
               ),
-              Text(
-                'pokepedia.id',
-                style: AppTypography.h3(colors.primary),
-              ),
+              Text('pokepedia.id', style: AppTypography.h3(colors.primary)),
             ],
           ),
         ],
@@ -152,11 +149,7 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SellerAvatar(
-          imageUrl: store.logoUrl,
-          name: store.storeName,
-          size: 72,
-        ),
+        SellerAvatar(imageUrl: store.logoUrl, name: store.storeName, size: 72),
         const SizedBox(width: 20),
         Expanded(
           child: Column(
@@ -201,8 +194,9 @@ class _Header extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           '$feedbackScore',
-                          style: AppTypography.bodySmSemibold(ink)
-                              .copyWith(fontSize: 20),
+                          style: AppTypography.bodySmSemibold(
+                            ink,
+                          ).copyWith(fontSize: 20),
                         ),
                       ],
                     ),
@@ -226,29 +220,32 @@ class _Header extends StatelessWidget {
           // the canvas.
           constraints: const BoxConstraints(maxWidth: 340),
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              decoration: BoxDecoration(
-                color: side == PosterSide.wts
-                    ? const Color(0xFF0B6F5C)
-                    : const Color(0xFF2F56E0),
-                borderRadius: BorderRadius.circular(999),
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: side == PosterSide.wts
+                      ? const Color(0xFF0B6F5C)
+                      : const Color(0xFF2F56E0),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  side.badge,
+                  style: AppTypography.h3(Colors.white).copyWith(fontSize: 26),
+                ),
               ),
-              child: Text(
-                side.badge,
-                style: AppTypography.h3(Colors.white).copyWith(fontSize: 26),
+              const SizedBox(height: 8),
+              Text(
+                'pokepedia.id/market/${store.handle}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption(muted).copyWith(fontSize: 18),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'pokepedia.id/market/${store.handle}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption(muted).copyWith(fontSize: 18),
-            ),
-          ],
+            ],
           ),
         ),
       ],
@@ -292,8 +289,9 @@ class _PosterTile extends StatelessWidget {
                   ),
                   child: Text(
                     listing.condition.label,
-                    style: AppTypography.badge(Colors.white)
-                        .copyWith(fontSize: 16),
+                    style: AppTypography.badge(
+                      Colors.white,
+                    ).copyWith(fontSize: 16),
                   ),
                 ),
               ),
@@ -332,13 +330,15 @@ class _MoreTile extends StatelessWidget {
         children: [
           Text(
             '+$count',
-            style: AppTypography.h1(const Color(0xFF15171D))
-                .copyWith(fontSize: 44),
+            style: AppTypography.h1(
+              const Color(0xFF15171D),
+            ).copyWith(fontSize: 44),
           ),
           Text(
             'lainnya',
-            style: AppTypography.bodySm(const Color(0xFF5A6270))
-                .copyWith(fontSize: 22),
+            style: AppTypography.bodySm(
+              const Color(0xFF5A6270),
+            ).copyWith(fontSize: 22),
           ),
         ],
       ),

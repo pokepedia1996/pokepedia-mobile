@@ -8,7 +8,8 @@ import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
 import 'models/wantlist_model.dart';
 
-const _deckSelect = 'id, name, description, share_code, created_at, updated_at, deck_cards(quantity)';
+const _deckSelect =
+    'id, name, description, share_code, created_at, updated_at, deck_cards(quantity)';
 
 /// The `cards` fields `CardModel.fromRow` reads — mirrors the same column
 /// list in `ExpansionsRepository`.
@@ -71,7 +72,10 @@ class PortfolioRepository {
 
   DeckModel _mapDeckRow(Map<String, dynamic> r) {
     final deckCards = (r['deck_cards'] as List).cast<Map<String, dynamic>>();
-    final cardCount = deckCards.fold<int>(0, (sum, dc) => sum + (dc['quantity'] as int? ?? 0));
+    final cardCount = deckCards.fold<int>(
+      0,
+      (sum, dc) => sum + (dc['quantity'] as int? ?? 0),
+    );
     return DeckModel(
       id: r['id'] as String,
       name: r['name'] as String,
@@ -130,26 +134,45 @@ class PortfolioRepository {
     }
   }
 
-  Future<String?> deleteDeck({required String deckId, required String userId}) async {
+  Future<String?> deleteDeck({
+    required String deckId,
+    required String userId,
+  }) async {
     try {
-      await _client.from('decks').delete().eq('id', deckId).eq('user_id', userId);
+      await _client
+          .from('decks')
+          .delete()
+          .eq('id', deckId)
+          .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
       return e.message;
     }
   }
 
-  Future<({DeckModel? deck, String? error})> duplicateDeck(String sourceDeckId) async {
+  Future<({DeckModel? deck, String? error})> duplicateDeck(
+    String sourceDeckId,
+  ) async {
     try {
-      final newId = await _client.rpc('duplicate_deck', params: {'p_source_deck_id': sourceDeckId}) as String;
-      final row = await _client.from('decks').select(_deckSelect).eq('id', newId).single();
+      final newId =
+          await _client.rpc(
+                'duplicate_deck',
+                params: {'p_source_deck_id': sourceDeckId},
+              )
+              as String;
+      final row = await _client
+          .from('decks')
+          .select(_deckSelect)
+          .eq('id', newId)
+          .single();
       return (deck: _mapDeckRow(row), error: null);
     } on PostgrestException catch (e) {
       return (deck: null, error: e.message);
     }
   }
 
-  static const _shareCodeChars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  static const _shareCodeChars =
+      'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 
   String _generateShareCode() {
     final rand = Random.secure();
@@ -162,7 +185,10 @@ class PortfolioRepository {
   }
 
   Future<List<DeckCardEntry>> fetchDeckCards(String deckId) async {
-    final rows = await _client.from('deck_cards').select('quantity, cards!inner($_cardColumns)').eq('deck_id', deckId);
+    final rows = await _client
+        .from('deck_cards')
+        .select('quantity, cards!inner($_cardColumns)')
+        .eq('deck_id', deckId);
     return rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       return DeckCardEntry(
@@ -183,7 +209,11 @@ class PortfolioRepository {
   /// the 60-card/4-copy/1-ACE rules server-side (deleting the row if the
   /// resulting quantity is <= 0), so the client just needs to surface
   /// whatever error it raises.
-  Future<String?> upsertDeckCard({required String deckId, required int cardId, required int delta}) async {
+  Future<String?> upsertDeckCard({
+    required String deckId,
+    required int cardId,
+    required int delta,
+  }) async {
     try {
       await _client.rpc(
         'upsert_deck_card',
@@ -216,7 +246,10 @@ class PortfolioRepository {
   Future<List<CardModel>> fetchWishlist(String userId) async {
     final cardIds = await fetchWishlistedCardIds();
     if (cardIds.isEmpty) return const [];
-    final rows = await _client.from('cards').select(_cardColumns).inFilter('id', cardIds.toList());
+    final rows = await _client
+        .from('cards')
+        .select(_cardColumns)
+        .inFilter('id', cardIds.toList());
     return rows.map((r) => CardModel.fromRow(r)).toList();
   }
 
@@ -234,7 +267,8 @@ class PortfolioRepository {
     }
   }
 
-  static const _inventorySelect = 'id, card_id, quantity, unit_price, created_at, notes, cards!inner($_cardColumns)';
+  static const _inventorySelect =
+      'id, card_id, quantity, unit_price, created_at, notes, cards!inner($_cardColumns)';
 
   InventoryEntry _mapInventoryRow(Map<String, dynamic> r) => InventoryEntry(
     id: r['id'] as int,
@@ -314,9 +348,17 @@ class PortfolioRepository {
     }
   }
 
-  Future<String?> deleteDraftRecord({required String userId, required int recordId}) async {
+  Future<String?> deleteDraftRecord({
+    required String userId,
+    required int recordId,
+  }) async {
     try {
-      await _client.from('user_inventory').delete().eq('id', recordId).eq('user_id', userId).eq('is_draft', true);
+      await _client
+          .from('user_inventory')
+          .delete()
+          .eq('id', recordId)
+          .eq('user_id', userId)
+          .eq('is_draft', true);
       return null;
     } on PostgrestException catch (e) {
       return e.message;
@@ -350,10 +392,14 @@ class PortfolioRepository {
   }
 
   /// Ports `fetchInventoryActivity` — a read-only audit trail.
-  Future<List<InventoryActivityEntry>> fetchInventoryActivity(String userId) async {
+  Future<List<InventoryActivityEntry>> fetchInventoryActivity(
+    String userId,
+  ) async {
     final rows = await _client
         .from('user_inventory_activity')
-        .select('id, card_id, action, quantity, unit_price, created_at, cards!inner($_cardColumns)')
+        .select(
+          'id, card_id, action, quantity, unit_price, created_at, cards!inner($_cardColumns)',
+        )
         .eq('user_id', userId)
         .order('created_at', ascending: false);
     return rows.map((r) {
@@ -372,14 +418,19 @@ class PortfolioRepository {
   /// removes up to [items].delQty of each record, deleting the row if it
   /// hits zero. The RPC already decrements `user_cards` and logs the
   /// activity row server-side, so no follow-up call is needed.
-  Future<String?> bulkRemoveInventory(String userId, List<({int recordId, int delQty})> items) async {
+  Future<String?> bulkRemoveInventory(
+    String userId,
+    List<({int recordId, int delQty})> items,
+  ) async {
     if (items.isEmpty) return null;
     try {
       await _client.rpc(
         'bulk_remove_inventory',
         params: {
           'p_user_id': userId,
-          'p_items': items.map((i) => {'record_id': i.recordId, 'del_qty': i.delQty}).toList(),
+          'p_items': items
+              .map((i) => {'record_id': i.recordId, 'del_qty': i.delQty})
+              .toList(),
         },
       );
       return null;
@@ -403,7 +454,13 @@ class PortfolioRepository {
               },
             )
             as List;
-    return rows.map((r) => CardModel.fromRow((r as Map<String, dynamic>)['card'] as Map<String, dynamic>)).toList();
+    return rows
+        .map(
+          (r) => CardModel.fromRow(
+            (r as Map<String, dynamic>)['card'] as Map<String, dynamic>,
+          ),
+        )
+        .toList();
   }
 
   /// Ports `fetchUserLists` — the user's lists, most recently touched first,
@@ -434,6 +491,50 @@ class PortfolioRepository {
       // reads it the same way the collection shows copies held.
       return card.copyWith(owned: (r['quantity'] as num?)?.toInt() ?? 1);
     }).toList();
+  }
+
+  /// Adds cards to a list, skipping any already in it — `list_cards` is
+  /// unique on `(list_id, card_id)`, so a re-add is a no-op rather than an
+  /// error.
+  Future<String?> addCardsToList({
+    required String listId,
+    required List<int> cardIds,
+  }) async {
+    if (cardIds.isEmpty) return null;
+    try {
+      await _client
+          .from('list_cards')
+          .upsert(
+            [
+              for (final cardId in cardIds)
+                {'list_id': listId, 'card_id': cardId, 'quantity': 1},
+            ],
+            onConflict: 'list_id,card_id',
+            ignoreDuplicates: true,
+          );
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Removes cards from a list. The cards themselves and the user's
+  /// ownership of them are untouched.
+  Future<String?> removeCardsFromList({
+    required String listId,
+    required List<int> cardIds,
+  }) async {
+    if (cardIds.isEmpty) return null;
+    try {
+      await _client
+          .from('list_cards')
+          .delete()
+          .eq('list_id', listId)
+          .inFilter('card_id', cardIds);
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
   }
 
   /// Ports `createList`. The share code is generated client-side there too,

@@ -79,7 +79,11 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
       // Invisible measuring pass to learn one group's natural width.
       return Opacity(
         opacity: 0,
-        child: Row(key: _measureKey, mainAxisSize: MainAxisSize.min, children: _spaced()),
+        child: Row(
+          key: _measureKey,
+          mainAxisSize: MainAxisSize.min,
+          children: _spaced(),
+        ),
       );
     }
 
@@ -92,14 +96,18 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
-            final progress = widget.reverse ? 1 - _controller.value : _controller.value;
+            final progress = widget.reverse
+                ? 1 - _controller.value
+                : _controller.value;
             return Transform.translate(
               offset: Offset(-progress * step, 0),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: List.generate(widget.repeat, (i) {
                   return Padding(
-                    padding: EdgeInsets.only(right: i == widget.repeat - 1 ? 0 : widget.gap),
+                    padding: EdgeInsets.only(
+                      right: i == widget.repeat - 1 ? 0 : widget.gap,
+                    ),
                     child: group,
                   );
                 }),

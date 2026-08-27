@@ -25,9 +25,7 @@ class CartSelectionNotifier extends Notifier<Set<int>> {
     final items = ref.watch(cartProvider);
     // Drop exclusions for lines that are no longer in the cart, so an id
     // reused later doesn't arrive pre-unticked.
-    _excluded.removeWhere(
-      (id) => !items.any((item) => item.cartItemId == id),
-    );
+    _excluded.removeWhere((id) => !items.any((item) => item.cartItemId == id));
 
     return {
       for (final item in items)
@@ -77,10 +75,9 @@ class CartSelectionNotifier extends Notifier<Set<int>> {
   }
 }
 
-final cartSelectionProvider =
-    NotifierProvider<CartSelectionNotifier, Set<int>>(
-      CartSelectionNotifier.new,
-    );
+final cartSelectionProvider = NotifierProvider<CartSelectionNotifier, Set<int>>(
+  CartSelectionNotifier.new,
+);
 
 /// The selected lines themselves, in cart order.
 final selectedCartItemsProvider = Provider<List<CartItem>>((ref) {

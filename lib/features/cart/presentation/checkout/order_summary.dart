@@ -87,10 +87,19 @@ class _OrderSummaryState extends State<OrderSummary> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Ringkasan', style: AppTypography.bodySemibold(colors.onSurface)),
+          Text(
+            'Ringkasan',
+            style: AppTypography.bodySemibold(colors.onSurface),
+          ),
           const SizedBox(height: 12),
-          _Row(label: 'Subtotal kartu', value: formatRupiah(widget.itemsSubtotal)),
-          _Row(label: 'Ongkos kirim', value: formatRupiah(widget.shippingTotal)),
+          _Row(
+            label: 'Subtotal kartu',
+            value: formatRupiah(widget.itemsSubtotal),
+          ),
+          _Row(
+            label: 'Ongkos kirim',
+            value: formatRupiah(widget.shippingTotal),
+          ),
           if (widget.insuranceTotal > 0)
             _Row(
               label: 'Asuransi pengiriman',
@@ -99,9 +108,7 @@ class _OrderSummaryState extends State<OrderSummary> {
           if (widget.paymentMethod == PaymentMethod.xendit)
             _Row(
               label: 'Biaya Platform',
-              value: !widget.hasChannel
-                  ? '-'
-                  : formatRupiah(totals.gatewayFee),
+              value: !widget.hasChannel ? '-' : formatRupiah(totals.gatewayFee),
               strikethrough: totals.gatewayFeeWaived,
             ),
           if (widget.appliedCoupon != null && !totals.gatewayFeeWaived)
@@ -140,7 +147,10 @@ class _OrderSummaryState extends State<OrderSummary> {
                   ),
                   TextButton(
                     onPressed: widget.onRemoveCoupon,
-                    child: Text('Lepas', style: AppTypography.captionSemibold(success)),
+                    child: Text(
+                      'Lepas',
+                      style: AppTypography.captionSemibold(success),
+                    ),
                   ),
                 ],
               ),
@@ -153,9 +163,10 @@ class _OrderSummaryState extends State<OrderSummary> {
                     controller: _controller,
                     textCapitalization: TextCapitalization.characters,
                     onChanged: (v) {
-                      final cleaned = v
-                          .toUpperCase()
-                          .replaceAll(RegExp(r'[^A-Z0-9_-]'), '');
+                      final cleaned = v.toUpperCase().replaceAll(
+                        RegExp(r'[^A-Z0-9_-]'),
+                        '',
+                      );
                       widget.onCouponInputChanged(
                         cleaned.length > 40
                             ? cleaned.substring(0, 40)
@@ -191,7 +202,10 @@ class _OrderSummaryState extends State<OrderSummary> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total', style: AppTypography.bodySemibold(colors.onSurface)),
+              Text(
+                'Total',
+                style: AppTypography.bodySemibold(colors.onSurface),
+              ),
               Text(
                 formatRupiah(totals.grandTotal),
                 style: AppTypography.bodySemibold(colors.primary),
@@ -203,7 +217,9 @@ class _OrderSummaryState extends State<OrderSummary> {
             onPressed: widget.payDisabled || widget.submitting
                 ? null
                 : widget.onCheckout,
-            style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
             child: widget.submitting
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,

@@ -156,9 +156,8 @@ class SearchNotifier extends Notifier<SearchState> {
 
   // --- Facets -------------------------------------------------------------
 
-  void toggleRarity(String rarity) => _updateFilters(
-    (f) => f.copyWith(rarities: _toggled(f.rarities, rarity)),
-  );
+  void toggleRarity(String rarity) =>
+      _updateFilters((f) => f.copyWith(rarities: _toggled(f.rarities, rarity)));
 
   void toggleCategory(CardCategory category) => _updateFilters(
     (f) => f.copyWith(categories: _toggled(f.categories, category)),
@@ -224,10 +223,7 @@ class SearchNotifier extends Notifier<SearchState> {
 
   void setRetreatRange(int? min, int? max) {
     state = state.copyWith(
-      query: state.query.copyWith(
-        retreatMin: () => min,
-        retreatMax: () => max,
-      ),
+      query: state.query.copyWith(retreatMin: () => min, retreatMax: () => max),
     );
   }
 

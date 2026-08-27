@@ -7,7 +7,18 @@ import '../../core/theme/app_theme.dart';
 /// page-specific [actions] a screen needs. Page titles are intentionally
 /// omitted — screens carry their own heading in the body.
 class TransparentAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const TransparentAppBar({super.key, this.actions, this.bottom, this.onBack});
+  const TransparentAppBar({
+    super.key,
+    this.title,
+    this.actions,
+    this.bottom,
+    this.onBack,
+  });
+
+  /// Sits beside the back button. Pages carry their own heading in the body,
+  /// so this is for controls that belong in the bar itself — a search field,
+  /// not a page title.
+  final Widget? title;
 
   /// Trailing icons (wishlist, cart, refresh, ...). Rendered as-is.
   final List<Widget>? actions;
@@ -50,6 +61,8 @@ class TransparentAppBar extends StatelessWidget implements PreferredSizeWidget {
               onPressed: onBack ?? () => Navigator.maybePop(context),
             )
           : null,
+      title: title,
+      titleSpacing: title == null ? null : 4,
       actions: actions,
       bottom: bottom,
     );
@@ -98,16 +111,15 @@ class AppBarOverlayBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final statusBarHeight =
-        MediaQueryData.fromView(View.of(context)).padding.top;
+    final statusBarHeight = MediaQueryData.fromView(
+      View.of(context),
+    ).padding.top;
 
     // Mirrors `TransparentAppBar._canPop`. `onBack` forces a back button on a
     // route that can't pop; such a page passes [reserveToolbar] itself.
-    final reserve =
-        reserveToolbar ?? (ModalRoute.of(context)?.canPop ?? false);
+    final reserve = reserveToolbar ?? (ModalRoute.of(context)?.canPop ?? false);
     final topInset =
-        statusBarHeight +
-        (reserve ? kToolbarHeight + appBarBottomHeight : 0);
+        statusBarHeight + (reserve ? kToolbarHeight + appBarBottomHeight : 0);
 
     return MediaQuery(
       data: media.copyWith(padding: media.padding.copyWith(top: topInset)),

@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_typography.dart';
-import '../../core/theme/condition_colors.dart';
 import '../models/card_condition.dart';
 
 /// Ports `components/card/condition-badge.tsx` — a small pill showing the
 /// short condition code (NM/LP/MP/HP/PSA.../BGS.../CGC.../EGS...) over a
-/// card thumbnail. Colors come from [conditionColorOf], which buckets the
-/// 21 grading values into the 7 `--cond-*` tokens in `globals.css`.
+/// card thumbnail.
+///
+/// Deliberately monochrome: the pill sits on artwork of every colour, and
+/// black on white is the one pairing that reads over all of it. The
+/// condition's own colour is still used where it identifies a series rather
+/// than a label — the market chart and the grade picker.
 class ConditionBadge extends StatelessWidget {
-  const ConditionBadge({super.key, required this.condition, this.dense = false});
+  const ConditionBadge({
+    super.key,
+    required this.condition,
+    this.dense = false,
+  });
 
   final CardCondition condition;
 
@@ -20,21 +27,20 @@ class ConditionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = conditionColorOf(context, condition);
     return Container(
       padding: dense
           ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
           : const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(dense ? 4 : AppRadius.full),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.25)),
       ),
       child: Text(
         condition.short,
         style: dense
-            ? AppTypography.badge(color).copyWith(fontSize: 9)
-            : AppTypography.badge(color),
+            ? AppTypography.badge(Colors.black).copyWith(fontSize: 9)
+            : AppTypography.badge(Colors.black),
       ),
     );
   }

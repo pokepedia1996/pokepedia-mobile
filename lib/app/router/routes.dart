@@ -32,6 +32,14 @@ class Routes {
   // Seller.
   static const seller = '/seller';
   static const sellerProducts = '/seller/products';
+  static const sellerOrders = '/seller/orders';
+
+  /// Web's "Toko" section and its three pages. `/seller/settings` is the
+  /// path web uses for the profile; kept as `/seller/store/profile` here so
+  /// the section reads as a hierarchy on a stack-based navigator.
+  static const sellerStore = '/seller/store';
+  static const sellerStoreProfile = '/seller/store/profile';
+  static const sellerCouriers = '/seller/store/couriers';
 
   // Social / account.
   static const chat = '/chat';
@@ -49,7 +57,8 @@ class Routes {
   static String cardDetail(String packSlug, int cardId) =>
       '/expansions/$packSlug/$cardId';
   static String storeDetail(String handle) => '/market/$handle';
-  static String storeCardDetail(String handle, int cardId) => '/market/$handle/card/$cardId';
+  static String storeCardDetail(String handle, int cardId) =>
+      '/market/$handle/card/$cardId';
   static String orderDetail(String slug) => '/orders/$slug';
 
   /// View an existing dispute's detail/timeline.
@@ -58,6 +67,10 @@ class Routes {
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
   static String chatThread(String slug) => '/chat/$slug';
+
+  /// A conversation with no room yet — the recipient rides along in
+  /// `extra` as a [ChatTarget], and the room is created on the first send.
+  static const chatNew = '/chat/new';
   static String userProfile(String username) => '/user/$username';
   static String deckDetail(String id) => '/portfolio/deck/$id';
   static String listDetail(String id) => '/portfolio/list/$id';

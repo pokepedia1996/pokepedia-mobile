@@ -35,15 +35,61 @@ String formatRelativeId(DateTime date, {DateTime? now}) {
   if (diff.inDays < 7) return '${diff.inDays} hari lalu';
   if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} minggu lalu';
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ];
   return '${date.day} ${months[date.month - 1]} ${date.year}';
 }
 
+/// "14:32" — the clock stamp under a chat bubble.
+String formatClockId(DateTime date) {
+  final local = date.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+}
+
+/// The right-hand stamp on a conversation row: the clock for today, "Kemarin"
+/// for yesterday, the weekday inside the last week, then the date. Mirrors
+/// how `ConversationList.tsx` labels its rows.
+String formatChatStamp(DateTime date, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  final local = date.toLocal();
+  final today = DateTime(reference.year, reference.month, reference.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final daysApart = today.difference(day).inDays;
+
+  if (daysApart <= 0) return formatClockId(local);
+  if (daysApart == 1) return 'Kemarin';
+  if (daysApart < 7) {
+    const weekdays = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    return weekdays[local.weekday - 1];
+  }
+  return formatShortDateId(local);
+}
+
 const _monthNamesId = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
 ];
 
 /// Mirrors `formatSaleDate` from `lib/marketplace/format-relative.ts` —

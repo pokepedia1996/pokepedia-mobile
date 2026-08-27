@@ -10,8 +10,9 @@ import '../../../../shared/widgets/marquee.dart';
 const _cdn = 'https://cdn2.pokepedia.id';
 String _cardUrl(int i) => '$_cdn/hero/sm/$i.webp';
 
-List<String> _range(int start, int end) =>
-    [for (var i = start; i <= end; i++) _cardUrl(i)];
+List<String> _range(int start, int end) => [
+  for (var i = start; i <= end; i++) _cardUrl(i),
+];
 
 final _rowA = _range(42, 53);
 final _rowB = _range(0, 11);
@@ -27,14 +28,17 @@ class HeroSection extends StatefulWidget {
   State<HeroSection> createState() => _HeroSectionState();
 }
 
-class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStateMixin {
+class _HeroSectionState extends State<HeroSection>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-      ..forward();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
   }
 
   @override
@@ -44,17 +48,17 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
   }
 
   Animation<double> _fade(double start, double end) => CurvedAnimation(
-        parent: _controller,
-        curve: Interval(start, end, curve: Curves.easeOutCubic),
-      );
+    parent: _controller,
+    curve: Interval(start, end, curve: Curves.easeOutCubic),
+  );
 
-  Animation<Offset> _slide(double start, double end) => Tween<Offset>(
-        begin: const Offset(0, 0.25),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _controller,
-        curve: Interval(start, end, curve: Curves.easeOutCubic),
-      ));
+  Animation<Offset> _slide(double start, double end) =>
+      Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(start, end, curve: Curves.easeOutCubic),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +85,11 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                       children: [
                         _wallRow(_rowA, const Duration(seconds: 34)),
                         const SizedBox(height: 12),
-                        _wallRow(_rowB, const Duration(seconds: 27), reverse: true),
+                        _wallRow(
+                          _rowB,
+                          const Duration(seconds: 27),
+                          reverse: true,
+                        ),
                         const SizedBox(height: 12),
                         _wallRow(_rowC, const Duration(seconds: 31)),
                       ],
@@ -98,7 +106,10 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [colors.surface, colors.surface.withValues(alpha: 0.0)],
+                    colors: [
+                      colors.surface,
+                      colors.surface.withValues(alpha: 0.0),
+                    ],
                     stops: const [0.0, 0.35],
                   ),
                 ),
@@ -110,7 +121,10 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                   gradient: LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
-                    colors: [colors.surface, colors.surface.withValues(alpha: 0.15)],
+                    colors: [
+                      colors.surface,
+                      colors.surface.withValues(alpha: 0.15),
+                    ],
                     stops: const [0.0, 0.85],
                   ),
                 ),
@@ -128,7 +142,10 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                     opacity: _fade(0.0, 0.5),
                     child: SlideTransition(
                       position: _slide(0.0, 0.5),
-                      child: Text('pokepedia.id', style: AppTypography.h3(colors.primary)),
+                      child: Text(
+                        'pokepedia.id',
+                        style: AppTypography.h3(colors.primary),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -153,7 +170,9 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                           onPressed: () => context.go(Routes.market),
                           style: ElevatedButton.styleFrom(
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppRadius.full),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
@@ -178,7 +197,11 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
     );
   }
 
-  Widget _wallRow(List<String> urls, Duration duration, {bool reverse = false}) {
+  Widget _wallRow(
+    List<String> urls,
+    Duration duration, {
+    bool reverse = false,
+  }) {
     return SizedBox(
       height: 100,
       child: Marquee(
@@ -192,7 +215,8 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                 url,
                 height: 100,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                errorBuilder: (context, error, stackTrace) =>
+                    const SizedBox.shrink(),
               ),
             ),
         ],

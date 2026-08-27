@@ -90,7 +90,11 @@ class PublicProfile {
 /// The signed-in user's own private contact row (`profiles_private`), read
 /// by the settings screen for the phone-verification state.
 class PrivateProfile {
-  const PrivateProfile({this.phone, this.phoneVerified = false, this.socialWhatsapp});
+  const PrivateProfile({
+    this.phone,
+    this.phoneVerified = false,
+    this.socialWhatsapp,
+  });
 
   final String? phone;
   final bool phoneVerified;
@@ -272,21 +276,19 @@ class FollowedShop {
       ),
       bannerUrl: proxyImageUrl(row['store_banner_url'] as String?),
       cityName: row['city_name'] as String?,
-      recentListings: listings
-          .whereType<Map<String, dynamic>>()
-          .take(4)
-          .map((l) {
-            final photos = (l['photo_urls'] as List?) ?? const [];
-            final photo = photos.whereType<String>().isEmpty
-                ? null
-                : photos.whereType<String>().first;
-            return FollowedShopListing(
-              cardId: (l['card_id'] as num?)?.toInt() ?? 0,
-              price: (l['price'] as num?)?.toInt() ?? 0,
-              photoUrl: proxyImageUrl(photo),
-            );
-          })
-          .toList(),
+      recentListings: listings.whereType<Map<String, dynamic>>().take(4).map((
+        l,
+      ) {
+        final photos = (l['photo_urls'] as List?) ?? const [];
+        final photo = photos.whereType<String>().isEmpty
+            ? null
+            : photos.whereType<String>().first;
+        return FollowedShopListing(
+          cardId: (l['card_id'] as num?)?.toInt() ?? 0,
+          price: (l['price'] as num?)?.toInt() ?? 0,
+          photoUrl: proxyImageUrl(photo),
+        );
+      }).toList(),
     );
   }
 }

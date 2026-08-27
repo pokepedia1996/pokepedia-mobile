@@ -17,7 +17,7 @@ class CardArt extends StatelessWidget {
     return AspectRatio(
       aspectRatio: 245 / 342,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
+        // borderRadius: BorderRadius.circular(borderRadius),
         child: Container(
           color: Theme.of(context).colorScheme.secondary,
           child: imageUrl == null
@@ -27,10 +27,16 @@ class CardArt extends StatelessWidget {
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
-                    return Image.asset('assets/images/backcard.webp', fit: BoxFit.cover);
+                    return Image.asset(
+                      'assets/images/backcard.webp',
+                      fit: BoxFit.cover,
+                    );
                   },
                   errorBuilder: (context, error, stackTrace) {
-                    return Image.asset('assets/images/backcard.webp', fit: BoxFit.cover);
+                    return Image.asset(
+                      'assets/images/backcard.webp',
+                      fit: BoxFit.cover,
+                    );
                   },
                 ),
         ),

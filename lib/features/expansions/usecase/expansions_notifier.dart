@@ -23,6 +23,22 @@ final seriesGroupsProvider = FutureProvider<List<SeriesGroup>>((ref) {
       .fetchSeriesGroups(language: language.raw);
 });
 
+/// The expansion a *card* belongs to, looked up in that card's language.
+///
+/// [packDetailProvider] keys off the catalog language switch, which is right
+/// for browsing an expansion but wrong for naming the one a card came from:
+/// each language has its own `expansions` row, so an English card viewed
+/// while the catalog is set to Indonesian finds nothing.
+final packForCardProvider =
+    FutureProvider.family<PackModel?, ({String slug, String language})>((
+      ref,
+      key,
+    ) {
+      return ref
+          .read(expansionsRepositoryProvider)
+          .fetchPack(key.slug, language: key.language);
+    });
+
 final packDetailProvider = FutureProvider.family<PackModel?, String>((
   ref,
   slug,
@@ -48,34 +64,33 @@ final packCardsProvider = FutureProvider.family<List<CardModel>, String>((
 /// the query *and* again client-side; one is enough.
 final relatedCardsProvider =
     FutureProvider.family<List<CardModel>, ({String name, int excludeId})>((
-  ref,
-  key,
-) {
-  final language = ref.watch(catalogLanguageProvider);
-  return ref.read(expansionsRepositoryProvider).fetchCardsByName(
-    key.name,
-    excludeId: key.excludeId,
-    language: language.raw,
-  );
-});
+      ref,
+      key,
+    ) {
+      final language = ref.watch(catalogLanguageProvider);
+      return ref
+          .read(expansionsRepositoryProvider)
+          .fetchCardsByName(
+            key.name,
+            excludeId: key.excludeId,
+            language: language.raw,
+          );
+    });
 
 /// Ports `useUserCardQuantities(cardIds)` as the pack detail page uses it:
 /// the owned quantity of every card in one expansion, keyed by card id.
 /// Empty for guests, mirroring the hook only fetching once a `user` exists.
 final packOwnedQuantitiesProvider =
     FutureProvider.family<Map<int, int>, String>((ref, slug) async {
-  final user = ref.watch(authProvider).valueOrNull;
-  if (user == null) return const {};
-  final cards = await ref.watch(packCardsProvider(slug).future);
-  return ref
-      .read(expansionsRepositoryProvider)
-      .fetchOwnedQuantities(user.id, cards.map((c) => c.id).toList());
-});
+      final user = ref.watch(authProvider).valueOrNull;
+      if (user == null) return const {};
+      final cards = await ref.watch(packCardsProvider(slug).future);
+      return ref
+          .read(expansionsRepositoryProvider)
+          .fetchOwnedQuantities(user.id, cards.map((c) => c.id).toList());
+    });
 
-final cardDetailProvider = FutureProvider.family<CardModel?, int>((
-  ref,
-  id,
-) {
+final cardDetailProvider = FutureProvider.family<CardModel?, int>((ref, id) {
   return ref.read(expansionsRepositoryProvider).fetchCard(id);
 });
 
@@ -88,10 +103,15 @@ final cardListingsProvider = FutureProvider.family<List<ListingModel>, int>((
 
 /// 0 for guests — mirrors `useUserCardQuantities` only fetching once a
 /// `user` is present.
-final ownedQuantityProvider = FutureProvider.family<int, int>((ref, cardId) async {
+final ownedQuantityProvider = FutureProvider.family<int, int>((
+  ref,
+  cardId,
+) async {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return 0;
-  return ref.read(expansionsRepositoryProvider).fetchOwnedQuantity(user.id, cardId);
+  return ref
+      .read(expansionsRepositoryProvider)
+      .fetchOwnedQuantity(user.id, cardId);
 });
 
 /// The daily price series behind the market activity chart. [days] is null
@@ -120,10 +140,12 @@ final marketHeadlineProvider = FutureProvider.family<MarketHeadline?, int>((
 
 /// Cached headline price — the fallback the market header shows when a card
 /// has no sale history to derive a series from.
-final cardMarketPriceProvider =
-    FutureProvider.family<CardMarketPrice?, int>((ref, cardId) {
-      return ref.read(expansionsRepositoryProvider).fetchCardMarketPrice(cardId);
-    });
+final cardMarketPriceProvider = FutureProvider.family<CardMarketPrice?, int>((
+  ref,
+  cardId,
+) {
+  return ref.read(expansionsRepositoryProvider).fetchCardMarketPrice(cardId);
+});
 
 /// The bid/ask ladder, re-fetched whenever the condition filter changes.
 final orderBookProvider =
@@ -154,9 +176,14 @@ final cardSalesProvider =
 /// The language comes from the card being viewed rather than
 /// [catalogLanguageProvider]: a card page reached from the market or a
 /// direct link can be in a different language than the catalog switch.
-final evolutionPoolProvider = FutureProvider.family<
-    List<CardModel>,
-    ({String name, String? evolvesFrom})>((ref, seed) {
-  final seeds = [seed.name, if (seed.evolvesFrom != null) seed.evolvesFrom!];
-  return ref.read(expansionsRepositoryProvider).fetchEvolutionPool(seeds);
-});
+final evolutionPoolProvider =
+    FutureProvider.family<
+      List<CardModel>,
+      ({String name, String? evolvesFrom})
+    >((ref, seed) {
+      final seeds = [
+        seed.name,
+        if (seed.evolvesFrom != null) seed.evolvesFrom!,
+      ];
+      return ref.read(expansionsRepositoryProvider).fetchEvolutionPool(seeds);
+    });

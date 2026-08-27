@@ -30,10 +30,7 @@ class MarketplaceFeedSection extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text(
-                'Marketplace',
-                style: AppTypography.h3(colors.onSurface),
-              ),
+              Text('Marketplace', style: AppTypography.h3(colors.onSurface)),
               const Spacer(),
               InkWell(
                 onTap: () => context.go(Routes.market),
@@ -97,15 +94,8 @@ class MarketplaceFeedSection extends ConsumerWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
                 itemCount: listings.length,
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.46,
-                    ),
-                itemBuilder: (context, i) =>
-                    ListingCard(listing: listings[i]),
+                gridDelegate: listingGridDelegate(context, showSeller: true),
+                itemBuilder: (context, i) => ListingCard(listing: listings[i]),
               );
             },
           ),
@@ -132,10 +122,7 @@ class _SortRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          'Sort by:',
-          style: AppTypography.caption(context.mutedForeground),
-        ),
+        Text('Sort by:', style: AppTypography.caption(context.mutedForeground)),
         const SizedBox(width: 4),
         InkWell(
           onTap: () => _open(context),

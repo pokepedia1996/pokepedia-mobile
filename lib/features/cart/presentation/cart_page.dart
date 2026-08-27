@@ -60,7 +60,8 @@ class _CartBody extends ConsumerWidget {
 
     final selectable = items.where((i) => i.isAvailable).toList();
     final allSelected =
-        selectable.isNotEmpty && selectable.every((i) => selected.contains(i.cartItemId));
+        selectable.isNotEmpty &&
+        selectable.every((i) => selected.contains(i.cartItemId));
 
     // Grouped by seller, as the web does — an order is placed per seller, so
     // the cart shows the shape the order will take.
@@ -114,8 +115,7 @@ class _CartBody extends ConsumerWidget {
     return showConfirmDialog(
       context,
       title: 'Hapus item terpilih?',
-      description:
-          'Akan menghapus ${selected.length} item dari keranjang.',
+      description: 'Akan menghapus ${selected.length} item dari keranjang.',
       confirmLabel: 'Hapus',
       loadingLabel: 'Menghapus...',
       onConfirm: () async {
@@ -194,7 +194,8 @@ class _SellerGroup extends ConsumerWidget {
     final first = items.first.listing;
 
     final selectable = items.where((i) => i.isAvailable).toList();
-    final allSelected = selectable.isNotEmpty &&
+    final allSelected =
+        selectable.isNotEmpty &&
         selectable.every((i) => selected.contains(i.cartItemId));
 
     return Container(

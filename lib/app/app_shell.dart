@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../shared/widgets/app_bottom_nav.dart';
+import '../shared/widgets/app_top_bar.dart';
 import 'router/routes.dart';
 
 /// Wraps the six buyer tab branches with the floating bottom nav, mirroring
@@ -10,7 +12,7 @@ import 'router/routes.dart';
 /// The nav bar is only shown on the 6 tab roots themselves; once the user
 /// drills into a child route nested under a branch (e.g. a pack/card detail
 /// under Ekspansi), it's hidden since that page is already a child screen.
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     super.key,
     required this.navigationShell,
@@ -30,10 +32,10 @@ class AppShell extends StatefulWidget {
   };
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   /// Below this offset the nav always stays at full size, so short pages and
   /// the first flick of a long one don't shrink it. Mirrors the `y > 80`
   /// check in `mobile-bottom-nav.tsx`.
@@ -47,6 +49,12 @@ class _AppShellState extends State<AppShell> {
   bool _onScroll(ScrollNotification notification) {
     // Horizontal carousels (set rows, market shelves) also bubble up here.
     if (notification.metrics.axis != Axis.vertical) return false;
+
+    // The top bar's logo row keys off absolute offset, like the web's
+    // `scrollY > 100`, so it's read from every notification rather than
+    // only the direction-sensitive updates the nav pill needs below.
+    _syncTopBar(notification.metrics.pixels > AppTopBar.morphThreshold);
+
     if (notification is! ScrollUpdateNotification) return false;
 
     final delta = notification.scrollDelta ?? 0;
@@ -57,6 +65,11 @@ class _AppShellState extends State<AppShell> {
         delta > 0 && notification.metrics.pixels > _compactThreshold;
     if (compact != _compact) setState(() => _compact = compact);
     return false;
+  }
+
+  void _syncTopBar(bool scrolled) {
+    final notifier = ref.read(topBarScrolledProvider.notifier);
+    if (notifier.state != scrolled) notifier.state = scrolled;
   }
 
   @override
@@ -76,8 +89,9 @@ class _AppShellState extends State<AppShell> {
               compact: _compact,
               onTap: (index) {
                 // The incoming tab starts at its own scroll offset, so drop
-                // back to the full-size pill.
+                // back to the full-size pill and bring the logo row back.
                 if (_compact) setState(() => _compact = false);
+                _syncTopBar(false);
                 navigationShell.goBranch(
                   index,
                   initialLocation: index == navigationShell.currentIndex,

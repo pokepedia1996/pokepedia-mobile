@@ -34,17 +34,7 @@ class CardGridItem extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                CardArt(imageUrl: card.imageUrl),
-                if (owned)
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: _OwnedBadge(quantity: card.owned),
-                  ),
-              ],
-            ),
+            CardArt(imageUrl: card.imageUrl),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -62,34 +52,25 @@ class CardGridItem extends StatelessWidget {
                 ),
               ],
             ),
-            Text(
-              card.marketPrice != null
-                  ? formatRupiah(card.marketPrice!)
-                  : 'Rp-',
-              style: AppTypography.bodySmSemibold(colors.onSurface),
+            Row(
+              children: [
+                Text(
+                  card.marketPrice != null
+                      ? formatRupiah(card.marketPrice!)
+                      : 'Rp-',
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+                const Spacer(),
+                if (owned)
+                  Text(
+                    'Qty: ${card.owned}',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+              ],
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _OwnedBadge extends StatelessWidget {
-  const _OwnedBadge({required this.quantity});
-
-  final int quantity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: context.appSemantic.success,
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        border: Border.all(color: Colors.white, width: 1.5),
-      ),
-      child: Text('×$quantity', style: AppTypography.badge(Colors.white)),
     );
   }
 }

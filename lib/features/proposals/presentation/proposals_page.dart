@@ -479,9 +479,7 @@ class _BidProposalTileState extends ConsumerState<_BidProposalTile> {
                         : () => _run(
                             () => ref
                                 .read(proposalsRepositoryProvider)
-                                .rejectBidProposal(
-                                  proposalSlug: proposal.slug,
-                                ),
+                                .rejectBidProposal(proposalSlug: proposal.slug),
                             'Proposal ditolak',
                           ),
                     style: OutlinedButton.styleFrom(

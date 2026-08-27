@@ -48,9 +48,10 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     setState(() => setSaving(true));
-    final error = await ref
-        .read(userRepositoryProvider)
-        .updateProfile(user.id, {column: value});
+    final error = await ref.read(userRepositoryProvider).updateProfile(
+      user.id,
+      {column: value},
+    );
     if (!mounted) return;
     setState(() => setSaving(false));
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
@@ -61,9 +62,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
       return;
     }
     ref.invalidate(userProfileProvider(widget.username));
-    messenger.showSnackBar(
-      SnackBar(content: Text(value ? onLabel : offLabel)),
-    );
+    messenger.showSnackBar(SnackBar(content: Text(value ? onLabel : offLabel)));
   }
 
   /// Web's collection search: matches card name, number, rarity, expansion
@@ -199,7 +198,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                   TextField(
                     onChanged: (value) => setState(() => _search = value),
                     decoration: const InputDecoration(
-                      hintText: 'Cari nama, nomor, ekspansi, atau kelangkaan...',
+                      hintText:
+                          'Cari nama, nomor, ekspansi, atau kelangkaan...',
                       prefixIcon: Icon(Icons.search, size: 20),
                     ),
                   ),
@@ -306,8 +306,7 @@ class _ProfileHeader extends StatelessWidget {
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
-            onPressed: () =>
-                context.push(Routes.storeDetail(profile.username)),
+            onPressed: () => context.push(Routes.storeDetail(profile.username)),
             icon: const Icon(Icons.storefront_outlined, size: 16),
             label: const Text('Lihat toko'),
           ),
@@ -383,7 +382,8 @@ class _SocialLinks extends StatelessWidget {
           _SocialIcon(
             icon: Icons.facebook,
             tooltip: 'Facebook',
-            onTap: () => _open('https://facebook.com/${profile.socialFacebook}'),
+            onTap: () =>
+                _open('https://facebook.com/${profile.socialFacebook}'),
           ),
         if (_isSafeHandle(profile.socialInstagram))
           _SocialIcon(
@@ -508,8 +508,7 @@ class _ExpansionGroupState extends State<_ExpansionGroup> {
             children: [
               if (expansion.packImage != null) ...[
                 InkWell(
-                  onTap: () =>
-                      context.push(Routes.packDetail(expansion.slug)),
+                  onTap: () => context.push(Routes.packDetail(expansion.slug)),
                   child: Image.network(
                     expansion.packImage!,
                     width: 64,
@@ -684,9 +683,8 @@ class _ContributionsSectionState extends State<_ContributionsSection> {
             itemBuilder: (context, i) {
               final card = visible[i];
               return InkWell(
-                onTap: () => context.push(
-                  Routes.cardDetail(card.packSlug, card.cardId),
-                ),
+                onTap: () =>
+                    context.push(Routes.cardDetail(card.packSlug, card.cardId)),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: CardArt(
                   imageUrl: card.imageUrl,

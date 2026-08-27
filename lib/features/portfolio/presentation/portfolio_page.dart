@@ -11,23 +11,27 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/app_top_bar.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
+import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../core/providers/card_ownership_controller.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
+import '../../home/usecase/portfolio_value_notifier.dart';
 import '../usecase/portfolio_notifier.dart';
+import 'widgets/portfolio_picker_sheet.dart';
+import 'widgets/selection_sheet.dart';
+import 'wishlist_page.dart';
 import 'widgets/collection_add_sheet.dart';
 
 /// Ports `app/portfolio/collection/page.tsx`.
 ///
-/// Deck and Inventori used to be tabs here; on the web they're sibling
-/// routes (`/portfolio/deck`, `/portfolio/inventory`), so they're their own
-/// pages now and this holds only the Koleksi / Wishlist pair the web page
-/// itself toggles between.
+/// Deck and Inventori are sibling routes rather than tabs here. The wishlist
+/// is still on this page, but behind the heart beside the search box rather
+/// than a tab strip: it shares the search, filters and sort with the
+/// collection, so it's a switch of what's listed, not a different screen.
 class PortfolioPage extends ConsumerStatefulWidget {
   const PortfolioPage({super.key});
 
@@ -35,11 +39,7 @@ class PortfolioPage extends ConsumerStatefulWidget {
   ConsumerState<PortfolioPage> createState() => _PortfolioPageState();
 }
 
-enum _CollectionView { collection, wishlist }
-
 class _PortfolioPageState extends ConsumerState<PortfolioPage> {
-  _CollectionView _view = _CollectionView.collection;
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).valueOrNull;
@@ -51,215 +51,30 @@ class _PortfolioPageState extends ConsumerState<PortfolioPage> {
         bottom: false,
         child: Column(
           children: [
-            const AppTopBar(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Koleksi Kartu',
-                  style: AppTypography.h2(context.appColors.onSurface),
-                ),
-              ),
-            ),
+            // Search first, with the way to the wishlist beside it. It's the
+            // only pinned row — the title scrolls away with the cards.
+            const _SearchRow(),
             if (user == null)
               Expanded(
                 child: EmptyState(
                   icon: Icons.style_outlined,
                   title: 'Masuk untuk melihat koleksimu',
-                  description:
-                      'Kelola koleksi dan wishlist kartu Pokemon-mu.',
+                  description: 'Kelola koleksi dan wishlist kartu Pokemon-mu.',
                   action: ElevatedButton(
                     onPressed: () => context.push(Routes.login),
                     child: const Text('Masuk'),
                   ),
                 ),
               )
-            else ...[
-              // The web's underlined pair, not a Material TabBar — it sits
-              // above the header stats rather than replacing them.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: Row(
-                  children: [
-                    for (final view in _CollectionView.values)
-                      _ViewTab(
-                        label: view == _CollectionView.collection
-                            ? 'Koleksi'
-                            : 'Wishlist',
-                        selected: _view == view,
-                        onTap: () => setState(() => _view = view),
-                      ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: _view == _CollectionView.collection
-                    ? const _CollectionTab()
-                    : const _WishlistTab(),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One of the two underlined view tabs.
-class _ViewTab extends StatelessWidget {
-  const _ViewTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-        margin: const EdgeInsets.only(right: 18),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? colors.primary : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
-        child: Text(
-          label,
-          style: selected
-              ? AppTypography.bodySmSemibold(colors.onSurface)
-              : AppTypography.bodySm(context.mutedForeground),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shared search/filter/sort/grid-list browser for a flat card list — used
-/// by both the Koleksi and Wishlist tabs.
-class _CardBrowseTab extends ConsumerStatefulWidget {
-  const _CardBrowseTab({
-    required this.provider,
-    required this.emptyIcon,
-    required this.emptyTitle,
-    this.emptyDescription,
-  });
-
-  final FutureProvider<List<CardModel>> provider;
-  final IconData emptyIcon;
-  final String emptyTitle;
-  final String? emptyDescription;
-
-  @override
-  ConsumerState<_CardBrowseTab> createState() => _CardBrowseTabState();
-}
-
-class _CardBrowseTabState extends ConsumerState<_CardBrowseTab> {
-  CardFilters _filters = const CardFilters();
-  CardSortOption _sortBy = CardSortOption.numberAsc;
-  CardViewMode _viewMode = CardViewMode.grid;
-
-  @override
-  Widget build(BuildContext context) {
-    final async = ref.watch(widget.provider);
-    return async.when(
-      data: (cards) {
-        if (cards.isEmpty) {
-          return EmptyState(
-            icon: widget.emptyIcon,
-            title: widget.emptyTitle,
-            description: widget.emptyDescription,
-          );
-        }
-
-        var visible = applyCardFilters(cards, _filters);
-        visible = sortCards(visible, _sortBy);
-
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: CardFilterBar(
-                  cards: cards,
-                  filters: _filters,
-                  onFiltersChanged: (f) => setState(() => _filters = f),
-                  sortBy: _sortBy,
-                  onSortChanged: (s) => setState(() => _sortBy = s),
-                  viewMode: _viewMode,
-                  onViewModeChanged: (v) => setState(() => _viewMode = v),
-                ),
-              ),
-            ),
-            if (visible.isEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: Text(
-                      'Tidak ada kartu yang sesuai filter.',
-                      style: AppTypography.bodySm(context.mutedForeground),
-                    ),
-                  ),
-                ),
-              )
-            else if (_viewMode == CardViewMode.grid)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.62,
-                  ),
-                  delegate: SliverChildBuilderDelegate((context, i) {
-                    final card = visible[i];
-                    return CardGridItem(
-                      card: card,
-                      onTap: () => context.push(
-                        Routes.cardDetail(card.packSlug, card.id),
-                      ),
-                    );
-                  }, childCount: visible.length),
-                ),
-              )
             else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, i) {
-                    final card = visible[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: CardListItem(
-                        card: card,
-                        onTap: () => context.push(
-                          Routes.cardDetail(card.packSlug, card.id),
-                        ),
-                      ),
-                    );
-                  }, childCount: visible.length),
-                ),
+              Expanded(
+                child: ref.watch(showWishlistProvider)
+                    ? const WishlistView(showSearch: false)
+                    : const _CollectionTab(),
               ),
-            SliverToBoxAdapter(
-              child: SizedBox(height: AppBottomNav.reservedSpace(context)),
-            ),
           ],
-        );
-      },
-      loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat data')),
+        ),
+      ),
     );
   }
 }
@@ -286,12 +101,23 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   /// Staged quantities by card id — only the ones the user actually moved.
   final Map<int, int> _edits = {};
+
+  /// Cards ticked in Kelola mode, for the batch actions.
+  final Set<int> _selected = {};
   bool _saving = false;
+  bool _working = false;
 
   void _exitEdit() => setState(() {
     _editMode = false;
     _edits.clear();
+    _selected.clear();
   });
+
+  void _toggleSelected(CardModel card) {
+    setState(() {
+      if (!_selected.remove(card.id)) _selected.add(card.id);
+    });
+  }
 
   void _stage(CardModel card, int quantity) {
     setState(() {
@@ -299,16 +125,6 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
         _edits.remove(card.id);
       } else {
         _edits[card.id] = quantity;
-      }
-    });
-  }
-
-  /// Web's "Hapus Semua" — stages every visible card to zero rather than
-  /// deleting outright, so it still goes through the same confirmation.
-  void _stageAllToZero(List<CardModel> visible) {
-    setState(() {
-      for (final card in visible) {
-        if (card.owned > 0) _edits[card.id] = 0;
       }
     });
   }
@@ -328,9 +144,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         title: const Text('Simpan perubahan?'),
-        content: Text(
-          '${_edits.length} kartu akan diperbarui di koleksimu.',
-        ),
+        content: Text('${_edits.length} kartu akan diperbarui di koleksimu.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -370,89 +184,43 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     });
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(content: Text(failure ?? 'Koleksi diperbarui')),
-      );
+      ..showSnackBar(SnackBar(content: Text(failure ?? 'Koleksi diperbarui')));
   }
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(collectionProvider);
+    // Not `collectionProvider` directly: the title's picker can narrow the
+    // page to one list, and this is that list's cards.
+    final async = ref.watch(selectedPortfolioCardsProvider);
+    // The search box lives at the top of the page now, so the query comes
+    // from there rather than from this tab's own filter bar.
+    final filters = _filters.copyWith(
+      search: ref.watch(collectionSearchProvider),
+    );
 
     return async.when(
       data: (cards) {
-        var visible = applyCardFilters(cards, _filters);
+        var visible = applyCardFilters(cards, filters);
         visible = sortCards(visible, _sortBy);
 
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: _CollectionHeader(
-                cards: cards,
-                visible: visible,
-                editMode: _editMode,
-                pendingEdits: _edits.length,
-                saving: _saving,
-                onAdd: _openAddSheet,
-                onManage: () => setState(() => _editMode = true),
-                onClearAll: () => _stageAllToZero(visible),
-                onDone: () => _save(cards),
-                onCancel: _exitEdit,
+        return Stack(
+          children: [
+            _grid(cards, visible, filters),
+            // The batch bar rides above the grid, clearing the floating nav.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: AppBottomNav.reservedSpace(context),
+              child: SelectionSheet(
+                count: _selected.length,
+                busy: _working,
+                canMove: !ref.watch(selectedPortfolioProvider).isPrimary,
+                moveHint: const Text('Pilih list dulu'),
+                onCopy: () => _copyOrMove(cards, move: false),
+                onMove: () => _copyOrMove(cards, move: true),
+                onDelete: () => _deleteSelected(cards),
+                onClear: () => setState(_selected.clear),
               ),
-            ),
-            if (cards.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: CardFilterBar(
-                    cards: cards,
-                    filters: _filters,
-                    onFiltersChanged: (f) => setState(() => _filters = f),
-                    sortBy: _sortBy,
-                    onSortChanged: (s) => setState(() => _sortBy = s),
-                    viewMode: _viewMode,
-                    onViewModeChanged: (v) => setState(() => _viewMode = v),
-                  ),
-                ),
-              ),
-            if (cards.isEmpty)
-              _message(
-                'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
-                'ekspansi!',
-              )
-            else if (visible.isEmpty)
-              _message('Tidak ada kartu yang sesuai filter.')
-            else if (_viewMode == CardViewMode.grid)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.62,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => _collectionCard(visible[i]),
-                    childCount: visible.length,
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _collectionCard(visible[i], list: true),
-                    ),
-                    childCount: visible.length,
-                  ),
-                ),
-              ),
-            SliverToBoxAdapter(
-              child: SizedBox(height: AppBottomNav.reservedSpace(context)),
             ),
           ],
         );
@@ -460,6 +228,191 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat data')),
     );
+  }
+
+  Widget _grid(
+    List<CardModel> cards,
+    List<CardModel> visible,
+    CardFilters filters,
+  ) {
+    return CustomScrollView(
+      slivers: [
+        const SliverToBoxAdapter(child: _TitleRow()),
+        SliverToBoxAdapter(
+          child: _CollectionHeader(
+            cards: cards,
+            visible: visible,
+            editMode: _editMode,
+            pendingEdits: _edits.length,
+            saving: _saving,
+            onAdd: _openAddSheet,
+            onManage: () => setState(() => _editMode = true),
+            onDone: () => _save(cards),
+            onCancel: _exitEdit,
+          ),
+        ),
+        if (cards.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: CardFilterBar(
+                cards: cards,
+                showSearch: false,
+                filters: filters,
+                onFiltersChanged: (f) => setState(() => _filters = f),
+                sortBy: _sortBy,
+                onSortChanged: (s) => setState(() => _sortBy = s),
+                viewMode: _viewMode,
+                onViewModeChanged: (v) => setState(() => _viewMode = v),
+              ),
+            ),
+          ),
+        if (cards.isEmpty)
+          _message(
+            'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
+            'ekspansi!',
+          )
+        else if (visible.isEmpty)
+          _message('Tidak ada kartu yang sesuai filter.')
+        else if (_viewMode == CardViewMode.grid)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.62,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => _collectionCard(visible[i]),
+                childCount: visible.length,
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _collectionCard(visible[i], list: true),
+                ),
+                childCount: visible.length,
+              ),
+            ),
+          ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            // Room for the nav pill, plus the batch bar when it's up.
+            height:
+                AppBottomNav.reservedSpace(context) +
+                (_selected.isEmpty ? 0 : 72),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Adds the selected cards to a list the user picks, and in `move` mode
+  /// takes them out of the list currently on screen.
+  Future<void> _copyOrMove(List<CardModel> cards, {required bool move}) async {
+    final target = ref.read(selectedPortfolioProvider);
+    if (move && target.isPrimary) return;
+
+    final destination = await showListPicker(
+      context,
+      ref,
+      excludeListId: target.listId,
+      title: move ? 'Pindahkan ke list' : 'Salin ke list',
+    );
+    if (destination == null || !mounted) return;
+
+    final ids = _selected.toList();
+    setState(() => _working = true);
+    final repository = ref.read(portfolioRepositoryProvider);
+
+    var error = await repository.addCardsToList(
+      listId: destination.id,
+      cardIds: ids,
+    );
+    if (error == null && move) {
+      error = await repository.removeCardsFromList(
+        listId: target.listId!,
+        cardIds: ids,
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _working = false;
+      if (error == null) _selected.clear();
+    });
+
+    ref.invalidate(listsProvider);
+    ref.invalidate(listCardsProvider(destination.id));
+    if (target.listId != null) {
+      ref.invalidate(listCardsProvider(target.listId!));
+    }
+
+    _toast(
+      error ??
+          (move
+              ? '${ids.length} kartu dipindahkan ke "${destination.name}"'
+              : '${ids.length} kartu disalin ke "${destination.name}"'),
+    );
+  }
+
+  /// Removes the selected cards from the list on screen, or from the
+  /// collection itself when the main portfolio is the one being shown.
+  Future<void> _deleteSelected(List<CardModel> cards) async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+    final target = ref.read(selectedPortfolioProvider);
+    final ids = _selected.toList();
+    final fromList = !target.isPrimary;
+
+    await showConfirmDialog(
+      context,
+      title: fromList ? 'Hapus dari list?' : 'Hapus dari koleksi?',
+      description: fromList
+          ? '${ids.length} kartu akan dikeluarkan dari "${target.name}". '
+                'Kartunya tetap ada di koleksimu.'
+          : '${ids.length} kartu akan dihapus dari koleksimu.',
+      confirmLabel: 'Hapus',
+      loadingLabel: 'Menghapus...',
+      onConfirm: () async {
+        setState(() => _working = true);
+        final String? error;
+        if (fromList) {
+          error = await ref
+              .read(portfolioRepositoryProvider)
+              .removeCardsFromList(listId: target.listId!, cardIds: ids);
+          ref.invalidate(listCardsProvider(target.listId!));
+          ref.invalidate(listsProvider);
+        } else {
+          final result = await ref
+              .read(cardOwnershipControllerProvider)
+              .bulkRemoveFromCollection(userId: user.id, cardIds: ids);
+          error = result.error;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _working = false;
+          if (error == null) _selected.clear();
+        });
+        _toast(error ?? '${ids.length} kartu dihapus');
+      },
+    );
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message), persist: false));
   }
 
   Widget _collectionCard(CardModel card, {bool list = false}) {
@@ -477,30 +430,83 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
     if (!_editMode) return tile;
 
-    // In edit mode the tile stops being a link — tapping through to a card
-    // page mid-edit would strand the staged changes.
-    return Stack(
-      children: [
-        IgnorePointer(child: tile),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor.withValues(alpha: 0.95),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: context.borderColor),
-            ),
-            child: QuantitySelector(
-              value: _edits[card.id] ?? card.owned,
-              onChanged: (value) => _stage(card, value),
+    // In edit mode the tile stops being a link — it's a checkbox. Tapping
+    // through to a card page mid-edit would strand the staged changes.
+    final selected = _selected.contains(card.id);
+    return GestureDetector(
+      onTap: () => _toggleSelected(card),
+      // Opaque, not the default `deferToChild`: the tile underneath is
+      // wrapped in an IgnorePointer, so with deferToChild nothing in the
+      // card's own area is hit-testable and only the counter took taps.
+      behavior: HitTestBehavior.opaque,
+      child: Stack(
+        children: [
+          IgnorePointer(child: tile),
+          // Selection state, drawn over the art so it reads at a glance.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                    color: selected
+                        ? context.appColors.primary
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                  color: selected
+                      ? context.appColors.primary.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+          Positioned(
+            top: 6,
+            left: 6,
+            child: IgnorePointer(
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? context.appColors.primary
+                      : Theme.of(context).cardColor.withValues(alpha: 0.9),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.borderColor),
+                ),
+                child: selected
+                    ? Icon(
+                        Icons.check,
+                        size: 15,
+                        color: context.appColors.onPrimary,
+                      )
+                    : null,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              // Hugs the bottom edge with no padding of its own, so it sits
+              // over the price line and leaves the card's name uncovered.
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: context.borderColor),
+              ),
+              child: QuantitySelector(
+                value: _edits[card.id] ?? card.owned,
+                onChanged: (value) => _stage(card, value),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -535,7 +541,6 @@ class _CollectionHeader extends StatelessWidget {
     required this.saving,
     required this.onAdd,
     required this.onManage,
-    required this.onClearAll,
     required this.onDone,
     required this.onCancel,
   });
@@ -547,7 +552,6 @@ class _CollectionHeader extends StatelessWidget {
   final bool saving;
   final VoidCallback onAdd;
   final VoidCallback onManage;
-  final VoidCallback onClearAll;
   final VoidCallback onDone;
   final VoidCallback onCancel;
 
@@ -563,39 +567,33 @@ class _CollectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            '${cards.length} kartu unik · $totalQuantity total',
-            style: AppTypography.bodySm(context.mutedForeground),
-          ),
-          const SizedBox(height: 6),
           Text.rich(
             TextSpan(
-              text: 'Nilai Total: ',
               style: AppTypography.h3(colors.onSurface),
               children: [
                 TextSpan(
                   // Web shows "Rp–" rather than Rp0 when nothing is priced
                   // yet, so a missing price never reads as a zero valuation.
                   text: totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
-                  style: AppTypography.h3(colors.primary),
+                  style: AppTypography.h2(colors.primary),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
+          Text(
+            '${cards.length} kartu unik · $totalQuantity total',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+          const SizedBox(height: 6),
           if (editMode)
             Row(
+              // Batch deletion moved to the selection bar's menu, so this row
+              // is only about the staged quantity edits now.
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (visible.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: saving ? null : onClearAll,
-                    icon: const Icon(Icons.delete_outline, size: 15),
-                    label: const Text('Hapus Semua'),
-                    style: TextButton.styleFrom(foregroundColor: colors.error),
-                  ),
-                const Spacer(),
                 ElevatedButton(
                   onPressed: saving ? null : onDone,
                   style: ElevatedButton.styleFrom(
@@ -625,16 +623,11 @@ class _CollectionHeader extends StatelessWidget {
             )
           else
             Row(
+              // Centred under the centred title, rather than hanging off the
+              // left edge on its own.
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Tambah Kartu'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                  ),
-                ),
-                const SizedBox(width: 8),
+                // const SizedBox(width: 8),
                 if (cards.isNotEmpty)
                   OutlinedButton.icon(
                     onPressed: onManage,
@@ -652,18 +645,83 @@ class _CollectionHeader extends StatelessWidget {
   }
 }
 
-class _WishlistTab extends StatelessWidget {
-  const _WishlistTab();
+/// The collection's search box, with the heart that opens the wishlist.
+class _SearchRow extends ConsumerWidget {
+  const _SearchRow();
 
   @override
-  Widget build(BuildContext context) {
-    return _CardBrowseTab(
-      provider: wishlistProvider,
-      emptyIcon: Icons.favorite_border,
-      emptyTitle: 'Wishlist masih kosong',
-      emptyDescription:
-          'Belum ada kartu di wishlist. Tekan ikon hati pada kartu untuk '
-          'menyimpannya.',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final query = ref.watch(collectionSearchProvider);
+    final showWishlist = ref.watch(showWishlistProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: CardSearchField(
+              dense: true,
+              value: query,
+              onChanged: (value) =>
+                  ref.read(collectionSearchProvider.notifier).state = value,
+            ),
+          ),
+          IconButton(
+            // Filled while the wishlist is what's on screen, so the heart
+            // reads as a switch rather than a link.
+            icon: Icon(showWishlist ? Icons.favorite : Icons.favorite_border),
+            color: context.appColors.primary,
+            tooltip: showWishlist ? 'Kembali ke koleksi' : 'Wishlist',
+            onPressed: () =>
+                ref.read(showWishlistProvider.notifier).state = !showWishlist,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Portfolio" with the list it's showing beside it — tapping the name opens
+/// the same picker Beranda uses, so both screens switch the same selection.
+class _TitleRow extends ConsumerWidget {
+  const _TitleRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    final target = ref.watch(selectedPortfolioProvider);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Portfolio', style: AppTypography.h2(colors.onSurface)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              onTap: () => showPortfolioPicker(context, ref),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        target.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.h2(colors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

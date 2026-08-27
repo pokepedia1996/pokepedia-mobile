@@ -74,9 +74,7 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
       return;
     }
     if (_priceValue >= widget.listing.price) {
-      setState(
-        () => _error = 'Penawaran harus di bawah harga listing.',
-      );
+      setState(() => _error = 'Penawaran harus di bawah harga listing.');
       return;
     }
     setState(() {

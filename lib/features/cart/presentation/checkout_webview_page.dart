@@ -16,7 +16,11 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 /// fallback used when the app can't reach the API and the buyer has to
 /// finish on the web.
 class CheckoutWebViewPage extends StatefulWidget {
-  const CheckoutWebViewPage({super.key, this.path = '/cart/checkout', this.url});
+  const CheckoutWebViewPage({
+    super.key,
+    this.path = '/cart/checkout',
+    this.url,
+  });
 
   /// Path under [AppConfig.appUrl] to load. Ignored when [url] is set.
   final String path;

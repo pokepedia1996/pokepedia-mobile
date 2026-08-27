@@ -48,9 +48,13 @@ class DummyCatalog {
   };
 
   static final List<SeriesGroup> seriesGroups = _buildSeries();
-  static final List<PackModel> packs = seriesGroups.expand((g) => g.packs).toList();
+  static final List<PackModel> packs = seriesGroups
+      .expand((g) => g.packs)
+      .toList();
   static final Map<String, List<CardModel>> cardsByPack = _buildCards();
-  static final List<CardModel> allCards = cardsByPack.values.expand((c) => c).toList();
+  static final List<CardModel> allCards = cardsByPack.values
+      .expand((c) => c)
+      .toList();
   static final List<StoreModel> stores = _buildStores();
   static final List<ListingModel> listings = _buildListings();
 
@@ -69,7 +73,8 @@ class DummyCatalog {
             name: names[i],
             mark: '$mark${i + 1}',
             series: series,
-            releaseDate: '${releaseYear - i} ${['Jan', 'Apr', 'Aug', 'Nov'][i % 4]}',
+            releaseDate:
+                '${releaseYear - i} ${['Jan', 'Apr', 'Aug', 'Nov'][i % 4]}',
             cardCount: cardCount,
             productType: i == names.length - 1 ? 'Special Set' : 'Expansion',
             collectedCount: collected,
@@ -183,7 +188,13 @@ class DummyCatalog {
     ('pokecorner', 'Poke Corner', 'Booster box & singles', true, false),
     ('trainerhub', 'Trainer Hub', 'Vintage WOTC collector', false, false),
     ('gxstore', 'GX Store', 'Fast response, COD area Jabodetabek', true, false),
-    ('holofoil.id', 'Holofoil.id', 'Jual beli kartu holo & rainbow', false, false),
+    (
+      'holofoil.id',
+      'Holofoil.id',
+      'Jual beli kartu holo & rainbow',
+      false,
+      false,
+    ),
   ];
 
   static List<StoreModel> _buildStores() {

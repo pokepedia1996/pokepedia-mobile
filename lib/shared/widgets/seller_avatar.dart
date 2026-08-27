@@ -5,7 +5,12 @@ import '../../core/theme/app_theme.dart';
 /// Ports `components/store/seller-avatar.tsx` — a circular seller/store
 /// image, falling back to the name's first letter when there's no logo.
 class SellerAvatar extends StatelessWidget {
-  const SellerAvatar({super.key, required this.name, this.imageUrl, this.size = 18});
+  const SellerAvatar({
+    super.key,
+    required this.name,
+    this.imageUrl,
+    this.size = 18,
+  });
 
   final String name;
   final String? imageUrl;
@@ -32,7 +37,8 @@ class SellerAvatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
-                errorBuilder: (context, error, stackTrace) => Text(initial, style: textStyle),
+                errorBuilder: (context, error, stackTrace) =>
+                    Text(initial, style: textStyle),
               ),
       ),
     );

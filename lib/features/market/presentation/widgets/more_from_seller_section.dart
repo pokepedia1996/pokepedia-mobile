@@ -99,10 +99,7 @@ class MoreFromSellerSection extends ConsumerWidget {
 }
 
 class _SellerListingThumb extends StatelessWidget {
-  const _SellerListingThumb({
-    required this.listing,
-    required this.storeHandle,
-  });
+  const _SellerListingThumb({required this.listing, required this.storeHandle});
 
   final ListingModel listing;
   final String storeHandle;
@@ -114,9 +111,8 @@ class _SellerListingThumb extends StatelessWidget {
     return SizedBox(
       width: 116,
       child: InkWell(
-        onTap: () => context.push(
-          Routes.storeCardDetail(storeHandle, listing.card.id),
-        ),
+        onTap: () =>
+            context.push(Routes.storeCardDetail(storeHandle, listing.card.id)),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: DecoratedBox(
           decoration: BoxDecoration(

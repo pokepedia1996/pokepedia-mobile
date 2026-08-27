@@ -57,13 +57,17 @@ class _CardListingsSectionState extends ConsumerState<CardListingsSection> {
     final out = [...listings];
     switch (_sort) {
       case _Sort.priceAsc:
-        out.sort((a, b) => a.price != b.price
-            ? a.price.compareTo(b.price)
-            : a.id.compareTo(b.id));
+        out.sort(
+          (a, b) => a.price != b.price
+              ? a.price.compareTo(b.price)
+              : a.id.compareTo(b.id),
+        );
       case _Sort.priceDesc:
-        out.sort((a, b) => a.price != b.price
-            ? b.price.compareTo(a.price)
-            : a.id.compareTo(b.id));
+        out.sort(
+          (a, b) => a.price != b.price
+              ? b.price.compareTo(a.price)
+              : a.id.compareTo(b.id),
+        );
       case _Sort.createdDesc:
         out.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       case _Sort.createdAsc:
@@ -217,8 +221,7 @@ class _CardListingsSectionState extends ConsumerState<CardListingsSection> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
                     child: TextButton(
-                      onPressed: () =>
-                          setState(() => _visible += _pageSize),
+                      onPressed: () => setState(() => _visible += _pageSize),
                       child: Text(
                         'Muat lebih banyak (${sorted.length - shown.length})',
                       ),
@@ -330,11 +333,7 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                         ),
                         if (listing.isVerified) ...[
                           const SizedBox(width: 3),
-                          Icon(
-                            Icons.verified,
-                            size: 13,
-                            color: colors.primary,
-                          ),
+                          Icon(Icons.verified, size: 13, color: colors.primary),
                         ],
                         const SizedBox(width: 6),
                         ConditionBadge(condition: listing.condition),

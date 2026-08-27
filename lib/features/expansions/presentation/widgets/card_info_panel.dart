@@ -176,7 +176,7 @@ class _CardInfoPanelState extends State<CardInfoPanel> {
                   ),
                 ),
               ],
-            )
+            ),
           ),
         ],
         if (isPokemon) ...[
@@ -231,7 +231,7 @@ class _CardInfoPanelState extends State<CardInfoPanel> {
                     ),
                   ],
                 ],
-              )
+              ),
             ),
           ),
         ],
@@ -325,10 +325,7 @@ class _AbilityRow extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: colors.primary,
                   borderRadius: BorderRadius.circular(AppRadius.xs),

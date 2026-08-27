@@ -38,7 +38,11 @@ class UsersSearchPage extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.people_outline, size: 22, color: colors.primary),
+                      Icon(
+                        Icons.people_outline,
+                        size: 22,
+                        color: colors.primary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Cari Pengguna',
@@ -167,7 +171,11 @@ class ContributorBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.workspace_premium_outlined, size: large ? 16 : 13, color: color),
+        Icon(
+          Icons.workspace_premium_outlined,
+          size: large ? 16 : 13,
+          color: color,
+        ),
         const SizedBox(width: 4),
         Text(
           'Kontributor · $count kartu',

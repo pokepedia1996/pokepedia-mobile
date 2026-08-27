@@ -17,7 +17,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/expansions_notifier.dart';
-import 'widgets/card_info_panel.dart';
+import 'widgets/card_details_section.dart';
 import 'widgets/related_cards_section.dart';
 import 'widgets/card_listings_section.dart';
 import 'widgets/card_market_header.dart';
@@ -47,15 +47,10 @@ class CardDetailPage extends ConsumerStatefulWidget {
   ConsumerState<CardDetailPage> createState() => _CardDetailPageState();
 }
 
-enum _Panel { market, histori }
-
 class _CardDetailPageState extends ConsumerState<CardDetailPage> {
-  _Panel _panel = _Panel.market;
-
   @override
   Widget build(BuildContext context) {
     final cardAsync = ref.watch(cardDetailProvider(widget.cardId));
-    final packAsync = ref.watch(packDetailProvider(widget.packSlug));
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -68,14 +63,13 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
               title: 'Kartu tidak ditemukan',
             );
           }
-          final pack = packAsync.valueOrNull;
 
           return AppBarOverlayBody(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                PackHeaderRow(pack: pack, card: card),
-                const SizedBox(height: 12),
+                // PackHeaderRow(pack: pack, card: card),
+                // const SizedBox(height: 12),
 
                 // Artwork column — tap the art for the lightbox, then the
                 // portfolio quantity and the neighbouring cards.
@@ -88,32 +82,43 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
                         _Artwork(card: card),
                         const SizedBox(height: 12),
                         _AddToCollectionSection(cardId: card.id),
+                        const SizedBox(height: 12),
+                        // Same heading the WTS listing page puts under its
+                        // artwork, so a card is named identically wherever
+                        // it's opened from.
                       ],
                     ),
                   ),
                 ),
+                CardTitleLine(card: card),
                 const SizedBox(height: 14),
-                _AdjacentCardsNav(packSlug: card.packSlug, cardId: card.id),
-                const SizedBox(height: 16),
 
                 CardMarketHeader(card: card),
                 const SizedBox(height: 12),
-                _PanelTabs(
-                  active: _panel,
-                  onChanged: (panel) => setState(() => _panel = panel),
-                ),
-                const SizedBox(height: 12),
-                if (_panel == _Panel.market) ...[
-                  OrderBookWidget(card: card),
-                  const SizedBox(height: 16),
-                  CardListingsSection(cardId: card.id),
-                ] else
-                  MarketActivitySection(cardId: card.id),
+                // No tabs: every market block is stacked, in the order a
+                // buyer works through them — what's on sale now, what it has
+                // actually sold for, how that has moved, and the book behind
+                // those prices.
+                CardListingsSection(cardId: card.id),
+                const SizedBox(height: 16),
+                SalesHistorySection(cardId: card.id),
+                const SizedBox(height: 16),
+                MarketActivitySection(cardId: card.id),
+                const SizedBox(height: 16),
+                OrderBookWidget(card: card),
 
                 const SizedBox(height: 20),
                 Divider(color: context.borderColor, height: 1),
                 const SizedBox(height: 16),
-                CardInfoPanel(card: card),
+                // The collapsible details card the WTS listing page uses,
+                // rather than the flat panel this page had: the same card
+                // shouldn't read two different ways.
+                CardDetailsHeader(
+                  card: card,
+                  trailing: WishlistButton(cardId: card.id),
+                ),
+                const SizedBox(height: 12),
+                CardDetailsSection(card: card),
                 // Web closes the page with this rail, below the info column.
                 RelatedCardsSection(card: card),
               ],
@@ -158,10 +163,7 @@ class _Artwork extends ConsumerWidget {
               left: 8,
               top: 8,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: context.appSemantic.success,
                   borderRadius: BorderRadius.circular(AppRadius.full),
@@ -171,10 +173,7 @@ class _Artwork extends ConsumerWidget {
                   children: [
                     const Icon(Icons.check, size: 12, color: Colors.white),
                     const SizedBox(width: 3),
-                    Text(
-                      '$owned',
-                      style: AppTypography.badge(Colors.white),
-                    ),
+                    Text('$owned', style: AppTypography.badge(Colors.white)),
                   ],
                 ),
               ),
@@ -261,54 +260,6 @@ class _NavChip extends StatelessWidget {
               : MainAxisAlignment.start,
           children: isNext ? [label, chevron] : [chevron, label],
         ),
-      ),
-    );
-  }
-}
-
-/// Ports `CardMobilePanels`' segmented Market / Histori Data switch.
-class _PanelTabs extends StatelessWidget {
-  const _PanelTabs({required this.active, required this.onChanged});
-
-  final _Panel active;
-  final ValueChanged<_Panel> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: context.appColors.secondary,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Row(
-        children: [
-          for (final panel in _Panel.values)
-            Expanded(
-              child: InkWell(
-                onTap: () => onChanged(panel),
-                borderRadius: BorderRadius.circular(AppRadius.xs),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: panel == active
-                        ? Theme.of(context).cardColor
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(AppRadius.xs),
-                  ),
-                  child: Text(
-                    panel == _Panel.market ? 'Market' : 'Histori Data',
-                    style: panel == active
-                        ? AppTypography.captionSemibold(
-                            context.appColors.onSurface,
-                          )
-                        : AppTypography.caption(context.mutedForeground),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

@@ -475,7 +475,9 @@ class _SelectedDot extends StatelessWidget {
           color: selected ? colors.primary : context.borderColor,
         ),
       ),
-      child: selected ? Icon(Icons.check, size: 13, color: colors.onPrimary) : null,
+      child: selected
+          ? Icon(Icons.check, size: 13, color: colors.onPrimary)
+          : null,
     );
   }
 }

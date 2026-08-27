@@ -24,6 +24,7 @@ class CardFilterBar extends StatefulWidget {
     required this.onViewModeChanged,
     this.ownershipFilter,
     this.onOwnershipChanged,
+    this.showSearch = true,
   });
 
   final List<CardModel> cards;
@@ -39,6 +40,10 @@ class CardFilterBar extends StatefulWidget {
   final OwnershipFilter? ownershipFilter;
   final ValueChanged<OwnershipFilter>? onOwnershipChanged;
 
+  /// Off where the page carries its own search box higher up, so the query
+  /// isn't asked for twice on one screen.
+  final bool showSearch;
+
   @override
   State<CardFilterBar> createState() => _CardFilterBarState();
 }
@@ -50,17 +55,21 @@ class _CardFilterBarState extends State<CardFilterBar> {
   Widget build(BuildContext context) {
     final options = deriveCardFilterOptions(widget.cards);
     final ownershipActive =
-        widget.ownershipFilter != null && widget.ownershipFilter != OwnershipFilter.all;
+        widget.ownershipFilter != null &&
+        widget.ownershipFilter != OwnershipFilter.all;
     final activeCount = widget.filters.activeCount + (ownershipActive ? 1 : 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SearchField(
-          value: widget.filters.search,
-          onChanged: (v) => widget.onFiltersChanged(widget.filters.copyWith(search: v)),
-        ),
-        const SizedBox(height: 10),
+        if (widget.showSearch) ...[
+          CardSearchField(
+            value: widget.filters.search,
+            onChanged: (v) =>
+                widget.onFiltersChanged(widget.filters.copyWith(search: v)),
+          ),
+          const SizedBox(height: 10),
+        ],
         Row(
           children: [
             _FilterToggleButton(
@@ -96,7 +105,9 @@ class _CardFilterBarState extends State<CardFilterBar> {
                   selected: widget.filters.categories,
                   labelOf: (v) => v.labelId,
                   onToggle: (v) => widget.onFiltersChanged(
-                    widget.filters.copyWith(categories: _toggled(widget.filters.categories, v)),
+                    widget.filters.copyWith(
+                      categories: _toggled(widget.filters.categories, v),
+                    ),
                   ),
                 ),
                 _ChipSection<PokemonType>(
@@ -106,7 +117,9 @@ class _CardFilterBarState extends State<CardFilterBar> {
                   labelOf: (v) => v.labelId,
                   iconOf: (v) => TypeIcon(type: v, size: 16),
                   onToggle: (v) => widget.onFiltersChanged(
-                    widget.filters.copyWith(types: _toggled(widget.filters.types, v)),
+                    widget.filters.copyWith(
+                      types: _toggled(widget.filters.types, v),
+                    ),
                   ),
                 ),
                 _ChipSection<String>(
@@ -115,7 +128,9 @@ class _CardFilterBarState extends State<CardFilterBar> {
                   selected: widget.filters.rarities,
                   labelOf: (v) => v,
                   onToggle: (v) => widget.onFiltersChanged(
-                    widget.filters.copyWith(rarities: _toggled(widget.filters.rarities, v)),
+                    widget.filters.copyWith(
+                      rarities: _toggled(widget.filters.rarities, v),
+                    ),
                   ),
                 ),
                 if (options.evolutionStages.isNotEmpty)
@@ -126,7 +141,10 @@ class _CardFilterBarState extends State<CardFilterBar> {
                     labelOf: (v) => v.labelId,
                     onToggle: (v) => widget.onFiltersChanged(
                       widget.filters.copyWith(
-                        evolutionStages: _toggled(widget.filters.evolutionStages, v),
+                        evolutionStages: _toggled(
+                          widget.filters.evolutionStages,
+                          v,
+                        ),
                       ),
                     ),
                   ),
@@ -138,7 +156,10 @@ class _CardFilterBarState extends State<CardFilterBar> {
                     labelOf: (v) => v.labelId,
                     onToggle: (v) => widget.onFiltersChanged(
                       widget.filters.copyWith(
-                        trainerSubtypes: _toggled(widget.filters.trainerSubtypes, v),
+                        trainerSubtypes: _toggled(
+                          widget.filters.trainerSubtypes,
+                          v,
+                        ),
                       ),
                     ),
                   ),
@@ -150,20 +171,28 @@ class _CardFilterBarState extends State<CardFilterBar> {
                     labelOf: (v) => v,
                     onToggle: (v) => widget.onFiltersChanged(
                       widget.filters.copyWith(
-                        regulationMarks: _toggled(widget.filters.regulationMarks, v),
+                        regulationMarks: _toggled(
+                          widget.filters.regulationMarks,
+                          v,
+                        ),
                       ),
                     ),
                   ),
                 if (widget.onOwnershipChanged != null)
                   _ChipSection<OwnershipFilter>(
                     label: 'Koleksi',
-                    options: const [OwnershipFilter.owned, OwnershipFilter.notOwned],
+                    options: const [
+                      OwnershipFilter.owned,
+                      OwnershipFilter.notOwned,
+                    ],
                     selected: {
                       if (widget.ownershipFilter != null &&
                           widget.ownershipFilter != OwnershipFilter.all)
                         widget.ownershipFilter!,
                     },
-                    labelOf: (v) => v == OwnershipFilter.owned ? 'Dimiliki' : 'Belum Dimiliki',
+                    labelOf: (v) => v == OwnershipFilter.owned
+                        ? 'Dimiliki'
+                        : 'Belum Dimiliki',
                     onToggle: (v) => widget.onOwnershipChanged!(
                       widget.ownershipFilter == v ? OwnershipFilter.all : v,
                     ),
@@ -175,12 +204,18 @@ class _CardFilterBarState extends State<CardFilterBar> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: () {
-                          widget.onFiltersChanged(widget.filters.clearedKeepingSearch());
+                          widget.onFiltersChanged(
+                            widget.filters.clearedKeepingSearch(),
+                          );
                           widget.onOwnershipChanged?.call(OwnershipFilter.all);
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: context.appColors.error,
-                          side: BorderSide(color: context.appColors.error.withValues(alpha: 0.4)),
+                          side: BorderSide(
+                            color: context.appColors.error.withValues(
+                              alpha: 0.4,
+                            ),
+                          ),
                         ),
                         icon: const Icon(Icons.close, size: 14),
                         label: Text('Hapus filter ($activeCount)'),
@@ -202,18 +237,33 @@ class _CardFilterBarState extends State<CardFilterBar> {
   }
 }
 
-class _SearchField extends StatefulWidget {
-  const _SearchField({required this.value, required this.onChanged});
+/// The card search box — shared so a page can lift it out of the filter bar
+/// and put it somewhere of its own.
+class CardSearchField extends StatefulWidget {
+  const CardSearchField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.hintText = 'Cari koleksimu',
+    this.dense = false,
+  });
 
   final String value;
   final ValueChanged<String> onChanged;
+  final String hintText;
+
+  /// A shorter box for pages that keep it permanently on screen. Still 40dp
+  /// tall — under that it stops being a comfortable tap target.
+  final bool dense;
 
   @override
-  State<_SearchField> createState() => _SearchFieldState();
+  State<CardSearchField> createState() => _CardSearchFieldState();
 }
 
-class _SearchFieldState extends State<_SearchField> {
-  late final TextEditingController _controller = TextEditingController(text: widget.value);
+class _CardSearchFieldState extends State<CardSearchField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value,
+  );
 
   @override
   void dispose() {
@@ -223,16 +273,27 @@ class _SearchFieldState extends State<_SearchField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    final field = TextField(
       controller: _controller,
       onChanged: widget.onChanged,
       textInputAction: TextInputAction.search,
+      style: widget.dense
+          ? AppTypography.bodySm(context.appColors.onSurface)
+          : null,
       decoration: InputDecoration(
-        hintText: 'Cari nama, nomor, atau ilustrator...',
-        prefixIcon: const Icon(Icons.search, size: 20),
+        hintText: widget.hintText,
+        isDense: widget.dense,
+        contentPadding: widget.dense
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+            : null,
+        prefixIcon: Icon(Icons.search, size: widget.dense ? 18 : 20),
+        prefixIconConstraints: widget.dense
+            ? const BoxConstraints(minWidth: 36, minHeight: 36)
+            : null,
         suffixIcon: widget.value.isNotEmpty
             ? IconButton(
-                icon: const Icon(Icons.close, size: 18),
+                icon: Icon(Icons.close, size: widget.dense ? 16 : 18),
+                visualDensity: widget.dense ? VisualDensity.compact : null,
                 onPressed: () {
                   _controller.clear();
                   widget.onChanged('');
@@ -241,11 +302,21 @@ class _SearchFieldState extends State<_SearchField> {
             : null,
       ),
     );
+
+    // A fixed floor rather than letting the padding decide: the box shrinks,
+    // the thing you have to hit doesn't.
+    return widget.dense
+        ? SizedBox(height: 40, child: Center(child: field))
+        : field;
   }
 }
 
 class _FilterToggleButton extends StatelessWidget {
-  const _FilterToggleButton({required this.activeCount, required this.open, required this.onTap});
+  const _FilterToggleButton({
+    required this.activeCount,
+    required this.open,
+    required this.onTap,
+  });
 
   final int activeCount;
   final bool open;
@@ -261,18 +332,30 @@ class _FilterToggleButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: active ? colors.primary.withValues(alpha: 0.1) : Theme.of(context).cardColor,
+          color: active
+              ? colors.primary.withValues(alpha: 0.1)
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: active ? colors.primary.withValues(alpha: 0.4) : context.borderColor),
+          border: Border.all(
+            color: active
+                ? colors.primary.withValues(alpha: 0.4)
+                : context.borderColor,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.filter_list, size: 16, color: active ? colors.primary : context.mutedForeground),
+            Icon(
+              Icons.filter_list,
+              size: 16,
+              color: active ? colors.primary : context.mutedForeground,
+            ),
             const SizedBox(width: 6),
             Text(
               'Filter',
-              style: AppTypography.captionSemibold(active ? colors.primary : context.mutedForeground),
+              style: AppTypography.captionSemibold(
+                active ? colors.primary : context.mutedForeground,
+              ),
             ),
             if (active) ...[
               const SizedBox(width: 6),
@@ -280,8 +363,14 @@ class _FilterToggleButton extends StatelessWidget {
                 width: 18,
                 height: 18,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
-                child: Text('$activeCount', style: AppTypography.badge(Colors.white)),
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$activeCount',
+                  style: AppTypography.badge(Colors.white),
+                ),
               ),
             ],
             const SizedBox(width: 4),
@@ -308,7 +397,9 @@ class _SortButton extends StatelessWidget {
     return PopupMenuButton<CardSortOption>(
       initialValue: sortBy,
       onSelected: onChanged,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
       itemBuilder: (context) => [
         for (final option in CardSortOption.values)
           PopupMenuItem(
@@ -335,9 +426,16 @@ class _SortButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(sortBy.label, style: AppTypography.captionSemibold(context.mutedForeground)),
+            Text(
+              sortBy.label,
+              style: AppTypography.captionSemibold(context.mutedForeground),
+            ),
             const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: context.mutedForeground),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 16,
+              color: context.mutedForeground,
+            ),
           ],
         ),
       ),
@@ -392,7 +490,12 @@ class _ChipSection<T> extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap, this.icon});
+  const _Chip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
 
   final String label;
   final bool selected;
@@ -410,7 +513,9 @@ class _Chip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? colors.primary : colors.secondary,
           borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(color: selected ? colors.primary : context.borderColor),
+          border: Border.all(
+            color: selected ? colors.primary : context.borderColor,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -418,7 +523,9 @@ class _Chip extends StatelessWidget {
             if (icon != null) ...[icon!, const SizedBox(width: 6)],
             Text(
               label,
-              style: AppTypography.caption(selected ? colors.onPrimary : colors.onSurface),
+              style: AppTypography.caption(
+                selected ? colors.onPrimary : colors.onSurface,
+              ),
             ),
           ],
         ),

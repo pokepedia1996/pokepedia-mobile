@@ -139,7 +139,9 @@ class ListingModel {
       id: row['id'] as int,
       sellerId: row['user_id'] as String? ?? '',
       slug: row['slug'] as String? ?? '',
-      side: (row['side'] as String?) == 'bid' ? ListingSide.bid : ListingSide.ask,
+      side: (row['side'] as String?) == 'bid'
+          ? ListingSide.bid
+          : ListingSide.ask,
       price: row['price'] as int? ?? 0,
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: row['quantity'] as int? ?? 0,
@@ -149,7 +151,9 @@ class ListingModel {
       storeName: storeName,
       isVerified: isVerified,
       cityName: cityName,
-      createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String? ?? '') ??
+          DateTime.now(),
       status: ListingStatusX.fromRaw(row['status'] as String?),
       acceptsOffers: row['accepts_offers'] as bool? ?? false,
       viewCount: (row['view_count'] as num?)?.toInt() ?? 0,
@@ -188,7 +192,9 @@ class ListingModel {
     return ListingModel(
       id: (row['id'] as num).toInt(),
       slug: row['slug'] as String? ?? '',
-      side: (row['side'] as String?) == 'bid' ? ListingSide.bid : ListingSide.ask,
+      side: (row['side'] as String?) == 'bid'
+          ? ListingSide.bid
+          : ListingSide.ask,
       price: row['price'] as int? ?? 0,
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: row['quantity'] as int? ?? 0,
@@ -198,10 +204,14 @@ class ListingModel {
       storeName: row['store_name'] as String? ?? 'Toko',
       isVerified: row['is_verified'] as bool? ?? false,
       cityName: row['city_name'] as String? ?? '',
-      createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String? ?? '') ??
+          DateTime.now(),
       acceptsOffers: false,
       viewCount: (row['view_count'] as num?)?.toInt() ?? 0,
-      expansionSetSymbolUrl: proxyImageUrl(row['expansion_set_symbol_url'] as String?),
+      expansionSetSymbolUrl: proxyImageUrl(
+        row['expansion_set_symbol_url'] as String?,
+      ),
       variantKey: row['variant_key'] as String?,
       sellerAvatarUrl: proxyImageUrl(row['avatar_url'] as String?),
       storeLogoUrl: proxyImageUrl(row['store_logo_url'] as String?),

@@ -64,7 +64,10 @@ class CartRepository {
         .order('added_at', ascending: false);
     if (cartRows.isEmpty) return const [];
 
-    final askIds = cartRows.map((r) => r['ask_order_id'] as int).toSet().toList();
+    final askIds = cartRows
+        .map((r) => r['ask_order_id'] as int)
+        .toSet()
+        .toList();
 
     final listingRows = await _client
         .from('listings')
@@ -75,8 +78,14 @@ class CartRepository {
         .inFilter('id', askIds);
     if (listingRows.isEmpty) return const [];
 
-    final cardIds = listingRows.map((r) => r['card_id'] as int).toSet().toList();
-    final sellerIds = listingRows.map((r) => r['user_id'] as String).toSet().toList();
+    final cardIds = listingRows
+        .map((r) => r['card_id'] as int)
+        .toSet()
+        .toList();
+    final sellerIds = listingRows
+        .map((r) => r['user_id'] as String)
+        .toSet()
+        .toList();
 
     final results = await Future.wait([
       _client
@@ -86,7 +95,10 @@ class CartRepository {
             'regulation_mark, illustrator, language, variant, details, image_url',
           )
           .inFilter('id', cardIds),
-      _client.from('profiles').select('id, username, avatar_url').inFilter('id', sellerIds),
+      _client
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .inFilter('id', sellerIds),
     ]);
     final cardRows = results[0];
     final profileRows = results[1];
@@ -99,14 +111,18 @@ class CartRepository {
     try {
       final storeRows = await _client
           .from('seller_profiles')
-          .select('user_id, store_name, store_slug, store_logo_url, city_name, is_verified')
+          .select(
+            'user_id, store_name, store_slug, store_logo_url, city_name, is_verified',
+          )
           .inFilter('user_id', sellerIds);
       storeById = {for (final r in storeRows) r['user_id'] as String: r};
     } catch (_) {
       // Swallowed — falls back to username-based display below.
     }
 
-    final cardById = {for (final r in cardRows) r['id'] as int: CardModel.fromRow(r)};
+    final cardById = {
+      for (final r in cardRows) r['id'] as int: CardModel.fromRow(r),
+    };
     final profileById = {for (final r in profileRows) r['id'] as String: r};
 
     final listingById = <int, ListingModel>{};
@@ -157,13 +173,19 @@ class CartRepository {
             as Map<String, dynamic>?;
     final error = result?['error'] as String?;
     if (error != null) {
-      throw CartException(error, available: (result?['available'] as num?)?.toInt());
+      throw CartException(
+        error,
+        available: (result?['available'] as num?)?.toInt(),
+      );
     }
   }
 
   Future<void> remove(int cartItemId) async {
     final result =
-        await _client.rpc('remove_from_cart', params: {'p_cart_item_id': cartItemId})
+        await _client.rpc(
+              'remove_from_cart',
+              params: {'p_cart_item_id': cartItemId},
+            )
             as Map<String, dynamic>?;
     final error = result?['error'] as String?;
     if (error != null) throw CartException(error);
@@ -210,35 +232,38 @@ class CartRepository {
   /// their problem right now — blocking checkout because something they
   /// left behind sold out would be nonsense.
   Future<List<String>> validate({Set<int>? only}) async {
-    final result =
-        await _client.rpc('validate_cart') as Map<String, dynamic>?;
+    final result = await _client.rpc('validate_cart') as Map<String, dynamic>?;
     if (result == null) return const [];
     if (result['error'] != null) return const ['Masuk dulu untuk checkout.'];
 
     final invalid = (result['invalid_items'] as List?) ?? const [];
-    return invalid.whereType<Map<String, dynamic>>().where((item) {
-      if (only == null) return true;
-      final id = (item['cart_item_id'] as num?)?.toInt();
-      return id != null && only.contains(id);
-    }).map((item) {
-      switch (item['reason'] as String?) {
-        case 'order_not_found':
-        case 'listing_cancelled':
-          return 'Satu listing sudah dibatalkan penjual.';
-        case 'listing_expired':
-          return 'Satu listing sudah kedaluwarsa.';
-        case 'listing_matched':
-          return 'Satu listing sudah terjual.';
-        case 'not_an_ask_order':
-          return 'Satu item bukan listing yang bisa dibeli.';
-        case 'seller_on_vacation':
-          return 'Penjual sedang libur, satu item tidak bisa diproses.';
-        case 'insufficient_quantity':
-          final available = (item['available'] as num?)?.toInt() ?? 0;
-          return 'Stok satu listing tinggal $available.';
-        default:
-          return 'Satu item di keranjang tidak bisa diproses.';
-      }
-    }).toList();
+    return invalid
+        .whereType<Map<String, dynamic>>()
+        .where((item) {
+          if (only == null) return true;
+          final id = (item['cart_item_id'] as num?)?.toInt();
+          return id != null && only.contains(id);
+        })
+        .map((item) {
+          switch (item['reason'] as String?) {
+            case 'order_not_found':
+            case 'listing_cancelled':
+              return 'Satu listing sudah dibatalkan penjual.';
+            case 'listing_expired':
+              return 'Satu listing sudah kedaluwarsa.';
+            case 'listing_matched':
+              return 'Satu listing sudah terjual.';
+            case 'not_an_ask_order':
+              return 'Satu item bukan listing yang bisa dibeli.';
+            case 'seller_on_vacation':
+              return 'Penjual sedang libur, satu item tidak bisa diproses.';
+            case 'insufficient_quantity':
+              final available = (item['available'] as num?)?.toInt() ?? 0;
+              return 'Stok satu listing tinggal $available.';
+            default:
+              return 'Satu item di keranjang tidak bisa diproses.';
+          }
+        })
+        .toList();
   }
 }

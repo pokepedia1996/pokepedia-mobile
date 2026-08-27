@@ -110,7 +110,9 @@ class _MarketPageState extends ConsumerState<MarketPage>
                   bottom: BorderSide(
                     // `dividerColor` is where the theme puts the web's
                     // `--border` token.
-                    color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).dividerColor.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -131,7 +133,9 @@ class _MarketPageState extends ConsumerState<MarketPage>
                       curve: _morphCurve,
                       child: AnimatedSlide(
                         // The timeline's `y: -4` on a 48px row.
-                        offset: _scrolled ? const Offset(0, -4 / 48) : Offset.zero,
+                        offset: _scrolled
+                            ? const Offset(0, -4 / 48)
+                            : Offset.zero,
                         duration: _morphDuration,
                         curve: _morphCurve,
                         child: AnimatedOpacity(
@@ -170,7 +174,8 @@ class _MarketPageState extends ConsumerState<MarketPage>
                         Expanded(
                           child: TextField(
                             onChanged: (v) =>
-                                ref.read(marketQueryProvider.notifier).state = v,
+                                ref.read(marketQueryProvider.notifier).state =
+                                    v,
                             decoration: const InputDecoration(
                               hintText: 'Cari kartu atau toko...',
                               prefixIcon: Icon(Icons.search, size: 20),
@@ -277,7 +282,9 @@ class _CartButton extends ConsumerWidget {
               alignment: Alignment.center,
               child: Text(
                 '$cartCount',
-                style: AppTypography.badge(colors.onPrimary).copyWith(fontSize: 9),
+                style: AppTypography.badge(
+                  colors.onPrimary,
+                ).copyWith(fontSize: 9),
               ),
             ),
           ),
@@ -656,12 +663,7 @@ class _ListingGrid extends ConsumerWidget {
           ),
           itemCount: listings.length,
 
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.46,
-          ),
+          gridDelegate: listingGridDelegate(context, showSeller: true),
           itemBuilder: (context, i) => ListingCard(listing: listings[i]),
         );
       },

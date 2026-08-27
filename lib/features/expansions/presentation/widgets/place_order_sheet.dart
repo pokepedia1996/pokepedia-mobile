@@ -97,13 +97,12 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
     super.dispose();
   }
 
-  int get _priceValue => int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
+  int get _priceValue =>
+      int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
 
   Future<void> _openWeb(String path) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => CheckoutWebViewPage(path: path),
-      ),
+      MaterialPageRoute<void>(builder: (_) => CheckoutWebViewPage(path: path)),
     );
     if (!mounted) return;
     // The gate may have been cleared in the WebView — re-read it.
@@ -498,10 +497,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _error!,
-            style: AppTypography.bodySm(colors.error),
-          ),
+          Text(_error!, style: AppTypography.bodySm(colors.error)),
         ],
         const SizedBox(height: 18),
         ElevatedButton(

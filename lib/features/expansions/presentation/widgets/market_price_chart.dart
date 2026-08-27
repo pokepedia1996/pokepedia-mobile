@@ -95,11 +95,7 @@ class _MarketPriceChartState extends State<MarketPriceChart> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               void select(Offset local) {
-                final day = _dayAt(
-                  local.dx,
-                  constraints.maxWidth,
-                  sortedDays,
-                );
+                final day = _dayAt(local.dx, constraints.maxWidth, sortedDays);
                 if (day != _selectedDay) setState(() => _selectedDay = day);
               }
 
@@ -107,8 +103,7 @@ class _MarketPriceChartState extends State<MarketPriceChart> {
                 onTapDown: (d) => select(d.localPosition),
                 onHorizontalDragStart: (d) => select(d.localPosition),
                 onHorizontalDragUpdate: (d) => select(d.localPosition),
-                onHorizontalDragEnd: (_) =>
-                    setState(() => _selectedDay = null),
+                onHorizontalDragEnd: (_) => setState(() => _selectedDay = null),
                 onTapCancel: () => setState(() => _selectedDay = null),
                 child: CustomPaint(
                   size: Size(constraints.maxWidth, widget.height),
@@ -271,7 +266,11 @@ class _ChartPainter extends CustomPainter {
       }
     }
     if (min == double.infinity) return;
-    final pad = [500.0, (max - min) * 0.1, min * 0.05].reduce((a, b) => a > b ? a : b);
+    final pad = [
+      500.0,
+      (max - min) * 0.1,
+      min * 0.05,
+    ].reduce((a, b) => a > b ? a : b);
     final yMin = (min - pad).clamp(0.0, double.infinity);
     final yMax = max + pad;
     final ySpan = yMax - yMin == 0 ? 1.0 : yMax - yMin;
@@ -363,8 +362,10 @@ class _ChartPainter extends CustomPainter {
     return started ? path : null;
   }
 
-  double _firstX(List<MarketPricePoint> points, double Function(DateTime) xOf) =>
-      xOf(points.first.day);
+  double _firstX(
+    List<MarketPricePoint> points,
+    double Function(DateTime) xOf,
+  ) => xOf(points.first.day);
 
   double _lastX(List<MarketPricePoint> points, double Function(DateTime) xOf) =>
       xOf(points.last.day);
@@ -391,11 +392,7 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  void _paintXLabels(
-    Canvas canvas,
-    Rect plot,
-    double Function(DateTime) xOf,
-  ) {
+  void _paintXLabels(Canvas canvas, Rect plot, double Function(DateTime) xOf) {
     if (days.isEmpty) return;
     // Roughly one label per 60px, like Recharts' `minTickGap`.
     final maxLabels = (plot.width / 60).floor().clamp(2, 6);
@@ -509,10 +506,7 @@ class _ChartPainter extends CustomPainter {
         Paint()..color = row.color,
       );
       row.left.paint(canvas, Offset(left + 22, y));
-      row.right.paint(
-        canvas,
-        Offset(left + width - 10 - row.right.width, y),
-      );
+      row.right.paint(canvas, Offset(left + width - 10 - row.right.width, y));
       y += 14;
     }
   }
@@ -526,10 +520,9 @@ class _ChartPainter extends CustomPainter {
     final painter = TextPainter(
       text: TextSpan(
         text: value,
-        style: AppTypography.caption(color).copyWith(
-          fontSize: size,
-          fontWeight: bold ? FontWeight.w600 : null,
-        ),
+        style: AppTypography.caption(
+          color,
+        ).copyWith(fontSize: size, fontWeight: bold ? FontWeight.w600 : null),
       ),
       textDirection: TextDirection.ltr,
     )..layout();

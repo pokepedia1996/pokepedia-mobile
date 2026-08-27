@@ -73,10 +73,9 @@ class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
 
     // Sorting by name drops the series grouping, matching web's `isGrouped`.
     if (!_sortBy.isGrouped) {
-      final packs = sortPacks(
-        [for (final group in groups) ...group.packs],
-        _sortBy,
-      );
+      final packs = sortPacks([
+        for (final group in groups) ...group.packs,
+      ], _sortBy);
       return ListView(
         padding: padding,
         children: [

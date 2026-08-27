@@ -25,13 +25,67 @@ const _ranges = <({String label, int? days})>[
   (label: '1 Thn', days: null),
 ];
 
-/// Ports `features/card-detail/components/market-activity.tsx` — the price
-/// chart with its range selector and condition legend, plus the "Histori
-/// Transaksi" table underneath.
+/// Ports the chart half of
+/// `features/card-detail/components/market-activity.tsx` — the price chart
+/// with its range selector and condition legend.
+///
+/// The sales table that used to sit underneath is [SalesHistorySection] now:
+/// the card page stacks its market blocks in its own order, and the two
+/// don't have to travel together.
 ///
 /// The legend lists the conditions this card actually has data for (web
 /// renders all 21 grades and dims the empty ones, which would be a long
 /// scroll on a phone).
+/// "Histori Transaksi" — what this card has actually sold for.
+class SalesHistorySection extends ConsumerWidget {
+  const SalesHistorySection({super.key, required this.cardId});
+
+  final int cardId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    final salesAsync = ref.watch(
+      cardSalesProvider((cardId: cardId, limit: _salesPageSize)),
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text(
+                  'Histori Transaksi',
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+              ),
+              if ((salesAsync.valueOrNull?.total ?? 0) > 0)
+                Text(
+                  '${salesAsync.value!.total} transaksi',
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _SalesHistoryTable(
+            page: salesAsync.valueOrNull,
+            loading: salesAsync.isLoading,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class MarketActivitySection extends ConsumerStatefulWidget {
   const MarketActivitySection({super.key, required this.cardId});
 
@@ -63,9 +117,6 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
     final colors = context.appColors;
     final seriesAsync = ref.watch(
       marketPriceSeriesProvider((cardId: widget.cardId, days: _rangeDays)),
-    );
-    final salesAsync = ref.watch(
-      cardSalesProvider((cardId: widget.cardId, limit: _salesPageSize)),
     );
     final points = seriesAsync.valueOrNull ?? const <MarketPricePoint>[];
     final visible = _visibleFor(points);
@@ -130,10 +181,7 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
             padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
             child: seriesAsync.isLoading
                 ? const SizedBox(height: 180)
-                : MarketPriceChart(
-                    points: points,
-                    visibleConditions: visible,
-                  ),
+                : MarketPriceChart(points: points, visibleConditions: visible),
           ),
           if (points.isNotEmpty)
             _ConditionLegend(
@@ -145,38 +193,6 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
                 _visible = next;
               }),
             ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: context.borderColor)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Histori Transaksi',
-                        style: AppTypography.bodySmSemibold(colors.onSurface),
-                      ),
-                    ),
-                    if ((salesAsync.valueOrNull?.total ?? 0) > 0)
-                      Text(
-                        '${salesAsync.value!.total} transaksi',
-                        style: AppTypography.caption(context.mutedForeground),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _SalesHistoryTable(
-                  page: salesAsync.valueOrNull,
-                  loading: salesAsync.isLoading,
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -305,15 +321,16 @@ class _ConditionLegend extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         condition.short,
-                        style: AppTypography.badge(
-                          visible.contains(condition)
-                              ? context.appColors.onSurface
-                              : context.mutedForeground,
-                        ).copyWith(
-                          decoration: visible.contains(condition)
-                              ? null
-                              : TextDecoration.lineThrough,
-                        ),
+                        style:
+                            AppTypography.badge(
+                              visible.contains(condition)
+                                  ? context.appColors.onSurface
+                                  : context.mutedForeground,
+                            ).copyWith(
+                              decoration: visible.contains(condition)
+                                  ? null
+                                  : TextDecoration.lineThrough,
+                            ),
                       ),
                     ],
                   ),
@@ -483,10 +500,10 @@ class _SaleDate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = formatSaleDate(sale.date);
-    final external = sale.source == SaleSource.external &&
-        sale.facebookUrl != null;
-    final hasPhotos = sale.source == SaleSource.internal &&
-        sale.photoUrls.isNotEmpty;
+    final external =
+        sale.source == SaleSource.external && sale.facebookUrl != null;
+    final hasPhotos =
+        sale.source == SaleSource.internal && sale.photoUrls.isNotEmpty;
 
     if (!external && !hasPhotos) {
       return Text(label, style: AppTypography.caption(context.mutedForeground));
@@ -508,9 +525,9 @@ class _SaleDate extends StatelessWidget {
           Flexible(
             child: Text(
               label,
-              style: AppTypography.caption(context.mutedForeground).copyWith(
-                decoration: TextDecoration.underline,
-              ),
+              style: AppTypography.caption(
+                context.mutedForeground,
+              ).copyWith(decoration: TextDecoration.underline),
             ),
           ),
           const SizedBox(width: 4),

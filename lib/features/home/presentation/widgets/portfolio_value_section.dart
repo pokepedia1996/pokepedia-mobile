@@ -10,6 +10,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
 import '../../repository/models/portfolio_value.dart';
 import '../../usecase/portfolio_value_notifier.dart';
 import 'portfolio_value_chart.dart';
@@ -98,15 +99,12 @@ class _PortfolioPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final targets = ref.watch(portfolioTargetsProvider);
-
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.sm),
-      onTap: targets.length < 2
-          // Nothing to switch to yet: sending the buyer to their lists is
-          // more use than opening a sheet with one row in it.
-          ? () => context.push(Routes.lists)
-          : () => _openPicker(context, ref, targets),
+      // Always the sheet, even with only the main portfolio in it — its
+      // "Buat list baru" row is what a buyer with one list needs, and it
+      // keeps them on Beranda instead of navigating away.
+      onTap: () => showPortfolioPicker(context, ref),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -130,53 +128,8 @@ class _PortfolioPicker extends ConsumerWidget {
       ),
     );
   }
-
-  Future<void> _openPicker(
-    BuildContext context,
-    WidgetRef ref,
-    List<PortfolioTarget> targets,
-  ) async {
-    final picked = await showModalBottomSheet<PortfolioTarget>(
-      context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                'Pilih portofolio',
-                style: AppTypography.h3(context.appColors.onSurface),
-              ),
-            ),
-            for (final target in targets)
-              ListTile(
-                title: Text(
-                  target.name,
-                  style: AppTypography.bodySm(context.appColors.onSurface),
-                ),
-                trailing: target == selected
-                    ? Icon(Icons.check, color: context.appColors.primary)
-                    : null,
-                onTap: () => Navigator.of(sheetContext).pop(target),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (picked != null) {
-      ref.read(selectedPortfolioProvider.notifier).state = picked;
-    }
-  }
 }
 
-/// `1H 7H 1B 3B 6B MAX`.
 class _RangeChips extends StatelessWidget {
   const _RangeChips({required this.selected, required this.onSelect});
 
@@ -268,7 +221,20 @@ class _PreviewSkeleton extends StatelessWidget {
   ];
 
   static const _curve = [
-    52, 58, 55, 63, 61, 70, 68, 74, 71, 79, 84, 81, 88, 95,
+    52,
+    58,
+    55,
+    63,
+    61,
+    70,
+    68,
+    74,
+    71,
+    79,
+    84,
+    81,
+    88,
+    95,
   ];
 
   @override

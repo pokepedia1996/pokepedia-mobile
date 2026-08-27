@@ -37,6 +37,91 @@ class CardInfoChip extends StatelessWidget {
 /// page (mirroring how `StoreCardDetailView` backs both on the web), so
 /// it's placed under `expansions` (which owns [evolutionPoolProvider])
 /// rather than `shared/widgets`.
+/// "Nama kartu — Nomor — Ekspansi" under the artwork, shared by the WTS
+/// listing page and the catalog (WTB) card page so both name a card the
+/// same way.
+class CardTitleLine extends ConsumerWidget {
+  const CardTitleLine({super.key, required this.card});
+
+  final CardModel card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Text(
+      '${card.name} - ${card.collectorNumber} - ${expansionLabelOf(ref, card)}',
+      style: AppTypography.h2(context.appColors.onSurface),
+    );
+  }
+}
+
+/// "Mega Evolution Promos (SV2A)" once the expansion has loaded; until then
+/// the code on its own, rather than an empty pair of brackets.
+String expansionLabelOf(WidgetRef ref, CardModel card) {
+  final code = card.expansionCode.toUpperCase();
+  final pack = ref
+      .watch(
+        packForCardProvider((slug: card.packSlug, language: card.language.raw)),
+      )
+      .valueOrNull;
+  final name = pack?.name;
+  return name == null || name.isEmpty ? code : '$name ($code)';
+}
+
+/// The "Detail kartu" heading above [CardDetailsSection]: a title, whatever
+/// action the host page puts on the right, and the card's own facts.
+class CardDetailsHeader extends StatelessWidget {
+  const CardDetailsHeader({super.key, required this.card, this.trailing});
+
+  final CardModel card;
+
+  /// The wishlist control, which each page owns differently.
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                'Detail kartu',
+                style: AppTypography.h3(colors.onSurface),
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Divider(height: 1, color: context.borderColor),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            CardInfoChip(text: card.language.labelId),
+            CardInfoChip(text: card.category.labelId),
+            if (card.rarity != null) CardInfoChip(text: card.rarity!),
+            CardInfoChip(
+              text:
+                  '${card.expansionCode.toUpperCase()} · '
+                  '${card.collectorNumber}',
+            ),
+            if (card.illustrator != null)
+              CardInfoChip(text: 'Ilus. ${card.illustrator}'),
+            if (card.regulationMark != null)
+              CardInfoChip(text: 'Reg. ${card.regulationMark}'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class CardDetailsSection extends StatelessWidget {
   const CardDetailsSection({super.key, required this.card});
 
@@ -117,6 +202,13 @@ class _PokemonDetailsCardState extends ConsumerState<PokemonDetailsCard> {
                 CardInfoChip(text: d.evolutionStage!.labelId),
             ],
           ),
+          // Carried over from the flat info panel this card replaced on the
+          // catalog page — an ability is as much a part of a card as its
+          // attacks, and dropping it would have lost information.
+          if (d.ability != null) ...[
+            const SizedBox(height: 14),
+            _AbilityBlock(ability: d.ability!),
+          ],
           if (d.attacks.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text(
@@ -530,6 +622,62 @@ class InfoCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+/// A card's ability, styled like the attack rows beside it.
+class _AbilityBlock extends StatelessWidget {
+  const _AbilityBlock({required this.ability});
+
+  final AbilityModel ability;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.secondary,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
+                ),
+                child: Text(
+                  'Ability',
+                  style: AppTypography.badge(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ability.name,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+              ),
+            ],
+          ),
+          if (ability.description != null &&
+              ability.description!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              ability.description!,
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+          ],
         ],
       ),
     );

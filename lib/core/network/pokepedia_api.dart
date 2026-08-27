@@ -18,20 +18,42 @@ import '../config/app_config.dart';
 /// Supabase session it already holds, and the Biteship and Xendit secrets
 /// never leave the server.
 class PokepediaApi {
-  PokepediaApi(this._auth);
+  PokepediaApi(this._client);
 
-  final GoTrueClient _auth;
+  final SupabaseClient _client;
+
+  GoTrueClient get _auth => _client.auth;
 
   static const _timeout = Duration(seconds: 30);
 
-  Future<Map<String, dynamic>> get(String path) => _retrying(
-    () => _send('GET', path, null),
-  );
+  /// The value of the `x-pokepedia-client` header that pokepedia.id's
+  /// firewall rule looks for.
+  ///
+  /// Held in Supabase Vault rather than compiled into the app, so it can be
+  /// rotated without a release; fetched once per app run and re-fetched if
+  /// the edge ever challenges us again, which is what a rotation looks like
+  /// from here.
+  String? _bypassKey;
 
-  Future<Map<String, dynamic>> post(
-    String path,
-    Map<String, dynamic> body,
-  ) => _retrying(() => _send('POST', path, body));
+  Future<String?> _fetchBypassKey() async {
+    try {
+      final response = await _client.functions.invoke('client-config');
+      final data = response.data;
+      if (data is Map && data['bypassKey'] is String) {
+        return data['bypassKey'] as String;
+      }
+    } catch (_) {
+      // Not fatal: without the header the request is challenged, and the
+      // caller already handles that path.
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> get(String path) =>
+      _retrying(() => _send('GET', path, null));
+
+  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
+      _retrying(() => _send('POST', path, body));
 
   /// Retries a 401 exactly once.
   ///
@@ -52,6 +74,19 @@ class PokepediaApi {
         // Refresh failed too — fall through and let the retry report it.
       }
       return send();
+    } on ApiChallengedException {
+      // The edge turned us away. Either we had no key yet or it was
+      // rotated; fetch it fresh and give the request one more go before
+      // telling the caller the site is unreachable.
+      _bypassKey = await _fetchBypassKey();
+      if (_bypassKey == null) throw _edgeUnreachable;
+      try {
+        return await send();
+      } on ApiChallengedException {
+        // Still challenged with a fresh key: the rule isn't matching, and
+        // callers only know how to handle "unreachable".
+        throw _edgeUnreachable;
+      }
     }
   }
 
@@ -73,6 +108,10 @@ class PokepediaApi {
       request.headers
         ..set(HttpHeaders.authorizationHeader, 'Bearer $token')
         ..set(HttpHeaders.acceptHeader, 'application/json');
+      // Satisfies the Vercel firewall rule. Absent on the very first call of
+      // a run, which is what the retry above is for.
+      final bypass = _bypassKey;
+      if (bypass != null) request.headers.set(_bypassHeader, bypass);
       if (body != null) {
         request.headers.contentType = ContentType.json;
         request.add(utf8.encode(jsonEncode(body)));
@@ -86,10 +125,9 @@ class PokepediaApi {
       // engine can — so say so plainly rather than surfacing "429" or a
       // JSON parse error from an HTML body.
       if (response.headers.value('x-vercel-mitigated') != null) {
-        throw const ApiUnreachableException(
-          'Layanan pengiriman & pembayaran sedang tidak bisa diakses dari '
-          'aplikasi. Lanjutkan lewat halaman web.',
-        );
+        // Distinct from "unreachable": this one is retryable once the
+        // bypass header is in hand, and `_retrying` does exactly that.
+        throw const ApiChallengedException();
       }
 
       final decoded = text.isEmpty ? null : jsonDecode(text);
@@ -143,6 +181,14 @@ class PokepediaApi {
   }
 }
 
+/// The header the firewall rule matches on.
+const _bypassHeader = 'x-pokepedia-client';
+
+const _edgeUnreachable = ApiUnreachableException(
+  'Layanan pengiriman & pembayaran sedang tidak bisa diakses dari '
+  'aplikasi. Lanjutkan lewat halaman web.',
+);
+
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode, this.payload});
 
@@ -160,11 +206,19 @@ class ApiUnreachableException extends ApiException {
   const ApiUnreachableException(super.message);
 }
 
+/// Vercel's Attack Challenge Mode answered instead of the route. Internal:
+/// callers see [ApiUnreachableException] if the retry with a fresh bypass
+/// key doesn't get through either.
+class ApiChallengedException extends ApiException {
+  const ApiChallengedException()
+    : super('Permintaan ditahan oleh proteksi situs.');
+}
+
 /// The session is missing, expired, or was refused.
 class ApiAuthException extends ApiException {
   const ApiAuthException(super.message);
 }
 
 final pokepediaApiProvider = Provider(
-  (ref) => PokepediaApi(Supabase.instance.client.auth),
+  (ref) => PokepediaApi(Supabase.instance.client),
 );

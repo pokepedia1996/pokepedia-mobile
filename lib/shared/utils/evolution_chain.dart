@@ -44,7 +44,10 @@ class EvolutionStageGroup {
 /// Weedle → Kakuna → Beedrill line. Putting [current] first means its own
 /// `evolves_from` edge is in the graph, its row wins for its own species,
 /// and the stage chip shows the print the user is actually looking at.
-List<EvolutionStageGroup>? buildEvolutionStages(CardModel current, List<CardModel> pool) {
+List<EvolutionStageGroup>? buildEvolutionStages(
+  CardModel current,
+  List<CardModel> pool,
+) {
   final allCards = [
     current,
     ...pool.where((c) => c.id != current.id),
@@ -121,7 +124,8 @@ List<EvolutionStageGroup>? buildEvolutionStages(CardModel current, List<CardMode
   return stages.length > 1 ? stages : null;
 }
 
-const _pokeapiSpriteBase = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
+const _pokeapiSpriteBase =
+    'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 
 /// Ports `getPokemonSpriteUrl` (minus the mega-evolution form-id overrides
 /// table, which only affects a handful of names).

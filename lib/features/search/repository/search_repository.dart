@@ -58,8 +58,7 @@ class SearchFilterOptions {
   final List<SearchExpansionOption> expansions;
 
   /// Expansion codes in display order, for the `p_expansions` argument.
-  List<String> get packMarks =>
-      expansions.map((e) => e.code).toList();
+  List<String> get packMarks => expansions.map((e) => e.code).toList();
   final List<CardCategory> categories;
   final List<PokemonType> types;
   final List<EvolutionStage> evolutionStages;
@@ -92,6 +91,7 @@ SearchFilterOptions resolveFilterOptions({
     if (derived.isNotEmpty) return derived;
     return vocabulary;
   }
+
   const encoder = JsonEncoder.withIndent('  ');
   final pretty = encoder.convert(fromServer?.categories);
   debugPrint(pretty);
@@ -214,8 +214,9 @@ class SearchRepository {
       rarities: rarities
         ..sort((a, b) => rarityRank(a).compareTo(rarityRank(b))),
       expansions: expansions,
-      categories:
-          stringList('categories').map(CardCategoryX.fromRaw).toSet().toList(),
+      categories: stringList(
+        'categories',
+      ).map(CardCategoryX.fromRaw).toSet().toList(),
       types: types,
       evolutionStages: stages,
       trainerSubtypes: subtypes,
@@ -236,10 +237,12 @@ class SearchRepository {
       errors.add('Daftar filter kosong');
       return const {};
     } on PostgrestException catch (e) {
-      errors.add(_isUnpopulatedCache(e)
-          ? 'Daftar filter belum disiapkan di server '
-              '(filter_options_cache belum di-refresh)'
-          : 'Filter: ${e.message}');
+      errors.add(
+        _isUnpopulatedCache(e)
+            ? 'Daftar filter belum disiapkan di server '
+                  '(filter_options_cache belum di-refresh)'
+            : 'Filter: ${e.message}',
+      );
       return const {};
     } catch (e) {
       errors.add('Filter: ${_describe(e)}');
@@ -251,8 +254,7 @@ class SearchRepository {
   /// of a matview that has never been refreshed — worth naming, since it
   /// reads like a client bug otherwise and no client change can fix it.
   static bool _isUnpopulatedCache(PostgrestException e) {
-    return e.code == '55000' ||
-        e.message.contains('has not been populated');
+    return e.code == '55000' || e.message.contains('has not been populated');
   }
 
   Future<List<SearchExpansionOption>> _fetchExpansionOptions(
@@ -355,15 +357,21 @@ class SearchRepository {
         'p_categories': _rawList(query.filters.categories, (c) => c.raw),
         'p_types': _rawList(query.filters.types, (t) => t.assetName),
         'p_rarities': _rawList(query.filters.rarities, (r) => r),
-        'p_evolution_stages':
-            _rawList(query.filters.evolutionStages, (s) => s.labelId),
-        'p_trainer_subtypes':
-            _rawList(query.filters.trainerSubtypes, (s) => s.labelId),
-        'p_regulation_marks':
-            _rawList(query.filters.regulationMarks, (m) => m),
+        'p_evolution_stages': _rawList(
+          query.filters.evolutionStages,
+          (s) => s.labelId,
+        ),
+        'p_trainer_subtypes': _rawList(
+          query.filters.trainerSubtypes,
+          (s) => s.labelId,
+        ),
+        'p_regulation_marks': _rawList(query.filters.regulationMarks, (m) => m),
         'p_expansions': _rawList(query.packMarks, (m) => m),
         'p_weakness_types': _rawList(query.weaknessTypes, (t) => t.assetName),
-        'p_resistance_types': _rawList(query.resistanceTypes, (t) => t.assetName),
+        'p_resistance_types': _rawList(
+          query.resistanceTypes,
+          (t) => t.assetName,
+        ),
         'p_hp_min': query.hpMin,
         'p_hp_max': query.hpMax,
         'p_retreat_min': query.retreatMin,
@@ -377,7 +385,9 @@ class SearchRepository {
       },
     );
 
-    final rows = (data as List<dynamic>).whereType<Map<String, dynamic>>().toList();
+    final rows = (data as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .toList();
     if (rows.isEmpty) return SearchPage.empty;
 
     final cards = rows

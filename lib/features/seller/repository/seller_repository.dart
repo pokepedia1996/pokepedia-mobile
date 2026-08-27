@@ -17,7 +17,14 @@ class SellerIdentity {
 
   /// Ports the page's `storeHref`: the store slug when there is one, else
   /// the username, else no link at all.
-  String? get storeHandle => storeSlug ?? username;
+  ///
+  /// Blank counts as absent. A `store_slug` of `''` is not null, so a plain
+  /// `??` would hand back an empty handle, and `/market/` routes to a path
+  /// with no `:handle` segment at all.
+  String? get storeHandle => _present(storeSlug) ?? _present(username);
+
+  static String? _present(String? value) =>
+      (value == null || value.trim().isEmpty) ? null : value;
 }
 
 /// Data access for the seller dashboard.
@@ -56,7 +63,11 @@ class SellerRepository {
     if (userId == null) return const SellerIdentity();
 
     final results = await Future.wait([
-      _client.from('profiles').select('username').eq('id', userId).maybeSingle(),
+      _client
+          .from('profiles')
+          .select('username')
+          .eq('id', userId)
+          .maybeSingle(),
       _client
           .from('seller_profiles')
           .select('store_slug, is_active')

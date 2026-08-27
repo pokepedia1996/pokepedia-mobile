@@ -102,7 +102,9 @@ class _Pill extends StatelessWidget {
           decoration: BoxDecoration(
             color: active ? accent.withValues(alpha: 0.14) : Colors.transparent,
             border: Border.all(
-              color: active ? accent.withValues(alpha: 0.5) : context.borderColor,
+              color: active
+                  ? accent.withValues(alpha: 0.5)
+                  : context.borderColor,
             ),
             borderRadius: BorderRadius.circular(AppRadius.full),
           ),

@@ -40,7 +40,7 @@ class PortfolioTarget {
 
   bool get isPrimary => listId == null;
 
-  static const primary = PortfolioTarget(name: 'Portofolio Utama');
+  static const primary = PortfolioTarget(name: 'Utama');
 
   @override
   bool operator ==(Object other) =>

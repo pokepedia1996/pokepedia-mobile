@@ -97,8 +97,7 @@ class _RelatedCardThumb extends ConsumerWidget {
     return SizedBox(
       width: 120,
       child: InkWell(
-        onTap: () =>
-            context.push(Routes.cardDetail(card.packSlug, card.id)),
+        onTap: () => context.push(Routes.cardDetail(card.packSlug, card.id)),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -130,7 +129,8 @@ class _RelatedCardThumb extends ConsumerWidget {
                         height: 16,
                         fit: BoxFit.contain,
                         alignment: Alignment.centerLeft,
-                        errorBuilder: (context, _, __) => _CodeLabel(card: card),
+                        errorBuilder: (context, _, __) =>
+                            _CodeLabel(card: card),
                       )
                     else
                       _CodeLabel(card: card),

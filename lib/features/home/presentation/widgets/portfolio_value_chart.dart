@@ -115,9 +115,7 @@ class _ValueLinePainter extends CustomPainter {
     for (var i = 0; i < series.length; i++) {
       final x = stepX * i;
       final y =
-          padY +
-          usableHeight -
-          ((series[i].value - min) / span) * usableHeight;
+          padY + usableHeight - ((series[i].value - min) / span) * usableHeight;
       if (i == 0) {
         path.moveTo(x, y);
       } else {

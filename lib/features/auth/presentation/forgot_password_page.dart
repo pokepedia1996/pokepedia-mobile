@@ -34,7 +34,9 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
     // Fire-and-forget like web: the "sent" state shows regardless of
     // whether the email exists, so this can't be used to enumerate
     // accounts.
-    await ref.read(authProvider.notifier).requestPasswordReset(_email.text.trim());
+    await ref
+        .read(authProvider.notifier)
+        .requestPasswordReset(_email.text.trim());
     if (!mounted) return;
     setState(() {
       _submitting = false;

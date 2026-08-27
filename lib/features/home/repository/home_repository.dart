@@ -37,7 +37,9 @@ class HomeRepository {
         .inFilter('code_lower', slugs)
         .eq('language', language);
 
-    final bySlug = {for (final r in rows) r['code_lower'] as String: PackModel.fromRow(r)};
+    final bySlug = {
+      for (final r in rows) r['code_lower'] as String: PackModel.fromRow(r),
+    };
     return slugs.map((s) => bySlug[s]).whereType<PackModel>().toList();
   }
 }

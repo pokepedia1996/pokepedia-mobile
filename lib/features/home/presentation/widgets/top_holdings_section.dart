@@ -91,9 +91,8 @@ class _HoldingRow extends StatelessWidget {
     ].join(' · ');
 
     return InkWell(
-      onTap: () => context.push(
-        Routes.cardDetail(holding.packSlug, holding.cardId),
-      ),
+      onTap: () =>
+          context.push(Routes.cardDetail(holding.packSlug, holding.cardId)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(

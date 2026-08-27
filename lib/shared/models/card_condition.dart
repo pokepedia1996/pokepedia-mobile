@@ -206,6 +206,8 @@ extension CardConditionX on CardCondition {
     return null;
   }
 
-  static CardCondition fromRaw(String raw) =>
-      CardCondition.values.firstWhere((c) => c.raw == raw, orElse: () => CardCondition.nm);
+  static CardCondition fromRaw(String raw) => CardCondition.values.firstWhere(
+    (c) => c.raw == raw,
+    orElse: () => CardCondition.nm,
+  );
 }

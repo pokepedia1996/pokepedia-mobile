@@ -31,7 +31,8 @@ class CardSwap extends StatefulWidget {
   State<CardSwap> createState() => _CardSwapState();
 }
 
-class _CardSwapState extends State<CardSwap> with SingleTickerProviderStateMixin {
+class _CardSwapState extends State<CardSwap>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late List<int> _order;
   Timer? _timer;
@@ -40,19 +41,23 @@ class _CardSwapState extends State<CardSwap> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
     _order = List.generate(widget.imageUrls.length, (i) => i);
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          setState(() {
-            _order = [..._order.skip(1), _order.first];
-            _controller.value = 0;
-          });
-        }
-      });
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 700),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            setState(() {
+              _order = [..._order.skip(1), _order.first];
+              _controller.value = 0;
+            });
+          }
+        });
     if (widget.imageUrls.length > 1) {
-      _timer = Timer.periodic(widget.delay, (_) => _controller.forward(from: 0));
+      _timer = Timer.periodic(
+        widget.delay,
+        (_) => _controller.forward(from: 0),
+      );
     }
   }
 
@@ -96,15 +101,21 @@ class _CardSwapState extends State<CardSwap> with SingleTickerProviderStateMixin
               final end = _slotOffset(total - 1);
               final dip = math.sin(_controller.value * math.pi) * 90;
               offset = Offset.lerp(start, end, t)! + Offset(0, dip);
-              scale = _slotScale(0) + (_slotScale(total - 1) - _slotScale(0)) * t;
-              rotation = _slotRotation(0) + (_slotRotation(total - 1) - _slotRotation(0)) * t;
+              scale =
+                  _slotScale(0) + (_slotScale(total - 1) - _slotScale(0)) * t;
+              rotation =
+                  _slotRotation(0) +
+                  (_slotRotation(total - 1) - _slotRotation(0)) * t;
               zIndex = t < 0.5 ? total : 0;
             } else {
               final start = _slotOffset(pos);
               final end = _slotOffset(pos - 1);
               offset = Offset.lerp(start, end, t)!;
-              scale = _slotScale(pos) + (_slotScale(pos - 1) - _slotScale(pos)) * t;
-              rotation = _slotRotation(pos) + (_slotRotation(pos - 1) - _slotRotation(pos)) * t;
+              scale =
+                  _slotScale(pos) + (_slotScale(pos - 1) - _slotScale(pos)) * t;
+              rotation =
+                  _slotRotation(pos) +
+                  (_slotRotation(pos - 1) - _slotRotation(pos)) * t;
               zIndex = total - pos + 1;
             }
 
@@ -146,10 +157,7 @@ class _DeckCard extends StatelessWidget {
     required this.imageUrl,
   });
 
-  final double scale,
-      rotation,
-      width,
-      height;
+  final double scale, rotation, width, height;
   final String imageUrl;
 
   @override
@@ -166,14 +174,19 @@ class _DeckCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.lg),
             border: Border.all(color: Colors.white, width: 1),
             boxShadow: const [
-              BoxShadow(color: Colors.black38, blurRadius: 18, offset: Offset(0, 10)),
+              BoxShadow(
+                color: Colors.black38,
+                blurRadius: 18,
+                offset: Offset(0, 10),
+              ),
             ],
           ),
           clipBehavior: Clip.antiAlias,
           child: Image.network(
             imageUrl,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+            errorBuilder: (context, error, stackTrace) =>
+                Container(color: Colors.black),
           ),
         ),
       ),
