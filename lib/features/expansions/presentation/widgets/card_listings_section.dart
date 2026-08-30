@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/routes.dart';
+import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -18,6 +19,8 @@ import '../../../../shared/widgets/seller_avatar.dart';
 import '../../../cart/repository/cart_repository.dart';
 import '../../../cart/usecase/cart_notifier.dart';
 import '../../../proposals/presentation/widgets/make_offer_sheet.dart';
+import '../../../proposals/repository/models/listing_offer_model.dart';
+import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../usecase/expansions_notifier.dart';
 
 /// How many rows are shown before "Muat lebih banyak" — web paginates at
@@ -255,6 +258,20 @@ class _ListingRow extends ConsumerStatefulWidget {
 }
 
 class _ListingRowState extends ConsumerState<_ListingRow> {
+  bool get _isMine {
+    final me = ref.watch(authProvider).valueOrNull?.id;
+    return me != null && me.isNotEmpty && me == widget.listing.sellerId;
+  }
+
+  /// The viewer's live offer on this listing, if they already made one.
+  ListingOfferModel? get _myOffer =>
+      ref.watch(myOfferOnListingProvider(widget.listing.slug)).valueOrNull;
+
+  Future<void> _offer(ListingModel listing) async {
+    final submitted = await showMakeOfferSheet(context, listing: listing);
+    if (submitted == true && mounted) ref.invalidate(myOffersProvider);
+  }
+
   int _qty = 1;
   bool _adding = false;
 
@@ -415,14 +432,23 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
               ),
             ),
           ],
-          if (listing.acceptsOffers && !soldOut) ...[
+          // Own listings are excluded from this feed, but a row can survive
+          // a sign-in, and `submit_offer` refuses your own listing anyway.
+          if (listing.acceptsOffers && !soldOut && !_isMine) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => showMakeOfferSheet(context, listing: listing),
-                icon: const Icon(Icons.handshake_outlined, size: 16),
-                label: const Text('Buat Penawaran'),
+                onPressed: _myOffer != null
+                    ? () => context.push(Routes.proposals)
+                    : () => _offer(listing),
+                icon: Icon(
+                  _myOffer != null ? Icons.schedule : Icons.handshake_outlined,
+                  size: 16,
+                ),
+                label: Text(
+                  _myOffer != null ? 'Penawaran terkirim' : 'Buat Penawaran',
+                ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: context.appSemantic.success,
                   side: BorderSide(

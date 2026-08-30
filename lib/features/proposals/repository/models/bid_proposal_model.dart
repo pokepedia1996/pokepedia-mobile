@@ -7,6 +7,16 @@ import '../../../../shared/models/card_model.dart';
 enum BidProposalStatus { pending, accepted, rejected, expired, withdrawn }
 
 extension BidProposalStatusX on BidProposalStatus {
+  /// `bid_proposals.status`. Unknown values read as pending rather than
+  /// throwing — a status the app doesn't know yet is still awaiting someone.
+  static BidProposalStatus fromRaw(String? raw) => switch (raw) {
+    'accepted' => BidProposalStatus.accepted,
+    'rejected' => BidProposalStatus.rejected,
+    'expired' => BidProposalStatus.expired,
+    'withdrawn' => BidProposalStatus.withdrawn,
+    _ => BidProposalStatus.pending,
+  };
+
   String get label {
     switch (this) {
       case BidProposalStatus.pending:
@@ -33,6 +43,7 @@ class BidProposalModel {
     required this.status,
     required this.createdAt,
     required this.expiresAt,
+    this.seenAt,
     this.message,
   });
 
@@ -42,6 +53,10 @@ class BidProposalModel {
   final int proposedQuantity;
   final String sellerStoreName;
   final BidProposalStatus status;
+
+  /// When the bid's owner first opened this proposal. Null is what the
+  /// market banner counts as "baru".
+  final DateTime? seenAt;
   final DateTime createdAt;
   final DateTime expiresAt;
   final String? message;

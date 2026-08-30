@@ -62,10 +62,7 @@ Widget _host(_FakeAuth auth) {
   );
   return ProviderScope(
     overrides: [authProvider.overrideWith(() => auth)],
-    child: MaterialApp.router(
-      theme: AppTheme.light,
-      routerConfig: router,
-    ),
+    child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
   );
 }
 

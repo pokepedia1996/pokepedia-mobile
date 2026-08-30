@@ -36,6 +36,18 @@ ListingModel _listing(int id, {ListingSide side = ListingSide.ask}) {
   );
 }
 
+StoreModel _storeSold(int itemsSoldCount) => StoreModel(
+  handle: 'toko-ash',
+  storeName: 'Toko Ash',
+  tagline: '',
+  activeListingCount: 40,
+  cityName: 'Jakarta',
+  isVerified: true,
+  topRated: true,
+  itemsSoldCount: itemsSoldCount,
+  followersCount: 12,
+);
+
 const _store = StoreModel(
   handle: 'toko-ash',
   storeName: 'Toko Ash',
@@ -48,13 +60,18 @@ const _store = StoreModel(
   followersCount: 12,
 );
 
-Widget _host({required List<ListingModel> listings, int? total, PosterSide side = PosterSide.wts}) {
+Widget _host({
+  required List<ListingModel> listings,
+  int? total,
+  PosterSide side = PosterSide.wts,
+  StoreModel store = _store,
+}) {
   return MaterialApp(
     theme: AppTheme.light,
     home: Scaffold(
       body: FittedBox(
         child: StorePoster(
-          store: _store,
+          store: store,
           listings: listings,
           side: side,
           totalCount: total,
@@ -80,7 +97,10 @@ void main() {
 
   testWidgets('WTB swaps the badge', (tester) async {
     await tester.pumpWidget(
-      _host(listings: [_listing(1, side: ListingSide.bid)], side: PosterSide.wtb),
+      _host(
+        listings: [_listing(1, side: ListingSide.bid)],
+        side: PosterSide.wtb,
+      ),
     );
     expect(find.text('WTB'), findsOneWidget);
     expect(find.text('WTS'), findsNothing);
@@ -88,10 +108,27 @@ void main() {
 
   testWidgets('the overflow tile counts what did not fit', (tester) async {
     // 112 listings, 12 tiles: 11 cards plus a "+101 lainnya".
-    final listings = [for (var i = 1; i <= StorePoster.capacity; i++) _listing(i)];
+    final listings = [
+      for (var i = 1; i <= StorePoster.capacity; i++) _listing(i),
+    ];
     await tester.pumpWidget(_host(listings: listings, total: 112));
 
     expect(find.text('+101'), findsOneWidget);
+    expect(find.text('lainnya'), findsOneWidget);
+  });
+
+  testWidgets('the first poster counts the listings it leaves out', (
+    tester,
+  ) async {
+    // What the sheet builds for page one: eleven cards and a tile saying
+    // how much more the store is holding. 30 - 11 = 19.
+    final listings = [
+      for (var i = 1; i < StorePoster.capacity; i++) _listing(i),
+    ];
+    await tester.pumpWidget(_host(listings: listings, total: 30));
+
+    expect(listings, hasLength(StorePoster.capacity - 1));
+    expect(find.text('+19'), findsOneWidget);
     expect(find.text('lainnya'), findsOneWidget);
   });
 
@@ -100,6 +137,44 @@ void main() {
       _host(listings: [_listing(1), _listing(2)], total: 2),
     );
     expect(find.text('lainnya'), findsNothing);
+  });
+
+  testWidgets('a quiet store keeps its sales count to itself', (tester) async {
+    // Under five sales the number reads as "nobody buys here" — worse for
+    // the seller than saying nothing, which is what the poster does.
+    await tester.pumpWidget(
+      _host(listings: [_listing(1)], store: _storeSold(4)),
+    );
+    expect(find.textContaining('terjual'), findsNothing);
+  });
+
+  testWidgets('the threshold itself still shows', (tester) async {
+    await tester.pumpWidget(
+      _host(listings: [_listing(1)], store: _storeSold(5)),
+    );
+    expect(find.text('5 terjual'), findsOneWidget);
+  });
+
+  testWidgets('tiles label the condition by its short code', (tester) async {
+    // The tile is ~245px wide and the price now sits on the art; the full
+    // label would wrap into it.
+    await tester.pumpWidget(_host(listings: [_listing(1)]));
+
+    expect(find.text('NM'), findsOneWidget);
+    expect(find.text(CardCondition.nm.label), findsNothing);
+  });
+
+  testWidgets('the price is painted over the card art', (tester) async {
+    // Revision 1: stacked on the image rather than stealing a row beneath
+    // it, so twelve tiles still fit at a readable size.
+    await tester.pumpWidget(_host(listings: [_listing(3)]));
+
+    final price = find.text('Rp30.000');
+    expect(price, findsOneWidget);
+    expect(
+      find.ancestor(of: price, matching: find.byType(Stack)),
+      findsAtLeastNWidgets(1),
+    );
   });
 
   testWidgets('renders at a fixed size regardless of the screen', (

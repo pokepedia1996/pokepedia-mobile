@@ -243,7 +243,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                     ),
                     decoration: BoxDecoration(
                       color: isBid ? semantic.bid : semantic.ask,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       isBid ? 'BID (WTB)' : 'ASK (WTS)',

@@ -33,7 +33,8 @@ Widget _pushedPage({required Widget body}) {
 
 void main() {
   setUp(() {
-    final view = TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
     view.viewInsets = FakeViewPadding.zero;
     view.padding = const FakeViewPadding(top: _statusBarHeight);
     view.devicePixelRatio = 1.0;
@@ -58,7 +59,8 @@ void main() {
     expect(
       contentTop,
       greaterThanOrEqualTo(_statusBarHeight + kToolbarHeight),
-      reason: 'Scaffold strips the body padding an app bar would have '
+      reason:
+          'Scaffold strips the body padding an app bar would have '
           'covered, so both the status bar inset and the toolbar row have to '
           'be re-added — otherwise the first widget sits under the back '
           'button.',
@@ -77,7 +79,9 @@ void main() {
     // Nothing to pop, so `TransparentAppBar` renders no back button and the
     // body should not open a hole where one would have been.
     await tester.pumpWidget(
-      _page(body: const Align(alignment: Alignment.topLeft, child: Text('Konten'))),
+      _page(
+        body: const Align(alignment: Alignment.topLeft, child: Text('Konten')),
+      ),
     );
 
     expect(find.byType(CircularBackButton), findsNothing);

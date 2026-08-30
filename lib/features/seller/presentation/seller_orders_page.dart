@@ -251,7 +251,10 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) => SellerOrderCard(
         order: orders[i],
-        onTap: () => context.push(Routes.orderDetail(orders[i].slug)),
+        // The seller's detail, not the buyer's. Both render the same row —
+        // `orders_select_own` covers either side — but a seller opening the
+        // buyer view saw what they had "paid" for their own listing.
+        onTap: () => context.push(Routes.sellerOrderDetail(orders[i].slug)),
       ),
     );
   }

@@ -231,6 +231,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     final current = state.shippingBySeller[sellerId] ?? const SellerShipping();
     _setShipping(sellerId, current.copyWith(selected: option));
     _syncMandatoryInsurance(sellerId);
+    _syncChannel();
   }
 
   /// Ports `isInsuranceMandatoryFor`: above Rp500.000 the buyer doesn't get
@@ -243,6 +244,35 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     state = state.copyWith(
       insuranceBySeller: {...state.insuranceBySeller, sellerId: enabled},
     );
+    _syncChannel();
+  }
+
+  /// Ports the two `usePayment` effects the picker was missing.
+  ///
+  /// The channel a buyer picked can stop being valid without them touching
+  /// it: QRIS is capped at [qrisMaxIdr], and the total moves when a courier
+  /// is chosen, when insurance turns mandatory above Rp500.000, or when a
+  /// coupon lands. Web clears the stale channel and settles on the first one
+  /// that *is* allowed; the app kept the dead pick and let the buyer submit
+  /// with it.
+  ///
+  /// Only ever touches the channel — a buyer who chose Saldo stays on Saldo.
+  void _syncChannel() {
+    if (state.paymentMethod == PaymentMethod.wallet) return;
+
+    final total = totals.grandTotalBeforeFee;
+    if (total <= 0) return;
+
+    final channel = state.paymentChannel;
+    if (channel != null && !isChannelAllowedForAmount(channel, total)) {
+      state = state.copyWith(clearChannel: true);
+    }
+    if (state.paymentChannel != null) return;
+
+    final available = availablePaymentChannels(total);
+    if (available.isNotEmpty) {
+      state = state.copyWith(paymentChannel: available.first);
+    }
   }
 
   void setBuyerNote(String note) => state = state.copyWith(buyerNote: note);
@@ -252,6 +282,8 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       paymentMethod: PaymentMethod.xendit,
       paymentChannel: channel,
     );
+    // Guards a pick made against a total that has since moved.
+    _syncChannel();
   }
 
   void selectWallet() {
@@ -281,10 +313,13 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       clearCoupon: result.coupon == null,
       clearCouponError: result.error == null,
     );
+    _syncChannel();
   }
 
-  void removeCoupon() =>
-      state = state.copyWith(clearCoupon: true, clearCouponError: true);
+  void removeCoupon() {
+    state = state.copyWith(clearCoupon: true, clearCouponError: true);
+    _syncChannel();
+  }
 
   int get itemsSubtotal => _items.fold(0, (sum, item) => sum + item.subtotal);
 

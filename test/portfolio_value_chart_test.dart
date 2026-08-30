@@ -82,10 +82,7 @@ void main() {
     await tester.pumpWidget(_host(series: const [], holdings: const []));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Belum ada kartu di portofolio ini'),
-      findsOneWidget,
-    );
+    expect(find.text('Belum ada kartu di portofolio ini'), findsOneWidget);
   });
 
   testWidgets('a dead-flat series still renders', (tester) async {
@@ -93,10 +90,7 @@ void main() {
     // it.
     await tester.pumpWidget(
       _host(
-        series: [
-          _point('2026-08-19', 500000),
-          _point('2026-08-20', 500000),
-        ],
+        series: [_point('2026-08-19', 500000), _point('2026-08-20', 500000)],
       ),
     );
     await tester.pumpAndSettle();
@@ -106,10 +100,14 @@ void main() {
 
   group('PortfolioRange', () {
     test('covers the sketched timeline filter, month by default', () {
-      expect(
-        PortfolioRange.values.map((r) => r.label),
-        ['1H', '7H', '1B', '3B', '6B', 'MAX'],
-      );
+      expect(PortfolioRange.values.map((r) => r.label), [
+        '1H',
+        '7H',
+        '1B',
+        '3B',
+        '6B',
+        'MAX',
+      ]);
       expect(PortfolioRange.fallback, PortfolioRange.month);
       expect(PortfolioRange.month.days, 30);
       expect(PortfolioRange.max.days, isNull);

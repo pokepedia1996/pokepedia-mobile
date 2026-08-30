@@ -56,7 +56,9 @@ void main() {
 
     // Tap the left half — the first day.
     final chart = tester.getRect(find.byType(DailyGmvChart));
-    await tester.tapAt(Offset(chart.left + chart.width * 0.25, chart.center.dy));
+    await tester.tapAt(
+      Offset(chart.left + chart.width * 0.25, chart.center.dy),
+    );
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

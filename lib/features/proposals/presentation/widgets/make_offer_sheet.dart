@@ -204,7 +204,8 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
             const SizedBox(height: 14),
             TextField(
               controller: _message,
-              maxLength: 200,
+              // `submit_offer` refuses past 280 with `message_too_long`.
+              maxLength: 280,
               maxLines: 2,
               decoration: const InputDecoration(
                 hintText: 'Pesan untuk penjual (opsional)',

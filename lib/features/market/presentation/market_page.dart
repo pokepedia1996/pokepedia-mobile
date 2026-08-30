@@ -14,6 +14,7 @@ import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/store_card.dart';
 import '../usecase/market_notifier.dart';
+import 'widgets/proposals_banner.dart';
 
 /// Ports `app/market/page.tsx` — marketplace bucket tabs
 /// (Semua/Listing/Buylist/Toko), search, and the listing sort/filter rail
@@ -209,6 +210,17 @@ class _MarketPageState extends ConsumerState<MarketPage>
                         ),
                       ],
                     ),
+                  ),
+                  // Web puts this above the feed; here it also collapses on
+                  // scroll, the same way the logo does, so it doesn't hold
+                  // 60-odd pixels of a phone screen hostage while browsing.
+                  AnimatedSize(
+                    duration: _morphDuration,
+                    curve: _morphCurve,
+                    alignment: Alignment.topCenter,
+                    child: _scrolled
+                        ? const SizedBox(width: double.infinity)
+                        : const ProposalsBanner(),
                   ),
                   TabBar(
                     controller: _tabController,

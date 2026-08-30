@@ -38,6 +38,8 @@ import '../../user/usecase/user_notifier.dart';
 import '../../cart/usecase/cart_notifier.dart';
 import '../../expansions/presentation/widgets/card_details_section.dart';
 import '../../proposals/presentation/widgets/make_offer_sheet.dart';
+import '../../proposals/repository/models/listing_offer_model.dart';
+import '../../proposals/usecase/proposals_notifier.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
 
@@ -139,12 +141,33 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     );
   }
 
+  /// Whether the viewer is the one selling this.
+  ///
+  /// Compared against `listings.user_id` rather than the store handle: a
+  /// seller can browse their own shop from a second account, and it is the
+  /// row's owner the RPCs check.
+  bool _isOwnListing(ListingModel listing) {
+    final me = ref.read(authProvider).valueOrNull?.id;
+    return me != null && me.isNotEmpty && me == listing.sellerId;
+  }
+
   Future<void> _makeOffer(ListingModel listing) async {
+    if (_isOwnListing(listing)) {
+      // `submit_offer` answers `cannot_offer_on_own_listing`; better to say
+      // so here than to spend a round trip finding out.
+      _comingSoon('Ini listing kamu sendiri');
+      return;
+    }
     if (!listing.acceptsOffers) {
       _comingSoon('Penjual tidak menerima penawaran untuk listing ini');
       return;
     }
-    await showMakeOfferSheet(context, listing: listing);
+
+    final submitted = await showMakeOfferSheet(context, listing: listing);
+    if (submitted != true || !mounted) return;
+    // The button's own state depends on this: with an offer running it
+    // becomes the way back to it rather than a second attempt.
+    ref.invalidate(myOffersProvider);
   }
 
   /// Opens the conversation with this seller, reusing the existing room when
@@ -398,6 +421,10 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                   }),
                   onAddToCart: (qty) => _addToCart(active, qty, heroImage),
                   onMakeOffer: () => _makeOffer(active),
+                  isOwnListing: _isOwnListing(active),
+                  myOffer: ref
+                      .watch(myOfferOnListingProvider(active.slug))
+                      .valueOrNull,
                   onReport: _reportListing,
                   onToggleFollow: () => _toggleFollow(store),
                   onContact: () => _contactSeller(store, active),
@@ -613,6 +640,8 @@ class _PurchasePanel extends StatefulWidget {
     required this.onSelectCondition,
     required this.onAddToCart,
     required this.onMakeOffer,
+    required this.isOwnListing,
+    required this.myOffer,
     required this.onReport,
     required this.onToggleFollow,
     required this.onContact,
@@ -630,6 +659,13 @@ class _PurchasePanel extends StatefulWidget {
   final void Function(CardCondition) onSelectCondition;
   final Future<void> Function(int quantity) onAddToCart;
   final VoidCallback onMakeOffer;
+
+  /// Whether the viewer is the seller. `submit_offer` and the cart both
+  /// refuse your own listing, so the panel offers the one thing that works.
+  final bool isOwnListing;
+
+  /// The viewer's offer already running on this listing, if any.
+  final ListingOfferModel? myOffer;
   final VoidCallback onReport;
   final VoidCallback onToggleFollow;
   final VoidCallback onContact;
@@ -642,6 +678,61 @@ class _PurchasePanel extends StatefulWidget {
 class _PurchasePanelState extends State<_PurchasePanel> {
   int _qty = 1;
   bool _adding = false;
+
+  /// The offer half of the action row, or null when there is nothing to
+  /// offer on.
+  ///
+  /// Three outcomes, and only one of them is a button that submits:
+  ///  * your own listing has nothing to negotiate — web swaps in a link to
+  ///    manage it, and so does this;
+  ///  * an offer already running means `submit_offer` would refuse a second
+  ///    (`offer_already_pending`), so the button leads to the one you have;
+  ///  * otherwise, Tawar.
+  Widget? get _offerSlot {
+    final listing = widget.active;
+
+    if (widget.isOwnListing) {
+      return OutlinedButton.icon(
+        onPressed: () => context.push(Routes.sellerProducts),
+        icon: const Icon(Icons.edit_outlined, size: 15),
+        label: const Text(
+          'Kelola listing',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+      );
+    }
+
+    final mine = widget.myOffer;
+    if (mine != null) {
+      return OutlinedButton.icon(
+        onPressed: () => context.push(Routes.proposals),
+        icon: const Icon(Icons.schedule, size: 15),
+        label: Text(
+          mine.status == OfferStatus.accepted
+              ? 'Penawaran diterima'
+              : 'Penawaran ${formatRupiah(mine.currentPrice)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+      );
+    }
+
+    if (!listing.acceptsOffers || listing.available <= 0) return null;
+
+    return ElevatedButton.icon(
+      onPressed: widget.onMakeOffer,
+      icon: const Icon(Icons.handshake_outlined, size: 15),
+      label: const Text('Tawar', maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: context.appSemantic.success,
+        foregroundColor: Colors.white,
+        minimumSize: const Size.fromHeight(44),
+      ),
+    );
+  }
 
   /// Holds the button until the row is really in the cart — a second tap
   /// while the first is in flight would add the quantity twice.
@@ -793,64 +884,52 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                 Row(
                   spacing: 10,
                   children: [
-                    if (active.acceptsOffers && active.available > 0)
+                    if (_offerSlot != null) Expanded(child: _offerSlot!),
+                    // `add_to_cart` refuses your own listing, so on it the
+                    // manage link stands alone rather than beside a button
+                    // that always fails.
+                    if (!widget.isOwnListing)
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: widget.onMakeOffer,
-                          icon: const Icon(Icons.handshake_outlined, size: 15),
-                          label: const Text(
-                            'Tawar',
+                          onPressed:
+                              active.available <= 0 || vacationHard || _adding
+                              ? null
+                              : _add,
+                          icon: _adding
+                              ? SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colors.surface,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.shopping_cart_outlined,
+                                  size: 15,
+                                ),
+                          label: Text(
+                            _adding ? 'Menambahkan...' : 'Keranjang',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: context.appSemantic.success,
-                            foregroundColor: Colors.white,
+                            backgroundColor: colors.onSurface,
+                            foregroundColor: colors.surface,
                             minimumSize: const Size.fromHeight(44),
+                            // A button disabled because it is *working* keeps
+                            // its fill, just dimmed — the default disabled grey
+                            // would read as "unavailable" and hide the white
+                            // spinner.
+                            disabledBackgroundColor: _adding
+                                ? colors.onSurface.withValues(alpha: 0.75)
+                                : null,
+                            disabledForegroundColor: _adding
+                                ? colors.surface
+                                : null,
                           ),
                         ),
                       ),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            active.available <= 0 || vacationHard || _adding
-                            ? null
-                            : _add,
-                        icon: _adding
-                            ? SizedBox(
-                                width: 15,
-                                height: 15,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: colors.surface,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.shopping_cart_outlined,
-                                size: 15,
-                              ),
-                        label: Text(
-                          _adding ? 'Menambahkan...' : 'Keranjang',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.onSurface,
-                          foregroundColor: colors.surface,
-                          minimumSize: const Size.fromHeight(44),
-                          // A button disabled because it is *working* keeps
-                          // its fill, just dimmed — the default disabled grey
-                          // would read as "unavailable" and hide the white
-                          // spinner.
-                          disabledBackgroundColor: _adding
-                              ? colors.onSurface.withValues(alpha: 0.75)
-                              : null,
-                          disabledForegroundColor: _adding
-                              ? colors.surface
-                              : null,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ],
@@ -905,12 +984,8 @@ class _OtherListingsCta extends StatelessWidget {
       onTap: () => context.push(href),
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: colors.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+
         child: Row(
           children: [
             Icon(Icons.storefront_outlined, size: 16, color: colors.primary),

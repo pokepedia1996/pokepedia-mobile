@@ -6,6 +6,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/condition_badge.dart';
+import '../../repository/models/listing_offer.dart';
 import '../../repository/models/seller_listing.dart';
 
 /// Ports the seller product tables (`active-table.tsx`, `inactive-table.tsx`,
@@ -27,8 +28,11 @@ class ListingTable extends StatelessWidget {
     required this.onArchive,
     required this.onUnarchive,
     required this.onRestock,
+    required this.onDelete,
     required this.onToggleOffers,
     required this.onToggleAutoRelist,
+    required this.onViewOffers,
+    required this.offerCounts,
     required this.onRefresh,
   });
 
@@ -38,8 +42,18 @@ class ListingTable extends StatelessWidget {
   final ValueChanged<SellerListing> onArchive;
   final ValueChanged<SellerListing> onUnarchive;
   final ValueChanged<SellerListing> onRestock;
+
+  /// `delete_listing` — a soft delete the seller cannot undo from the app,
+  /// which is why the page confirms before calling it.
+  final ValueChanged<SellerListing> onDelete;
   final void Function(SellerListing listing, bool value) onToggleOffers;
   final void Function(SellerListing listing, bool value) onToggleAutoRelist;
+  final ValueChanged<SellerListing> onViewOffers;
+
+  /// Live offers per `listings.slug`. Empty while they load — a row with no
+  /// badge yet looks exactly like a row with no offers, and neither wants a
+  /// spinner in a table cell.
+  final Map<String, OfferCount> offerCounts;
   final Future<void> Function() onRefresh;
 
   static const _columns = <_Column>[
@@ -71,8 +85,11 @@ class ListingTable extends StatelessWidget {
         onArchive: () => onArchive(listings[i]),
         onUnarchive: () => onUnarchive(listings[i]),
         onRestock: () => onRestock(listings[i]),
+        onDelete: () => onDelete(listings[i]),
         onToggleOffers: (v) => onToggleOffers(listings[i], v),
         onToggleAutoRelist: (v) => onToggleAutoRelist(listings[i], v),
+        onViewOffers: () => onViewOffers(listings[i]),
+        offers: offerCounts[listings[i].slug],
       ),
     );
   }
@@ -286,6 +303,9 @@ List<Widget> _listingCells(
   required VoidCallback onRestock,
   required ValueChanged<bool> onToggleOffers,
   required ValueChanged<bool> onToggleAutoRelist,
+  required VoidCallback onViewOffers,
+  required VoidCallback onDelete,
+  required OfferCount? offers,
 }) {
   final colors = context.appColors;
   // Web disables price/quantity/condition edits while a buyer holds stock;
@@ -296,6 +316,9 @@ List<Widget> _listingCells(
     _ActionsCell(
       listing: listing,
       locked: locked,
+      offers: offers,
+      onViewOffers: onViewOffers,
+      onDelete: onDelete,
       onArchive: onArchive,
       onUnarchive: onUnarchive,
       onRestock: onRestock,
@@ -427,29 +450,69 @@ class _ActionsCell extends StatelessWidget {
   const _ActionsCell({
     required this.listing,
     required this.locked,
+    required this.offers,
     required this.onArchive,
     required this.onUnarchive,
     required this.onRestock,
+    required this.onDelete,
+    required this.onViewOffers,
   });
 
   final SellerListing listing;
   final bool locked;
+  final OfferCount? offers;
   final VoidCallback onArchive;
   final VoidCallback onUnarchive;
   final VoidCallback onRestock;
+  final VoidCallback onDelete;
+  final VoidCallback onViewOffers;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final needsResponse = offers?.needsResponse ?? 0;
+
     return PopupMenuButton<String>(
       tooltip: 'Aksi listing',
       padding: EdgeInsets.zero,
-      icon: Icon(Icons.more_horiz, size: 18, color: context.mutedForeground),
+      // Web marks the menu itself when something inside needs answering, so
+      // the row reads as "open me" without expanding every row to find out.
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.more_horiz, size: 18, color: context.mutedForeground),
+          if (needsResponse > 0)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Theme.of(context).cardColor),
+                ),
+              ),
+            ),
+        ],
+      ),
       onSelected: (value) => switch (value) {
+        'offers' => onViewOffers(),
         'unarchive' => onUnarchive(),
         'restock' => onRestock(),
+        'delete' => onDelete(),
         _ => onArchive(),
       },
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'offers',
+          child: _MenuItem(
+            icon: Icons.handshake_outlined,
+            label: 'Lihat penawaran',
+            trailing: needsResponse > 0 ? '$needsResponse' : null,
+          ),
+        ),
         if (listing.isArchived)
           const PopupMenuItem(
             value: 'unarchive',
@@ -459,9 +522,9 @@ class _ActionsCell extends StatelessWidget {
             ),
           )
         else ...[
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'restock',
-            child: const _MenuItem(
+            child: _MenuItem(
               icon: Icons.add_box_outlined,
               label: 'Tambah stok',
             ),
@@ -477,24 +540,62 @@ class _ActionsCell extends StatelessWidget {
             ),
           ),
         ],
+        PopupMenuItem(
+          value: 'delete',
+          enabled: !locked,
+          child: _MenuItem(
+            icon: Icons.delete_outline,
+            label: 'Hapus permanen',
+            color: colors.error,
+          ),
+        ),
       ],
     );
   }
 }
 
 class _MenuItem extends StatelessWidget {
-  const _MenuItem({required this.icon, required this.label});
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    this.trailing,
+    this.color,
+  });
 
   final IconData icon;
   final String label;
 
+  /// A count on the right, the way web badges "Lihat penawaran".
+  final String? trailing;
+
+  /// Overrides both icon and label — the destructive entry reads as one.
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
+    final tint = color ?? context.mutedForeground;
     return Row(
       children: [
-        Icon(icon, size: 16, color: context.mutedForeground),
+        Icon(icon, size: 16, color: tint),
         const SizedBox(width: 8),
-        Text(label, style: AppTypography.bodySm(context.appColors.onSurface)),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTypography.bodySm(color ?? context.appColors.onSurface),
+          ),
+        ),
+        if (trailing != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: context.appSemantic.gold.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            child: Text(
+              trailing!,
+              style: AppTypography.badge(context.appSemantic.gold),
+            ),
+          ),
       ],
     );
   }

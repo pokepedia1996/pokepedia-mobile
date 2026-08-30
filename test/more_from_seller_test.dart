@@ -69,11 +69,7 @@ Widget _host(List<ListingModel> listings, {int excludeCardId = 1}) {
 void main() {
   testWidgets('shows the seller\'s other cards', (tester) async {
     await tester.pumpWidget(
-      _host([
-        _listing(cardId: 1),
-        _listing(cardId: 2),
-        _listing(cardId: 3),
-      ]),
+      _host([_listing(cardId: 1), _listing(cardId: 2), _listing(cardId: 3)]),
     );
     await tester.pumpAndSettle();
 

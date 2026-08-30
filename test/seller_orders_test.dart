@@ -285,7 +285,11 @@ void main() {
 
   group('SellerOrderSort', () {
     final older = _order(
-      _orderRow(slug: 'a', createdAt: '2026-08-01T09:00:00+00:00', price: 50000),
+      _orderRow(
+        slug: 'a',
+        createdAt: '2026-08-01T09:00:00+00:00',
+        price: 50000,
+      ),
     );
     final newer = _order(
       _orderRow(
@@ -296,17 +300,17 @@ void main() {
     );
 
     test('newest first is the default order', () {
-      expect(
-        SellerOrderSort.newest.apply([older, newer]).map((o) => o.slug),
-        ['b', 'a'],
-      );
+      expect(SellerOrderSort.newest.apply([older, newer]).map((o) => o.slug), [
+        'b',
+        'a',
+      ]);
     });
 
     test('oldest reverses it', () {
-      expect(
-        SellerOrderSort.oldest.apply([newer, older]).map((o) => o.slug),
-        ['a', 'b'],
-      );
+      expect(SellerOrderSort.oldest.apply([newer, older]).map((o) => o.slug), [
+        'a',
+        'b',
+      ]);
     });
 
     test('price sorts on the order total, shipping included', () {

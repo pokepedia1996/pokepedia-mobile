@@ -9,6 +9,24 @@ import 'models/store_feedback.dart';
 
 enum MarketBucket { all, listing, buylist, toko }
 
+/// Drops [viewerId]'s own rows out of a marketplace feed.
+///
+/// A property of the marketplace rather than of one screen: you cannot buy
+/// from yourself, so a row you could only look at is noise between the ones
+/// you can act on. Signed out, nothing is excluded.
+///
+/// Applied client-side because `get_recent_marketplace_listings` has no
+/// exclusion parameter — its `p_seller_user_id` filters *to* a seller. The
+/// cost is that a page can come back slightly short when your own listings
+/// fall inside it.
+List<ListingModel> excludeOwnListings(
+  Iterable<ListingModel> listings,
+  String? viewerId,
+) {
+  if (viewerId == null || viewerId.isEmpty) return listings.toList();
+  return listings.where((l) => l.sellerId != viewerId).toList();
+}
+
 /// Data access for the Market feature, backed by Supabase. Mirrors
 /// `loadMarketplaceListingsPage` (`get_recent_marketplace_listings` RPC)
 /// and `loadStoreDirectoryPage` (`search_stores` RPC) on the web. Only GET
@@ -58,9 +76,20 @@ class MarketRepository {
               },
             )
             as List;
-    return rows
-        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
-        .toList();
+    // Your own listings are dropped here rather than in the pages that show
+    // this feed, because it is a property of the marketplace and not of one
+    // screen: you cannot buy from yourself, so a row you could only look at
+    // is noise between the ones you can act on.
+    //
+    // Client-side because `get_recent_marketplace_listings` has no exclusion
+    // parameter — its `p_seller_user_id` filters *to* a seller. The cost is
+    // that a page can come back slightly short when you have listings in it.
+    return excludeOwnListings(
+      rows.map(
+        (r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>),
+      ),
+      _client.auth.currentUser?.id,
+    );
   }
 
   Future<List<StoreModel>> fetchStores({String query = ''}) async {

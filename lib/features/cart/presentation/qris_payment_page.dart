@@ -12,6 +12,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../repository/checkout_gateway.dart';
+import 'payment_webview_page.dart';
 
 /// The QRIS payment screen, drawn natively instead of opening Xendit's
 /// hosted invoice in a WebView.
@@ -50,6 +51,7 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
 
   QrisCharge? _charge;
   String? _error;
+  String? _diagnostic;
   String? _fallbackUrl;
   bool _paid = false;
 
@@ -74,6 +76,7 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
     setState(() {
       _error = null;
       _fallbackUrl = null;
+      _diagnostic = null;
     });
     try {
       final charge = await ref
@@ -87,17 +90,45 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
       if (!_paid) _startPolling();
     } on QrisUnavailableException catch (e) {
       if (!mounted) return;
+      final invoiceUrl = e.invoiceUrl ?? widget.invoiceUrl;
+
+      // No QR to draw, but the hosted invoice can still take the payment —
+      // and that page is the documented flow (§5 of the bearer-auth
+      // handoff: mobile opens a WebView on `invoiceUrl` and nothing else).
+      // Showing a dead end with a link the buyer has to notice would strand
+      // a checkout that is otherwise perfectly payable.
+      if (invoiceUrl != null) {
+        await _payOnXendit(invoiceUrl);
+        return;
+      }
+
       setState(() {
         _error = e.message;
-        _fallbackUrl = e.invoiceUrl ?? widget.invoiceUrl;
+        _fallbackUrl = invoiceUrl;
+        _diagnostic = e.diagnostic;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Gagal memuat QRIS.';
-        _fallbackUrl = widget.invoiceUrl;
-      });
+      // Same reasoning as above, for the failures that aren't a considered
+      // "no QR here" answer — the function being unreachable, a shape we
+      // can't parse. If there's an invoice, it can still be paid.
+      final invoiceUrl = widget.invoiceUrl;
+      if (invoiceUrl != null) {
+        await _payOnXendit(invoiceUrl);
+        return;
+      }
+      setState(() => _error = 'Gagal memuat QRIS.');
     }
+  }
+
+  /// The lines under the error headline: where to finish paying, and what
+  /// the invoice actually held when no QR could be read off it.
+  String? _errorDetail() {
+    final lines = [
+      if (_fallbackUrl != null) 'Selesaikan pembayaran di halaman Xendit.',
+      if (_diagnostic != null) _diagnostic!,
+    ];
+    return lines.isEmpty ? null : lines.join('\n\n');
   }
 
   void _startPolling() {
@@ -117,6 +148,26 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
     } catch (_) {
       // A failed poll is not a failed payment; the next tick tries again.
     }
+  }
+
+  /// Hands the buyer to Xendit's hosted invoice, in place of this page.
+  ///
+  /// `pushReplacement`, not `push`: there is no QR here to come back to, and
+  /// leaving a dead page under the WebView means the back gesture lands on
+  /// an error screen instead of returning to checkout.
+  ///
+  /// The outcome is deliberately not trusted — the webhook settles the
+  /// order, so the caller polls status either way. Returning normally is
+  /// what lets it.
+  Future<void> _payOnXendit(String invoiceUrl) async {
+    if (!mounted) return;
+    _poll?.cancel();
+    _tick?.cancel();
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<PaymentOutcome>(
+        builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
+      ),
+    );
   }
 
   Future<void> _openInvoice(String url) async {
@@ -145,9 +196,7 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
             ? EmptyState(
                 icon: Icons.qr_code_2,
                 title: _error!,
-                description: _fallbackUrl == null
-                    ? null
-                    : 'Selesaikan pembayaran di halaman Xendit.',
+                description: _errorDetail(),
                 action: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

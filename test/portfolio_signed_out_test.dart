@@ -65,7 +65,8 @@ void main() {
     expect(
       ignorePointer.ignoring,
       isTrue,
-      reason: 'the placeholder is not real data and must not be tappable, '
+      reason:
+          'the placeholder is not real data and must not be tappable, '
           'matching the web gate\'s pointer-events-none',
     );
   });

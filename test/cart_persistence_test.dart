@@ -120,7 +120,8 @@ void main() {
     expect(
       repository.fetchCalls,
       0,
-      reason: 'nothing to read without a user, and reading anyway is what '
+      reason:
+          'nothing to read without a user, and reading anyway is what '
           'produced an empty cart that never refilled',
     );
 
@@ -150,15 +151,18 @@ void main() {
     );
   });
 
-  test('adding while signed out fails fast instead of hitting the RPC', () async {
-    final auth = _FakeAuth();
-    final container = containerWith(auth);
+  test(
+    'adding while signed out fails fast instead of hitting the RPC',
+    () async {
+      final auth = _FakeAuth();
+      final container = containerWith(auth);
 
-    await expectLater(
-      container.read(cartProvider.notifier).add(1, 1),
-      throwsA(isA<CartException>()),
-    );
-    // The fake would throw UnimplementedError if `add` had been forwarded.
-    expect(repository.fetchCalls, 0);
-  });
+      await expectLater(
+        container.read(cartProvider.notifier).add(1, 1),
+        throwsA(isA<CartException>()),
+      );
+      // The fake would throw UnimplementedError if `add` had been forwarded.
+      expect(repository.fetchCalls, 0);
+    },
+  );
 }

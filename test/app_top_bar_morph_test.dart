@@ -29,9 +29,7 @@ double _logoRowHeight(WidgetTester tester) =>
     tester.getSize(find.byType(ClipRect).first).height;
 
 void main() {
-  testWidgets('opens as two rows: logo above the search field', (
-    tester,
-  ) async {
+  testWidgets('opens as two rows: logo above the search field', (tester) async {
     await _host(tester);
     await tester.pumpAndSettle();
 

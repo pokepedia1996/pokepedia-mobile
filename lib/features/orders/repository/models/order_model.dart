@@ -109,6 +109,7 @@ class OrderItemModel {
     final card = embeddedRow(row['cards']);
 
     return OrderItemModel(
+      id: (row['id'] as num?)?.toInt(),
       slug: row['slug'] as String? ?? '',
       orderNumber: row['order_number'] as String? ?? '',
       // A card row is always joined; the placeholder keeps a row with a
@@ -152,6 +153,7 @@ class OrderItemModel {
   }
 
   const OrderItemModel({
+    this.id,
     required this.slug,
     required this.orderNumber,
     required this.card,
@@ -169,6 +171,10 @@ class OrderItemModel {
     this.statusRaw,
     this.dispute,
   });
+
+  /// `order_items.id` — what `confirm_receipt` takes, unlike everything
+  /// else here which is keyed by slug.
+  final int? id;
 
   final String slug;
   final String orderNumber;
@@ -295,6 +301,12 @@ class OrderModel {
     this.biteshipBookError,
     this.originCollectionMethod,
     this.statusHistory,
+    this.shippedAt,
+    this.deliveredAt,
+    this.sellerUsername,
+    this.sellerAvatarUrl,
+    this.sellerLogoUrl,
+    this.sellerSlug,
   });
 
   final String slug;
@@ -323,6 +335,54 @@ class OrderModel {
 
   /// `shipments.status_history`, the courier's own trail.
   final List<ShipmentStatusEntry>? statusHistory;
+
+  /// Already selected by the orders query; the detail page's history needs
+  /// them to date each step rather than only naming it.
+  final DateTime? shippedAt;
+  final DateTime? deliveredAt;
+
+  /// When the money landed. Payment is recorded by `settlements.paid_at`,
+  /// not by a status.
+  DateTime? get paidAt => items.isEmpty ? null : items.first.paidAt;
+
+  /// What the buyer paid for the cards alone.
+  int get itemsSubtotal => items.fold(0, (sum, item) => sum + item.subtotal);
+
+  /// What they paid to have it sent.
+  int get shippingTotal =>
+      items.fold(0, (sum, item) => sum + item.shippingCost);
+
+  /// The counterparty's identity, resolved separately: `seller_profiles` is
+  /// self-select-only, so a store name and logo come from
+  /// `get_store_identities` and the username and avatar from `profiles`.
+  final String? sellerUsername;
+  final String? sellerAvatarUrl;
+  final String? sellerLogoUrl;
+  final String? sellerSlug;
+
+  /// Ports `resolveSellerDisplay`: a store name wins, the username is the
+  /// fallback, and `@username` rides underneath only when the store chose a
+  /// different name.
+  String? get sellerSecondaryName {
+    final username = sellerUsername;
+    if (username == null || username.isEmpty) return null;
+    return storeName.trim() == username ? null : '@$username';
+  }
+
+  /// The store's logo if it has one, else the person's avatar.
+  String? get sellerImageUrl =>
+      (sellerLogoUrl?.isNotEmpty ?? false) ? sellerLogoUrl : sellerAvatarUrl;
+
+  /// `confirm_receipt` refuses anything but a shipped settlement that the
+  /// courier has recorded as delivered, with no open dispute — so the button
+  /// only appears where the server would accept it.
+  bool get canConfirmReceipt =>
+      shipmentStatus == 'shipped' &&
+      !isUnpaid &&
+      latestBiteshipStatus(statusHistory) == 'delivered';
+
+  /// `order_items.id` of the first line — what `confirm_receipt` takes.
+  int? get firstItemId => items.isEmpty ? null : items.first.id;
 
   /// The settlement status the seller list buckets on. Read off the first
   /// item: every item of one order shares a checkout, so they share it.
@@ -381,6 +441,36 @@ class OrderModel {
 
   int get totalQuantity =>
       items.fold(0, (sum, item) => sum + item.matchedQuantity);
+
+  OrderModel withSeller({
+    String? username,
+    String? avatarUrl,
+    String? logoUrl,
+    String? slug,
+  }) {
+    return OrderModel(
+      slug: this.slug,
+      orderNumber: orderNumber,
+      storeName: storeName,
+      status: status,
+      createdAt: createdAt,
+      items: items,
+      trackingNumber: trackingNumber,
+      courier: courier,
+      shipmentStatus: shipmentStatus,
+      shipmentDeadline: shipmentDeadline,
+      biteshipOrderId: biteshipOrderId,
+      biteshipBookError: biteshipBookError,
+      originCollectionMethod: originCollectionMethod,
+      statusHistory: statusHistory,
+      shippedAt: shippedAt,
+      deliveredAt: deliveredAt,
+      sellerUsername: username,
+      sellerAvatarUrl: avatarUrl,
+      sellerLogoUrl: logoUrl,
+      sellerSlug: slug,
+    );
+  }
 }
 
 List<ShipmentStatusEntry>? _statusHistory(Object? raw) {

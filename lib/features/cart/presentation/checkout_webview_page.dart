@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/session_cookie.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 
@@ -51,10 +53,36 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
           },
           onNavigationRequest: _handleNavigation,
         ),
-      )
-      ..loadRequest(
-        Uri.parse(widget.url ?? '${AppConfig.appUrl}${widget.path}'),
       );
+    _seedSessionAndLoad();
+  }
+
+  /// Hands the WebView the session the app already holds, then loads.
+  ///
+  /// Without this the WebView starts with an empty cookie jar, so the site
+  /// sees an anonymous visitor and demands a second login for an account the
+  /// user is already signed into. These are the same `@supabase/ssr` cookies
+  /// the API transport sends, so the two views of the session cannot drift.
+  Future<void> _seedSessionAndLoad() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null) {
+      final manager = WebViewCookieManager();
+      final domain = Uri.parse(AppConfig.appUrl).host;
+      for (final cookie in buildSessionCookies(session)) {
+        await manager.setCookie(
+          WebViewCookie(
+            name: cookie.name,
+            value: cookie.value,
+            domain: domain,
+            path: '/',
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    await _controller.loadRequest(
+      Uri.parse(widget.url ?? '${AppConfig.appUrl}${widget.path}'),
+    );
   }
 
   /// Keeps ordinary http(s) navigation (our own domain, and Xendit's hosted

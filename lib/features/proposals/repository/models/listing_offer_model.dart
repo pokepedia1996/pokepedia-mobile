@@ -43,9 +43,15 @@ class ListingOfferModel {
     required this.expiresAt,
     this.buyerCounterCount = 0,
     this.sellerCounterCount = 0,
+    this.listingSlug = '',
   });
 
   final String slug;
+
+  /// The listing this offer is against — `listings.slug`. Carried so a
+  /// listing page can tell whether the viewer already has an offer running
+  /// on it, which is the difference between offering and duplicating.
+  final String listingSlug;
   final CardModel card;
   final CardCondition condition;
   final int quantity;

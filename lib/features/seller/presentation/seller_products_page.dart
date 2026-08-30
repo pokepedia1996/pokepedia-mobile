@@ -15,6 +15,7 @@ import 'widgets/add_listing_sheet.dart';
 import 'widgets/listing_table.dart';
 import '../repository/models/seller_listing.dart';
 import '../repository/seller_listings_repository.dart';
+import '../usecase/offers_notifier.dart';
 import '../usecase/seller_listings_notifier.dart';
 
 /// Ports `app/seller/products` — the seller's listings, bucketed, with the
@@ -59,6 +60,25 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
       onConfirm: () => _run(
         () => ref.read(sellerListingActionsProvider).archive(listing.slug),
         'Listing diarsipkan',
+      ),
+    );
+  }
+
+  /// `delete_listing` is a soft delete, but nothing in the app brings a row
+  /// back from it — so it asks first, and says so plainly.
+  Future<void> _confirmDelete(SellerListing listing) {
+    return showConfirmDialog(
+      context,
+      title: 'Hapus listing ini?',
+      description:
+          '${listing.card.name} akan dihapus permanen dan tidak bisa '
+          'dikembalikan dari aplikasi. Untuk menyimpannya, arsipkan saja.',
+      confirmLabel: 'Hapus permanen',
+      onConfirm: () => _run(
+        () => ref
+            .read(sellerListingActionsProvider)
+            .deletePermanent(listing.slug),
+        'Listing dihapus',
       ),
     );
   }
@@ -239,6 +259,20 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                   ),
                 ),
               ),
+            if (bucket.isListingBucket)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _OfferFilterChip(
+                    active: ref.watch(sellerOfferFilterProvider),
+                    count: ref.watch(offerCountsProvider).length,
+                    onTap: () => ref
+                        .read(sellerOfferFilterProvider.notifier)
+                        .update((on) => !on),
+                  ),
+                ),
+              ),
             const SizedBox(height: 10),
             Expanded(
               child: switch (bucket) {
@@ -289,12 +323,15 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
             'Listing dikembalikan',
           ),
           onRestock: _restock,
+          onDelete: _confirmDelete,
           onToggleOffers: (l, v) => _run(
             () => ref
                 .read(sellerListingActionsProvider)
                 .setAcceptsOffers(l.slug, v),
             v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
           ),
+          offerCounts: ref.watch(offerCountsProvider),
+          onViewOffers: (l) => context.push(Routes.sellerListingOffers(l.slug)),
           onToggleAutoRelist: (l, v) => _run(
             () =>
                 ref.read(sellerListingActionsProvider).setAutoRelist(l.slug, v),
@@ -592,6 +629,68 @@ class _PreferencesPanelState extends ConsumerState<_PreferencesPanel> {
             style: AppTypography.caption(context.mutedForeground),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Ports the "Dengan penawaran" pill from `active-table.tsx`.
+///
+/// The count is listings holding a live offer, not offers — it is the number
+/// of rows the filter would leave, which is what the seller is deciding
+/// about when they tap it.
+class _OfferFilterChip extends StatelessWidget {
+  const _OfferFilterChip({
+    required this.active,
+    required this.count,
+    required this.onTap,
+  });
+
+  final bool active;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final foreground = active ? colors.onPrimary : colors.onSurface;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? colors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: active ? colors.primary : context.borderColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.handshake_outlined, size: 14, color: foreground),
+            const SizedBox(width: 6),
+            Text(
+              'Dengan penawaran',
+              style: AppTypography.captionSemibold(foreground),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 16),
+              decoration: BoxDecoration(
+                color: active
+                    ? colors.onPrimary.withValues(alpha: 0.22)
+                    : colors.secondary,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              alignment: Alignment.center,
+              child: Text('$count', style: AppTypography.badge(foreground)),
+            ),
+          ],
+        ),
       ),
     );
   }

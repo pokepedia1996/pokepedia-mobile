@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../repository/models/seller_listing.dart';
 import '../repository/seller_listings_repository.dart';
+import 'offers_notifier.dart';
 
 /// Which bucket the products screen is showing.
 final sellerBucketProvider = StateProvider<SellerListingBucket>(
@@ -18,6 +19,12 @@ final sellerSortProvider = StateProvider<ListingSort>(
 );
 
 /// The seller's listings for the selected bucket and search.
+/// Web's `?offers=1` — narrows the table to listings holding a live offer.
+///
+/// A view filter rather than a query parameter: the offer counts are already
+/// loaded for the row menus, so this costs nothing the page hasn't paid for.
+final sellerOfferFilterProvider = StateProvider<bool>((ref) => false);
+
 final sellerListingsProvider = FutureProvider<List<SellerListing>>((ref) async {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return const <SellerListing>[];
@@ -31,7 +38,14 @@ final sellerListingsProvider = FutureProvider<List<SellerListing>>((ref) async {
   final listings = await ref
       .read(sellerListingsRepositoryProvider)
       .fetchListings(bucket: bucket, query: query);
-  return ref.watch(sellerSortProvider).apply(listings);
+  final sorted = ref.watch(sellerSortProvider).apply(listings);
+  if (!ref.watch(sellerOfferFilterProvider)) return sorted;
+
+  final counts = ref.watch(offerCountsProvider);
+  return [
+    for (final listing in sorted)
+      if (counts.containsKey(listing.slug)) listing,
+  ];
 });
 
 /// The seller's unposted drafts, for the Draft tab.
@@ -61,6 +75,9 @@ class SellerListingActions {
   Future<String?> archive(String slug) => _run(() => _repo.archive(slug));
 
   Future<String?> unarchive(String slug) => _run(() => _repo.unarchive(slug));
+
+  Future<String?> deletePermanent(String slug) =>
+      _run(() => _repo.deletePermanent(slug));
 
   Future<String?> restock(String slug, int quantity) =>
       _run(() => _repo.restock(slug, quantity));

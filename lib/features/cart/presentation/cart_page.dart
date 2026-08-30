@@ -10,9 +10,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
-import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/seller_avatar.dart';
+import 'widgets/empty_cart_card.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/models/listing_model.dart';
 import '../repository/models/cart_item.dart';
@@ -32,17 +32,7 @@ class CartPage extends ConsumerWidget {
       extendBodyBehindAppBar: true,
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
-        child: items.isEmpty
-            ? EmptyState(
-                icon: Icons.shopping_cart_outlined,
-                title: 'Keranjang kosong',
-                description: 'Yuk cari kartu incaranmu di Market.',
-                action: ElevatedButton(
-                  onPressed: () => context.go(Routes.market),
-                  child: const Text('Jelajahi Market'),
-                ),
-              )
-            : const _CartBody(),
+        child: items.isEmpty ? const EmptyCartCard() : const _CartBody(),
       ),
     );
   }

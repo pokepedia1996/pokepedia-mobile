@@ -43,6 +43,15 @@ class CheckoutResult {
   /// price moved, seller went on vacation. The order went ahead without
   /// them, so the buyer has to be told rather than silently shortchanged.
   final List<String> droppedItems;
+
+  /// Named fields rather than the default `Instance of 'CheckoutResult'`:
+  /// which of these came back is exactly what decides where checkout goes
+  /// next, so a log line that omits them says nothing.
+  @override
+  String toString() =>
+      'CheckoutResult(externalId: $externalId, invoiceUrl: $invoiceUrl, '
+      'redirect: $redirect, totalAmount: $totalAmount, '
+      'droppedItems: ${droppedItems.length})';
 }
 
 /// Where a checkout stands. Read from the buyer's own `carts` row.
@@ -92,10 +101,18 @@ class QrisCharge {
 /// The QR couldn't be produced. Carries the hosted invoice, which can still
 /// take the payment, so the caller has somewhere to send the buyer.
 class QrisUnavailableException extends ApiException {
-  const QrisUnavailableException({required String message, this.invoiceUrl})
-    : super(message);
+  const QrisUnavailableException({
+    required String message,
+    this.invoiceUrl,
+    this.diagnostic,
+  }) : super(message);
 
   final String? invoiceUrl;
+
+  /// What the invoice held when no QR could be read off it. Shown in the
+  /// error state, because "QRIS belum tersedia" on its own can't be told
+  /// apart from a misparse or an invoice that never got a channel.
+  final String? diagnostic;
 }
 
 /// The three checkout steps that cannot run in the app.
@@ -241,6 +258,7 @@ class CheckoutGateway {
     });
 
     final dropped = json['droppedItems'];
+    print('WKWKWK ${json.toString()}');
     return CheckoutResult(
       invoiceUrl: json['invoiceUrl'] as String?,
       redirect: json['redirect'] as String?,
@@ -280,6 +298,9 @@ class CheckoutGateway {
           _ => 'Gagal memuat QRIS.',
         },
         invoiceUrl: data['invoiceUrl'] as String?,
+        // What the invoice actually carried. Four different causes collapse
+        // into one message otherwise, and they need different fixes.
+        diagnostic: data['diagnostic']?.toString(),
       );
     }
 

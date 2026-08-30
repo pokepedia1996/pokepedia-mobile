@@ -40,6 +40,14 @@ final sellerPendingCheckoutsProvider = FutureProvider<List<PendingCheckout>>((
   return ref.read(ordersRepositoryProvider).fetchPendingCheckouts();
 });
 
+/// The buyer's own unpaid checkouts. Separate from [ordersProvider] because
+/// they aren't orders yet — the webhook creates those.
+final myPendingCheckoutsProvider = FutureProvider<List<PendingCheckout>>((ref) {
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return Future.value(const <PendingCheckout>[]);
+  return ref.read(ordersRepositoryProvider).fetchMyPendingCheckouts();
+});
+
 /// Which tab the seller's Pesanan list is on, and how it's ordered. Held
 /// outside the widget so the list survives a detail-page round trip.
 final sellerOrderTabProvider = StateProvider<SellerOrderTab>(

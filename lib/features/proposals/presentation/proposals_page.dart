@@ -1,497 +1,304 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
-import '../repository/models/bid_proposal_model.dart';
-import '../repository/models/listing_offer_model.dart';
+import '../repository/models/proposal_card_group.dart';
 import '../usecase/proposals_notifier.dart';
 
 /// Ports `app/proposals/page.tsx` — negotiated offers on ask listings
 /// (`listing_offers`) and bid-fulfillment proposals sellers send for the
 /// buyer's WTB bids (`bid_proposals`).
 class ProposalsPage extends ConsumerStatefulWidget {
-  const ProposalsPage({super.key});
+  const ProposalsPage({super.key, this.initialFilter = ProposalFeedFilter.all});
+
+  /// Which status chip to preselect. The market banner uses this to land on
+  /// whatever its subtitle just described.
+  final ProposalFeedFilter initialFilter;
 
   @override
   ConsumerState<ProposalsPage> createState() => _ProposalsPageState();
 }
 
-class _ProposalsPageState extends ConsumerState<ProposalsPage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
+class _ProposalsPageState extends ConsumerState<ProposalsPage> {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: TransparentAppBar(
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: context.appColors.primary,
-          unselectedLabelColor: context.mutedForeground,
-          indicatorColor: context.appColors.primary,
-          tabs: const [
-            Tab(text: 'Penawaran Saya'),
-            Tab(text: 'Proposal Diterima'),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: TabBarView(
-          controller: _tabController,
-          children: const [_OffersTab(), _ReceivedProposalsTab()],
-        ),
-      ),
-    );
-  }
-}
-
-Color _offerStatusColor(BuildContext context, OfferStatus status) {
-  final semantic = context.appSemantic;
-  final colors = context.appColors;
-  switch (status) {
-    case OfferStatus.pending:
-      return semantic.condMp;
-    case OfferStatus.accepted:
-      return semantic.success;
-    case OfferStatus.rejected:
-      return colors.error;
-    case OfferStatus.expired:
-    case OfferStatus.withdrawn:
-      return context.mutedForeground;
-  }
-}
-
-Color _bidProposalStatusColor(BuildContext context, BidProposalStatus status) {
-  final semantic = context.appSemantic;
-  final colors = context.appColors;
-  switch (status) {
-    case BidProposalStatus.pending:
-      return semantic.condMp;
-    case BidProposalStatus.accepted:
-      return semantic.success;
-    case BidProposalStatus.rejected:
-      return colors.error;
-    case BidProposalStatus.expired:
-    case BidProposalStatus.withdrawn:
-      return context.mutedForeground;
-  }
-}
-
-class _OffersTab extends ConsumerWidget {
-  const _OffersTab();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(myOffersProvider);
-    return async.when(
-      data: (items) {
-        if (items.isEmpty) {
-          return const EmptyState(
-            icon: Icons.local_offer_outlined,
-            title: 'Belum ada penawaran terkirim',
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) => _OfferTile(offer: items[i]),
-        );
-      },
-      loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat penawaran')),
-    );
-  }
-}
-
-class _OfferTile extends ConsumerStatefulWidget {
-  const _OfferTile({required this.offer});
-
-  final ListingOfferModel offer;
-
-  @override
-  ConsumerState<_OfferTile> createState() => _OfferTileState();
-}
-
-class _OfferTileState extends ConsumerState<_OfferTile> {
-  bool _busy = false;
-
-  ListingOfferModel get offer => widget.offer;
-
-  /// Runs one of the offer RPCs, then refreshes the list. [action] answers
-  /// null on success or a ready-to-show message on failure.
-  Future<void> _run(Future<String?> Function() action, String success) async {
-    setState(() => _busy = true);
-    final error = await action();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(error ?? success)));
-    if (error == null) ref.invalidate(myOffersProvider);
-  }
-
-  Future<void> _counter() async {
-    final price = await showCounterPriceDialog(
-      context,
-      title: 'Tawar balik',
-      initialPrice: offer.currentPrice,
-    );
-    if (price == null || !mounted) return;
-    await _run(
-      () => ref
-          .read(proposalsRepositoryProvider)
-          .counterOffer(offerSlug: offer.slug, price: price),
-      'Tawaran balik terkirim',
-    );
+    // After the first frame: setting provider state during build throws.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(proposalFeedFilterProvider.notifier).state =
+          widget.initialFilter;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    // The buyer can only act when it's their turn: the seller countered and
-    // the offer is still open.
-    final awaitingBuyer =
-        offer.status == OfferStatus.pending &&
-        offer.lastActor == OfferActor.seller;
-    final canWithdraw =
-        offer.status == OfferStatus.pending &&
-        offer.lastActor == OfferActor.buyer;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  offer.card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
-                ),
-              ),
-              StatusPill(
-                label: offer.status.label,
-                color: _offerStatusColor(context, offer.status),
-              ),
-            ],
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: TransparentAppBar(
+        actions: [
+          // Listing offers are a different object from proposals, and web
+          // keeps them elsewhere entirely — the seller's offers list and
+          // inside chat. The app has no chat-side offer UI, so this is the
+          // only way to reach them.
+          IconButton(
+            tooltip: 'Penawaran Saya',
+            icon: const Icon(Icons.local_offer_outlined, size: 20),
+            onPressed: () => context.push(Routes.offers),
           ),
-          const SizedBox(height: 4),
-          Text(
-            offer.storeName,
-            style: AppTypography.caption(context.mutedForeground),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                formatRupiah(offer.currentPrice),
-                style: AppTypography.bodySemibold(colors.onSurface),
-              ),
-              if (offer.currentPrice != offer.listingPrice) ...[
-                const SizedBox(width: 6),
-                Text(
-                  formatRupiah(offer.listingPrice),
-                  style: AppTypography.caption(
-                    context.mutedForeground,
-                  ).copyWith(decoration: TextDecoration.lineThrough),
-                ),
-              ],
-              const Spacer(),
-              Text(
-                formatRelativeId(offer.createdAt),
-                style: AppTypography.caption(context.mutedForeground),
-              ),
-            ],
-          ),
-          if (offer.isCountered) ...[
-            const SizedBox(height: 6),
-            Text(
-              offer.lastActor == OfferActor.seller
-                  ? 'Penjual memberi tawaran balik — menunggu responsmu'
-                  : 'Menunggu respons penjual',
-              style: AppTypography.caption(context.appColors.primary),
-            ),
-          ],
-          if (awaitingBuyer) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _run(
-                            () => ref
-                                .read(proposalsRepositoryProvider)
-                                .acceptOffer(offer.slug),
-                            'Penawaran diterima — lanjutkan pembayaran',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: context.appSemantic.success,
-                      minimumSize: const Size(0, 38),
-                    ),
-                    child: const Text('Terima'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy ? null : _counter,
-                    child: const Text('Tawar balik'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Tolak',
-                  onPressed: _busy
-                      ? null
-                      : () => _run(
-                          () => ref
-                              .read(proposalsRepositoryProvider)
-                              .rejectOffer(offerSlug: offer.slug),
-                          'Penawaran ditolak',
-                        ),
-                  icon: Icon(Icons.close, color: colors.error, size: 20),
-                ),
-              ],
-            ),
-          ] else if (canWithdraw) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: _busy
-                    ? null
-                    : () => _run(
-                        () => ref
-                            .read(proposalsRepositoryProvider)
-                            .withdrawOffer(offer.slug),
-                        'Penawaran ditarik',
-                      ),
-                child: Text(
-                  'Tarik penawaran',
-                  style: AppTypography.bodySmSemibold(colors.error),
-                ),
-              ),
-            ),
-          ],
         ],
+      ),
+      body: AppBarOverlayBody(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Proposal Saya',
+                    style: AppTypography.h1(colors.onSurface),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Aktivitas bid dan proposal kamu, dikelompokkan per kartu.',
+                    style: AppTypography.bodySm(context.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Expanded(child: _CardFeedTab()),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Shared price prompt for countering an offer.
-Future<int?> showCounterPriceDialog(
-  BuildContext context, {
-  required String title,
-  required int initialPrice,
-}) {
-  final controller = TextEditingController(text: '$initialPrice');
-  return showDialog<int>(
-    context: context,
-    builder: (context) => AlertDialog(
-      backgroundColor: Theme.of(context).cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(prefixText: 'Rp ', hintText: '0'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? colors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? colors.primary : context.borderColor,
+          ),
         ),
-        FilledButton(
-          onPressed: () {
-            final value = int.tryParse(controller.text) ?? 0;
-            Navigator.of(context).pop(value > 0 ? value : null);
-          },
-          child: const Text('Kirim'),
+        child: Text(
+          label,
+          style: selected
+              ? AppTypography.captionSemibold(colors.onPrimary)
+              : AppTypography.caption(context.mutedForeground),
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
-class _ReceivedProposalsTab extends ConsumerWidget {
-  const _ReceivedProposalsTab();
+class _CardFeedTab extends ConsumerWidget {
+  const _CardFeedTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(receivedProposalsProvider);
+    final async = ref.watch(proposalCardFeedProvider);
+    final filter = ref.watch(proposalFeedFilterProvider);
+
     return async.when(
-      data: (items) {
-        if (items.isEmpty) {
+      loading: () => const PikachuLoader(),
+      error: (_, __) => Center(
+        child: Text(
+          'Gagal memuat proposal',
+          style: AppTypography.bodySm(context.mutedForeground),
+        ),
+      ),
+      data: (groups) {
+        if (groups.isEmpty) {
           return const EmptyState(
             icon: Icons.inbox_outlined,
-            title: 'Belum ada proposal diterima',
+            title: 'Belum ada aktivitas',
             description:
-                'Proposal muncul saat penjual menawarkan kartu untuk bid (WTB) aktifmu.',
+                'Pasang bid (WTB) atau kirim proposal untuk mulai bernegosiasi.',
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) => _BidProposalTile(proposal: items[i]),
+
+        final visible = groups.where(filter.matches).toList();
+
+        return Column(
+          children: [
+            SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (final option in ProposalFeedFilter.values)
+                    // Web drops a chip with nothing behind it; "Semua"
+                    // always stands so there is a way back.
+                    if (option == ProposalFeedFilter.all ||
+                        groups.any(option.matches)) ...[
+                      _FilterChip(
+                        label:
+                            '${option.label} '
+                            '(${groups.where(option.matches).length})',
+                        selected: filter == option,
+                        onTap: () =>
+                            ref
+                                    .read(proposalFeedFilterProvider.notifier)
+                                    .state =
+                                option,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                ],
+              ),
+            ),
+            Expanded(
+              child: visible.isEmpty
+                  ? const EmptyState(
+                      icon: Icons.filter_list_off,
+                      title: 'Tidak ada kartu untuk filter ini',
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        ref.invalidate(myBidsProvider);
+                        ref.invalidate(sentProposalsProvider);
+                        await ref.read(proposalCardFeedProvider.future);
+                      },
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) =>
+                            _CardGroupRow(group: visible[i]),
+                      ),
+                    ),
+            ),
+          ],
         );
       },
-      loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat proposal')),
     );
   }
 }
 
-class _BidProposalTile extends ConsumerStatefulWidget {
-  const _BidProposalTile({required this.proposal});
+class _CardGroupRow extends StatelessWidget {
+  const _CardGroupRow({required this.group});
 
-  final BidProposalModel proposal;
-
-  @override
-  ConsumerState<_BidProposalTile> createState() => _BidProposalTileState();
-}
-
-class _BidProposalTileState extends ConsumerState<_BidProposalTile> {
-  bool _busy = false;
-
-  BidProposalModel get proposal => widget.proposal;
-
-  Future<void> _run(Future<String?> Function() action, String success) async {
-    setState(() => _busy = true);
-    final error = await action();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(error ?? success)));
-    if (error == null) ref.invalidate(receivedProposalsProvider);
-  }
+  final ProposalCardGroup group;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final pending = proposal.status == BidProposalStatus.pending;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  proposal.card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
-                ),
+    final card = group.card;
+    final breakdown = group.statusBreakdown;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      onTap: () => context.push(Routes.cardProposals(card.id)),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 48,
+              child: CardArt(
+                imageUrl: card.imageUrl,
+                borderRadius: AppRadius.sm,
               ),
-              StatusPill(
-                label: proposal.status.label,
-                color: _bidProposalStatusColor(context, proposal.status),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${proposal.sellerStoreName} · ×${proposal.proposedQuantity}',
-            style: AppTypography.caption(context.mutedForeground),
-          ),
-          if (proposal.message != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              proposal.message!,
-              style: AppTypography.bodySm(context.mutedForeground),
             ),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            formatRelativeId(proposal.createdAt),
-            style: AppTypography.caption(context.mutedForeground),
-          ),
-          if (pending) ...[
-            const SizedBox(height: 12),
-            Row(
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    card.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
+                  Text(
+                    '${card.expansionCode.toUpperCase()} #'
+                    '${card.collectorNumber}',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                  if (group.subtitle.isNotEmpty)
+                    Text(
+                      group.subtitle,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  if (breakdown.isNotEmpty)
+                    Text(
+                      breakdown,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  if (group.earliestExpiry != null)
+                    Text(
+                      'Berakhir ${formatShortDateId(group.earliestExpiry!)}',
+                      style: AppTypography.caption(context.appSemantic.condMp),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _run(
-                            () => ref
-                                .read(proposalsRepositoryProvider)
-                                .acceptBidProposal(proposal.slug),
-                            'Proposal diterima — lanjutkan pembayaran',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: context.appSemantic.success,
-                      minimumSize: const Size(0, 38),
-                    ),
-                    child: const Text('Terima'),
+                if (group.receivedPending > 0)
+                  StatusPill(
+                    label: '${group.receivedPending} menunggu',
+                    color: context.appSemantic.condMp,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _run(
-                            () => ref
-                                .read(proposalsRepositoryProvider)
-                                .rejectBidProposal(proposalSlug: proposal.slug),
-                            'Proposal ditolak',
-                          ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colors.error,
-                    ),
-                    child: const Text('Tolak'),
+                if (group.sentPending > 0) ...[
+                  if (group.receivedPending > 0) const SizedBox(height: 4),
+                  StatusPill(
+                    label: '${group.sentPending} terkirim',
+                    color: context.mutedForeground,
                   ),
-                ),
+                ],
               ],
             ),
+            Icon(Icons.chevron_right, size: 18, color: context.mutedForeground),
           ],
-        ],
+        ),
       ),
     );
   }

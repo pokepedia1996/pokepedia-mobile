@@ -14,9 +14,12 @@ void main() {
     });
 
     test('reads the array shape', () {
-      expect(embeddedRow([
+      expect(
+        embeddedRow([
+          {'condition': 'LP'},
+        ]),
         {'condition': 'LP'},
-      ]), {'condition': 'LP'});
+      );
     });
 
     test('an absent or empty embed is null, not a crash', () {
@@ -27,10 +30,13 @@ void main() {
 
   group('embeddedRows', () {
     test('takes either shape', () {
-      expect(embeddedRows([
-        {'a': 1},
-        {'a': 2},
-      ]), hasLength(2));
+      expect(
+        embeddedRows([
+          {'a': 1},
+          {'a': 2},
+        ]),
+        hasLength(2),
+      );
       expect(embeddedRows({'a': 1}), hasLength(1));
       expect(embeddedRows(null), isEmpty);
     });
@@ -103,7 +109,10 @@ void main() {
             'collector_number': '079/101',
             'category': 'pokemon',
           },
-          'settlements': {'status': 'awaiting_shipment', 'paid_at': '2026-08-01T01:00:00Z'},
+          'settlements': {
+            'status': 'awaiting_shipment',
+            'paid_at': '2026-08-01T01:00:00Z',
+          },
         },
       ],
     }, storeName: 'ash_ketchum');

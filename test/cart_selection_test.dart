@@ -129,11 +129,7 @@ void main() {
 
   test('the seller checkbox toggles only that seller', () {
     final container = _containerWith(
-      _FakeCart([
-        _item(1),
-        _item(2),
-        _item(3, sellerId: 'seller-2'),
-      ]),
+      _FakeCart([_item(1), _item(2), _item(3, sellerId: 'seller-2')]),
     );
 
     container
@@ -175,10 +171,7 @@ void main() {
 
   test('the subtotal follows the selection, not the cart', () {
     final container = _containerWith(
-      _FakeCart([
-        _item(1, price: 50000, quantity: 2),
-        _item(2, price: 30000),
-      ]),
+      _FakeCart([_item(1, price: 50000, quantity: 2), _item(2, price: 30000)]),
     );
     expect(container.read(selectedSubtotalProvider), 130000);
 

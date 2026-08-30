@@ -129,6 +129,25 @@ class CartNotifier extends Notifier<List<CartItem>> {
     await refresh();
   }
 
+  /// Removes the lines a checkout just took, leaving anything the buyer
+  /// left unticked.
+  ///
+  /// The server locks the stock but does not empty the cart —
+  /// `lock_cart_for_payment` only raises `qty_locked` — so without this the
+  /// buyer returns from paying to a cart still holding what they bought.
+  Future<void> removeItems(Iterable<int> cartItemIds) async {
+    final repo = ref.read(cartRepositoryProvider);
+    for (final id in cartItemIds) {
+      try {
+        await repo.remove(id);
+      } on Object {
+        // Best effort: a line that refuses to go is a stale cart row, not a
+        // reason to hold up a buyer who has already paid.
+      }
+    }
+    await refresh();
+  }
+
   Future<void> clear() async {
     final repo = ref.read(cartRepositoryProvider);
     for (final item in state) {

@@ -96,23 +96,21 @@ void main() {
   });
 
   for (final showSeller in [true, false]) {
-    testWidgets(
-      'the computed cell fits a card (showSeller: $showSeller)',
-      (tester) async {
-        tester.view.physicalSize = const Size(1170, 3000);
-        tester.view.devicePixelRatio = 3;
-        addTearDown(tester.view.reset);
+    testWidgets('the computed cell fits a card (showSeller: $showSeller)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1170, 3000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
 
-        for (final cell in [173.0, 210.0, 260.0]) {
-          final extent = _extentFor(cell, showSeller: showSeller);
-          expect(
-            await _overflows(tester, cell, extent, showSeller: showSeller),
-            isFalse,
-            reason:
-                'cell ${cell}x$extent overflows with showSeller=$showSeller',
-          );
-        }
-      },
-    );
+      for (final cell in [173.0, 210.0, 260.0]) {
+        final extent = _extentFor(cell, showSeller: showSeller);
+        expect(
+          await _overflows(tester, cell, extent, showSeller: showSeller),
+          isFalse,
+          reason: 'cell ${cell}x$extent overflows with showSeller=$showSeller',
+        );
+      }
+    });
   }
 }

@@ -83,16 +83,6 @@ class AccountPage extends ConsumerWidget {
                           badge: ref.watch(chatUnreadCountProvider),
                           onTap: () => context.push(Routes.chat),
                         ),
-                        // _Row(
-                        //   icon: Icons.favorite_border,
-                        //   label: 'Toko yang Diikuti',
-                        //   onTap: () => context.push(Routes.accountFollowing),
-                        // ),
-                        // _Row(
-                        //   icon: Icons.location_on_outlined,
-                        //   label: 'Alamat',
-                        //   onTap: () => context.push(Routes.addresses),
-                        // ),
                         _Row(
                           icon: Icons.people_outline,
                           label: 'Cari Pengguna',

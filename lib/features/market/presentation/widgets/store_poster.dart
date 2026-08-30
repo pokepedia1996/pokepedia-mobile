@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_radius.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
@@ -9,6 +8,9 @@ import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/models/store_model.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/seller_avatar.dart';
+
+/// Below this, the sold count is omitted from the poster entirely.
+const _minSoldToShow = 5;
 
 /// Which side of the seller's book the poster is advertising.
 enum PosterSide {
@@ -33,6 +35,53 @@ enum PosterSide {
 /// Rendered off-screen and captured to PNG, so it is deliberately built at a
 /// fixed size rather than to the phone's width — a poster that reflows with
 /// the device would produce a different image per handset.
+/// Ten posters is the ceiling — past that a "poster" is a catalogue nobody
+/// scrolls, and the share sheet starts choking on attachments.
+const maxPosterPages = 10;
+
+/// Splits a store's listings into poster-sized pages, capped at
+/// [maxPosterPages].
+///
+/// The first page is one card short of the rest: its last slot goes to the
+/// "+N lainnya" tile, because that page is the one posted on its own and has
+/// to say how much more the store is holding. Paginating it as a full page
+/// would leave the card that tile displaces on no poster at all.
+List<List<ListingModel>> paginateForPoster(List<ListingModel> listings) {
+  if (listings.isEmpty) return const [];
+  if (listings.length <= StorePoster.capacity) return [listings];
+
+  final first = StorePoster.capacity - 1;
+  final pages = [listings.take(first).toList()];
+  for (
+    var i = first;
+    i < listings.length && pages.length < maxPosterPages;
+    i += StorePoster.capacity
+  ) {
+    pages.add(listings.skip(i).take(StorePoster.capacity).toList());
+  }
+  return pages;
+}
+
+/// The `totalCount` a given page reports, which is what decides whether it
+/// draws a "+N lainnya" tile.
+///
+/// Page one carries the whole store's remainder: it is what the sheet
+/// selects by default and what gets posted alone, so it is the page that has
+/// to point at the rest. The pages after it are read as part of a set and
+/// count only themselves — repeating the remainder there would tell a reader
+/// who has all the images that they are still missing most of them. Only the
+/// final page adds anything back, and only what the [maxPosterPages] cap
+/// left behind.
+int posterPageTotal(List<List<ListingModel>> pages, int index, int total) {
+  if (index == 0) return total;
+
+  final shownThrough = pages
+      .take(index + 1)
+      .fold<int>(0, (sum, page) => sum + page.length);
+  final leftover = index == pages.length - 1 ? total - shownThrough : 0;
+  return pages[index].length + leftover;
+}
+
 class StorePoster extends StatelessWidget {
   const StorePoster({
     super.key,
@@ -70,7 +119,6 @@ class StorePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
     final total = totalCount ?? listings.length;
     // Reserve the last slot for the "+N" tile unless everything fits, then
     // count the overflow against what is actually *drawn* — counting it
@@ -104,7 +152,7 @@ class StorePoster extends StatelessWidget {
               crossAxisCount: _columns,
               mainAxisSpacing: 20,
               crossAxisSpacing: 20,
-              childAspectRatio: 0.66,
+              childAspectRatio: 245 / 342,
               children: [
                 for (final listing in tiles) _PosterTile(listing: listing),
                 if (overflow > 0) _MoreTile(count: overflow),
@@ -113,13 +161,21 @@ class StorePoster extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'Belanja aman tanpa potongan di ',
-                style: AppTypography.h3(const Color(0xFF5A6270)),
+              Expanded(
+                child: Text(
+                  'Belanja aman tanpa potongan di pokepedia.id',
+                  style: AppTypography.h3(const Color(0xFF5A6270)),
+                ),
               ),
-              Text('pokepedia.id', style: AppTypography.h3(colors.primary)),
+              const SizedBox(width: 16),
+              // The wordmark in the bottom corner, so a screenshot that
+              // loses the caption still carries the source.
+              Image.asset(
+                'assets/images/horizontal-logo-light.webp',
+                height: 44,
+                filterQuality: FilterQuality.high,
+              ),
             ],
           ),
         ],
@@ -205,10 +261,13 @@ class _Header extends StatelessWidget {
                       '${positivePct!.round()}% positif',
                       style: AppTypography.bodySm(muted).copyWith(fontSize: 20),
                     ),
-                  Text(
-                    '${store.itemsSoldCount} terjual',
-                    style: AppTypography.bodySm(muted).copyWith(fontSize: 20),
-                  ),
+                  // Under five sales is not a number worth advertising —
+                  // it reads as "nobody buys here" rather than as traction.
+                  if (store.itemsSoldCount >= _minSoldToShow)
+                    Text(
+                      '${store.itemsSoldCount} terjual',
+                      style: AppTypography.bodySm(muted).copyWith(fontSize: 20),
+                    ),
                 ],
               ),
             ],
@@ -260,53 +319,60 @@ class _PosterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF15171D);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CardArt(imageUrl: listing.card.imageUrl, borderRadius: AppRadius.md),
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CardArt(
-                  imageUrl: listing.card.imageUrl,
-                  borderRadius: AppRadius.md,
-                ),
+          // Condition, abbreviated — "NM" reads at poster scale where "Near
+          // Mint" would wrap or shrink.
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              // Condition sits on the art, as sketched.
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Text(
-                    listing.condition.label,
-                    style: AppTypography.badge(
-                      Colors.white,
-                    ).copyWith(fontSize: 16),
-                  ),
-                ),
+              child: Text(
+                listing.condition.short,
+                style: AppTypography.badge(Colors.white).copyWith(fontSize: 16),
               ),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          formatRupiah(listing.price),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.bodySmSemibold(ink).copyWith(fontSize: 22),
-        ),
-      ],
+
+          // Price sits *on* the art rather than under it, which buys the
+          // grid a full row of height. The scrim is what keeps it legible
+          // over a light card — a plain label on artwork is a coin flip.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0xE6000000)],
+                ),
+              ),
+              child: Text(
+                formatRupiah(listing.price),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySmSemibold(
+                  Colors.white,
+                ).copyWith(fontSize: 22),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

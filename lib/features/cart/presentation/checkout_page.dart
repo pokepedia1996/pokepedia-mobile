@@ -8,6 +8,8 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
+import 'widgets/empty_cart_card.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../account/presentation/widgets/address_form_sheet.dart';
 import '../../account/repository/models/address_model.dart';
@@ -17,6 +19,7 @@ import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import '../usecase/cart_notifier.dart';
 import '../usecase/cart_selection.dart';
+import '../../orders/usecase/orders_notifier.dart';
 import '../usecase/checkout_notifier.dart';
 import 'checkout/buyer_note_box.dart';
 import 'checkout/order_summary.dart';
@@ -24,8 +27,6 @@ import 'checkout/payment_method_picker.dart';
 import 'checkout/payment_section.dart';
 import 'checkout/seller_group_card.dart';
 import 'checkout_status_page.dart';
-import 'checkout_webview_page.dart';
-import 'qris_payment_page.dart';
 import 'payment_webview_page.dart';
 
 /// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
@@ -41,8 +42,10 @@ import 'payment_webview_page.dart';
 /// on pokepedia.id: they need `BITESHIP_API_KEY` / `XENDIT_SECRET_KEY` and
 /// `service_role`, none of which belong in a shipped app. The app
 /// authenticates to them with its own Supabase session, which
-/// `getRequestAuth` accepts. If those routes can't be reached, this page
-/// falls back to finishing checkout on the web rather than pretending.
+/// `getRequestAuth` accepts. If those routes can't be reached the buyer
+/// stays here and is told so — checkout is never handed off to the web
+/// version, which would run pricing and address selection a second time
+/// against a session this page can't see, with both racing over one cart.
 class CheckoutPage extends ConsumerStatefulWidget {
   const CheckoutPage({super.key});
 
@@ -143,6 +146,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   /// Validates locally, submits, then opens the gateway's page.
+  /// True from the moment the payment page is pushed until it closes.
+  bool _paying = false;
+
   Future<void> _pay() async {
     final notifier = ref.read(checkoutProvider.notifier);
 
@@ -163,6 +169,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
       final invoiceUrl = result.invoiceUrl;
       final externalId = result.externalId;
+      // Read before anything mutates the cart: `selectedCartItemsProvider`
+      // is derived from it, so it empties the moment the lines are removed.
+      final checkedOutItemIds = [
+        for (final item in ref.read(selectedCartItemsProvider)) item.cartItemId,
+      ];
       final method = ref.read(checkoutProvider).paymentMethod;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
@@ -174,36 +185,48 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         return;
       }
 
-      // A `redirect` and no invoice means the server already finished the
-      // job — a wallet settlement, or a repeat submit it recognised and
-      // deduplicated. There's nothing to pay.
-      if (invoiceUrl == null && result.redirect != null) {
-        await ref.read(cartProvider.notifier).refresh();
-        if (mounted) context.go(Routes.orders);
-        return;
-      }
-
-      // QRIS always goes to the native payment page. It asks the gateway
-      // for the code itself, so it doesn't need the hosted invoice URL and
-      // isn't blocked when the checkout didn't return one.
-      if (channel == PaymentChannel.qris && externalId != null) {
-        await Navigator.of(context).push<bool>(
-          MaterialPageRoute<bool>(
-            builder: (_) => QrisPaymentPage(
-              externalId: externalId,
-              amount: result.totalAmount ?? 0,
-              invoiceUrl: invoiceUrl,
-            ),
-          ),
-        );
-      } else if (invoiceUrl != null) {
-        // Virtual accounts still use the hosted page — there's no native
-        // screen for an account number yet.
-        await Navigator.of(context).push(
+      // Every channel goes to Xendit's hosted invoice — QRIS included.
+      // That is the documented flow (§5 of the bearer-auth handoff: mobile
+      // opens a WebView on `invoiceUrl` and nothing else), and the Invoice
+      // API exposes no QR payload for the app to draw itself.
+      if (invoiceUrl != null) {
+        // Push first, then clear — deliberately in that order, and
+        // deliberately not awaiting the push before clearing.
+        //
+        // Clearing has to happen now rather than on return: payment often
+        // finishes in a banking app with this page long gone, and a cart
+        // still holding what was just bought invites a double purchase. But
+        // emptying the cart rebuilds this page into its empty state, which
+        // flashed behind the route transition. Starting the push first puts
+        // the WebView over the top before that rebuild lands.
+        setState(() => _paying = true);
+        final closed = Navigator.of(context).push(
           MaterialPageRoute<PaymentOutcome>(
             builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
           ),
         );
+
+        await ref.read(cartProvider.notifier).removeItems(checkedOutItemIds);
+        // The checkout now exists as an unpaid cart, which is what Pesanan
+        // shows under Belum Bayar.
+        ref.invalidate(myPendingCheckoutsProvider);
+
+        await closed;
+        if (mounted) setState(() => _paying = false);
+      } else if (result.redirect != null) {
+        // `/api/cart/checkout` only returns a bare `redirect` from its
+        // wallet branch, so reaching this on a card payment means the
+        // response didn't come from where we think. Report the target
+        // rather than asserting the order was processed.
+        await ref.read(cartProvider.notifier).refresh();
+        if (mounted) {
+          _toast(
+            'Server mengarahkan ke ${result.redirect} '
+            '(channel: ${channel?.code ?? "-"}, '
+            'ref: ${externalId ?? "-"}).',
+          );
+        }
+        return;
       } else {
         // No QR to draw and no page to open. Name what came back, because
         // "not available" alone is undiagnosable — this is the branch that
@@ -222,9 +245,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // happen — a VA transfer is often paid in a banking app with the
       // page long gone. Only our own backend knows, so go ask it.
       if (externalId == null) {
-        // No id to poll with; the order still exists server-side.
+        // No id to poll with, so there's nothing to confirm against — the
+        // order still exists server-side. Named rather than silent: landing
+        // on Pesanan with no explanation looks like the payment was skipped.
         await ref.read(cartProvider.notifier).refresh();
-        if (mounted) context.go(Routes.orders);
+        if (mounted) {
+          _toast(
+            'Checkout tidak mengembalikan nomor referensi. Cek status di '
+            'Pesanan.',
+          );
+          // context.go(Routes.orders);
+        }
         return;
       }
 
@@ -239,23 +270,24 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (!mounted) return;
       await ref.read(cartProvider.notifier).refresh();
     } on ApiUnreachableException catch (e) {
+      // Reported and left at that. Handing the buyer the web checkout
+      // instead would restart pricing and address selection in a second
+      // place, against a session the app can't see the state of — two
+      // checkouts racing over the same cart. Staying put means retrying is
+      // one tap, on the numbers already on screen.
       if (!mounted) return;
       _toast(e.message);
-      await _finishOnWeb();
+    } on ApiSessionExpiredException catch (e) {
+      // The one auth failure worth interrupting for: the token could not be
+      // refreshed, so nothing the buyer does here will work until they sign
+      // in again. Every other 401 was already retried transparently.
+      if (!mounted) return;
+      _toast(e.message);
+      context.push(Routes.login);
     } on ApiException catch (e) {
       if (!mounted) return;
       _toast(e.message);
     }
-  }
-
-  /// Last resort when the API can't be reached from the app: the same
-  /// checkout on pokepedia.id, where the browser can satisfy the edge.
-  Future<void> _finishOnWeb() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CheckoutWebViewPage()),
-    );
-    if (!mounted) return;
-    await ref.read(cartProvider.notifier).refresh();
   }
 
   void _toast(String message) {
@@ -276,6 +308,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // and submits the selection, so reading the whole cart here showed a
     // buyer two lines while charging them for one.
     final items = ref.watch(selectedCartItemsProvider);
+    final cartIsEmpty = ref.watch(cartProvider).isEmpty;
     final state = ref.watch(checkoutProvider);
     final notifier = ref.watch(checkoutProvider.notifier);
     final addresses = ref.watch(addressesProvider).valueOrNull ?? const [];
@@ -295,23 +328,30 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       extendBodyBehindAppBar: true,
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
-        child: items.isEmpty
+        // While the payment page is up, this one is only ever a backdrop.
+        // Clearing the cart empties the selection, which would otherwise
+        // rebuild this into "Keranjang kosong" and flash it through the
+        // route transition — a page the buyer never asked to see.
+        child: _paying
+            ? const PikachuLoader()
+            // An empty cart and an empty selection are different problems
+            // with different exits, so they are separate branches rather
+            // than one empty state with swapped copy.
+            //
+            // Cart empty is checked first: with nothing in the cart there is
+            // nothing to go back and select, so "Kembali ke Keranjang" would
+            // be a dead end.
+            : cartIsEmpty
+            ? const EmptyCartCard()
+            : items.isEmpty
             ? EmptyState(
-                icon: Icons.shopping_cart_outlined,
-                // An empty cart and an empty selection are different
-                // problems, and only one of them is solved by shopping.
-                title: ref.watch(cartProvider).isEmpty
-                    ? 'Keranjang kosong'
-                    : 'Belum ada kartu yang dipilih',
-                description: ref.watch(cartProvider).isEmpty
-                    ? 'Tambahkan kartu dulu sebelum checkout.'
-                    : 'Pilih kartu di keranjang untuk dilanjutkan.',
-                action: ref.watch(cartProvider).isEmpty
-                    ? null
-                    : ElevatedButton(
-                        onPressed: () => context.pop(),
-                        child: const Text('Kembali ke Keranjang'),
-                      ),
+                icon: Icons.check_box_outline_blank,
+                title: 'Belum ada kartu yang dipilih',
+                description: 'Pilih kartu di keranjang untuk dilanjutkan.',
+                action: ElevatedButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Kembali ke Keranjang'),
+                ),
               )
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -334,7 +374,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     _ServerUnreachableNotice(
                       message: state.contextError!,
                       onRetry: notifier.loadContext,
-                      onFinishOnWeb: _finishOnWeb,
                     ),
                   ],
 
@@ -446,12 +485,10 @@ class _ServerUnreachableNotice extends StatelessWidget {
   const _ServerUnreachableNotice({
     required this.message,
     required this.onRetry,
-    required this.onFinishOnWeb,
   });
 
   final String message;
   final VoidCallback onRetry;
-  final VoidCallback onFinishOnWeb;
 
   @override
   Widget build(BuildContext context) {

@@ -4,6 +4,7 @@ import '../../../shared/utils/postgrest_embed.dart';
 import 'models/dispute_model.dart';
 import 'models/order_model.dart';
 import 'models/pending_checkout.dart';
+import 'models/seller_order_detail.dart';
 
 /// The card columns [OrderItemModel] needs, matching what
 /// `expansions_repository.dart` selects so both build the same [CardModel].
@@ -28,7 +29,7 @@ class OrdersRepository {
   /// Kept on one line: PostgREST takes `select` as a query parameter.
   static const _orderColumns =
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
-      'order_items(slug, order_number, card_id, matched_quantity, match_price,'
+      'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
       'status, created_at, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'paid_at, payment_deadline, cancel_status, cancel_reason),'
@@ -76,13 +77,27 @@ class OrdersRepository {
     final names = asSeller
         ? await _usernames(counterpartyIds)
         : await _sellerNames(counterpartyIds);
+    // The card's header shows a store logo, an `@username` and a link, so
+    // the identity is resolved alongside the name — two batched queries for
+    // the whole page rather than one per row.
+    final identities = asSeller
+        ? const <String, _SellerIdentity>{}
+        : await _sellerIdentities(counterpartyIds);
 
     return rows.map((r) {
       final row = r as Map<String, dynamic>;
-      final counterparty = row[asSeller ? 'buyer_id' : 'seller_id'];
-      return OrderModel.fromRow(
+      final counterparty = row[asSeller ? 'buyer_id' : 'seller_id'] as String?;
+      final order = OrderModel.fromRow(
         row,
         storeName: names[counterparty] ?? (asSeller ? 'Pembeli' : 'Penjual'),
+      );
+      final identity = identities[counterparty];
+      if (identity == null) return order;
+      return order.withSeller(
+        username: identity.username,
+        avatarUrl: identity.avatarUrl,
+        logoUrl: identity.logoUrl,
+        slug: identity.slug,
       );
     }).toList();
   }
@@ -107,6 +122,80 @@ class OrdersRepository {
     }
     return byCart.values.map(PendingCheckout.fromRows).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// The buyer's own unpaid checkouts — what "Belum Bayar" actually is.
+  ///
+  /// There is no order until the webhook settles the payment, so an unpaid
+  /// checkout lives in `carts` and nowhere else. `carts_select_own` scopes
+  /// this to the caller, so it needs no server route.
+  Future<List<PendingCheckout>> fetchMyPendingCheckouts({
+    int limit = 20,
+  }) async {
+    final me = _uid;
+    if (me == null) return const [];
+
+    final rows =
+        await _client
+                .from('carts')
+                .select(
+                  'id, external_id, status, total_amount, expires_at,'
+                  'created_at, invoice_url, cart_snapshot',
+                )
+                .eq('user_id', me)
+                .eq('status', 'pending')
+                // An expired cart is not payable: the stock is already back
+                // on sale, so offering it would be a dead end.
+                .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+                .order('created_at', ascending: false)
+                .limit(limit)
+            as List;
+
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(pendingCheckoutFromCart)
+        .toList();
+  }
+
+  /// Store logo and slug from `get_store_identities`, username and avatar
+  /// from `profiles` — the two halves of what web's `resolveSellerDisplay`
+  /// needs, neither of which is readable off `seller_profiles` by a buyer.
+  Future<Map<String, _SellerIdentity>> _sellerIdentities(
+    Set<String> ids,
+  ) async {
+    if (ids.isEmpty) return const {};
+
+    final stores = <String, Map<String, dynamic>>{};
+    try {
+      final rows =
+          await _client.rpc(
+                'get_store_identities',
+                params: {'p_user_ids': ids.toList()},
+              )
+              as List;
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        stores[row['user_id'] as String] = row;
+      }
+    } on PostgrestException {
+      // A missing storefront just means the username is what shows.
+    }
+
+    final profiles =
+        await _client
+                .from('profiles')
+                .select('id, username, avatar_url')
+                .inFilter('id', ids.toList())
+            as List;
+
+    return {
+      for (final row in profiles.cast<Map<String, dynamic>>())
+        row['id'] as String: _SellerIdentity(
+          username: row['username'] as String?,
+          avatarUrl: row['avatar_url'] as String?,
+          logoUrl: stores[row['id']]?['store_logo_url'] as String?,
+          slug: stores[row['id']]?['store_slug'] as String?,
+        ),
+    };
   }
 
   /// Usernames by id, straight off `profiles` — world-readable, unlike
@@ -139,6 +228,54 @@ class OrdersRepository {
     final sellerId = row['seller_id'] as String?;
     final names = await _sellerNames({if (sellerId != null) sellerId});
     return OrderModel.fromRow(row, storeName: names[sellerId] ?? 'Penjual');
+  }
+
+  /// The seller's own columns for one order: the settlement's money and the
+  /// shipping destination, neither of which the buyer's view needs.
+  ///
+  /// A superset of [_orderColumns] rather than an addition to it — the buyer
+  /// list would be paying for joins it never reads.
+  static const _sellerOrderColumns =
+      'id, slug, order_number, status, created_at, seller_id, buyer_id,'
+      'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
+      'status, created_at, cards($_cardColumns),'
+      'settlements(condition, escrow_amount, shipping_cost, status,'
+      'paid_at, payment_deadline, cancel_status, cancel_reason,'
+      'commission_amount, seller_net_amount, insurance_premium_idr),'
+      'disputes(slug, current_status)),'
+      'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
+      'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'biteship_book_error, origin_collection_method, status_history,'
+      'destination_contact_name, destination_contact_phone,'
+      'destination_full_address, destination_district, destination_city,'
+      'destination_province, destination_postal_code)';
+
+  /// One order as its seller — web's `/seller/orders/[matchId]`.
+  ///
+  /// Returns null when the row isn't this user's to sell: `orders_select_own`
+  /// covers both sides, so a buyer opening a seller URL would otherwise get
+  /// their own order back wearing the wrong screen.
+  Future<SellerOrderDetail?> fetchSellerOrder(String slug) async {
+    final me = _uid;
+    if (me == null) return null;
+
+    final row = await _client
+        .from('orders')
+        .select(_sellerOrderColumns)
+        .eq('slug', slug)
+        .eq('seller_id', me)
+        .maybeSingle();
+    if (row == null) return null;
+
+    final buyerId = row['buyer_id'] as String?;
+    final usernames = await _usernames({if (buyerId != null) buyerId});
+    final username = usernames[buyerId];
+
+    return SellerOrderDetail.fromRow(
+      row,
+      order: OrderModel.fromRow(row, storeName: username ?? 'Pembeli'),
+      buyerUsername: username,
+    );
   }
 
   /// Store name per seller id, falling back to their username for a seller
@@ -178,6 +315,34 @@ class OrdersRepository {
     return names;
   }
 
+  /// Buyer confirms the package arrived, releasing the escrow.
+  ///
+  /// `confirm_receipt` refuses anything but a shipped settlement the courier
+  /// has recorded as delivered, with no open dispute — [OrderModel]'s
+  /// `canConfirmReceipt` mirrors those rules so the button only appears
+  /// where the call would succeed.
+  Future<String?> confirmReceipt(int orderItemId) async {
+    if (_uid == null) return 'Sesi berakhir.';
+    try {
+      final result = await _client.rpc(
+        'confirm_receipt',
+        params: {'p_match_id': orderItemId},
+      );
+      if (result is! Map) return 'Gagal mengonfirmasi penerimaan.';
+      if (result['ok'] == true || result['error'] == null) return null;
+
+      return switch (result['error']) {
+        'not_delivered_yet' => 'Paket belum tercatat sampai oleh kurir.',
+        'dispute_open' => 'Ada komplain terbuka untuk pesanan ini.',
+        'invalid_status' => 'Pesanan ini belum bisa dikonfirmasi.',
+        'forbidden' => 'Kamu bukan pembeli pesanan ini.',
+        _ => 'Gagal mengonfirmasi penerimaan.',
+      };
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
   /// The dispute on an order, if one was opened. Disputes hang off the
   /// settlement rather than the order, so this walks the order's items.
   Future<DisputeModel?> fetchDispute(String orderSlug) async {
@@ -210,4 +375,20 @@ class OrdersRepository {
 
     return DisputeModel.fromRow(row, orderSlug: orderSlug);
   }
+}
+
+/// The counterparty's display identity, assembled from the two sources a
+/// buyer is allowed to read.
+class _SellerIdentity {
+  const _SellerIdentity({
+    this.username,
+    this.avatarUrl,
+    this.logoUrl,
+    this.slug,
+  });
+
+  final String? username;
+  final String? avatarUrl;
+  final String? logoUrl;
+  final String? slug;
 }

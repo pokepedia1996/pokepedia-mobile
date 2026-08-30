@@ -34,9 +34,14 @@ import '../../features/portfolio/presentation/inventory_page.dart';
 import '../../features/portfolio/presentation/list_detail_page.dart';
 import '../../features/portfolio/presentation/lists_page.dart';
 import '../../features/portfolio/presentation/portfolio_page.dart';
+import '../../features/proposals/presentation/card_proposals_page.dart';
+import '../../features/proposals/presentation/offers_page.dart';
 import '../../features/proposals/presentation/proposals_page.dart';
+import '../../features/proposals/repository/models/proposal_card_group.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
+import '../../features/seller/presentation/seller_listing_offers_page.dart';
+import '../../features/seller/presentation/seller_order_detail_page.dart';
 import '../../features/seller/presentation/seller_orders_page.dart';
 import '../../features/seller/presentation/seller_couriers_page.dart';
 import '../../features/seller/presentation/seller_products_page.dart';
@@ -218,7 +223,25 @@ final appRouter = GoRouter(
         ),
       ],
     ),
-    GoRoute(path: Routes.proposals, builder: (_, __) => const ProposalsPage()),
+    GoRoute(path: Routes.offers, builder: (_, __) => const OffersPage()),
+    GoRoute(
+      path: '/proposals/card/:cardId',
+      builder: (_, state) => CardProposalsPage(
+        cardId: int.tryParse(state.pathParameters['cardId'] ?? '') ?? 0,
+      ),
+    ),
+    GoRoute(
+      path: Routes.proposals,
+      builder: (_, state) => ProposalsPage(
+        initialFilter: switch (state.uri.queryParameters['filter']) {
+          'perlu_aksi' => ProposalFeedFilter.needsAction,
+          'menunggu' => ProposalFeedFilter.waiting,
+          'diterima' => ProposalFeedFilter.accepted,
+          'selesai' => ProposalFeedFilter.done,
+          _ => ProposalFeedFilter.all,
+        },
+      ),
+    ),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
 
     // Seller.
@@ -229,10 +252,26 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.sellerProducts,
       builder: (_, __) => const SellerProductsPage(),
+      routes: [
+        GoRoute(
+          path: 'offers/:slug',
+          builder: (_, state) => SellerListingOffersPage(
+            listingSlug: state.pathParameters['slug'] ?? '',
+          ),
+        ),
+      ],
     ),
     GoRoute(
       path: Routes.sellerOrders,
       builder: (_, __) => const SellerOrdersPage(),
+      routes: [
+        GoRoute(
+          path: ':slug',
+          builder: (_, state) => SellerOrderDetailPage(
+            orderSlug: state.pathParameters['slug'] ?? '',
+          ),
+        ),
+      ],
     ),
     GoRoute(
       path: Routes.sellerStore,

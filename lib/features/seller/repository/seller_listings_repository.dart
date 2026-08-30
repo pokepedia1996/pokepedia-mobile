@@ -154,6 +154,14 @@ class SellerListingsRepository {
   Future<String?> archive(String slug) =>
       _call('archive_listing', {'p_slug': slug});
 
+  /// Ports `POST /api/seller/listings/delete` → `delete_listing`, which is
+  /// a soft delete: the row keeps its history, it just leaves every list.
+  ///
+  /// Distinct from [archive], which is reversible from the Arsip tab. This
+  /// one is not, which is why the caller confirms first.
+  Future<String?> deletePermanent(String slug) =>
+      _call('delete_listing', {'p_slug': slug});
+
   /// Ports `unarchiveListing`.
   Future<String?> unarchive(String slug) =>
       _call('unarchive_listing', {'p_slug': slug});
@@ -194,6 +202,8 @@ class SellerListingsRepository {
     'not_archived' => 'Listing ini tidak diarsipkan.',
     'invalid_quantity' => 'Jumlah tidak valid.',
     'listing_matched' => 'Listing sudah terjual.',
+    'has_active_payment' =>
+      'Ada pembeli yang sedang membayar listing ini. Coba lagi nanti.',
     _ => 'Gagal memproses listing ($code).',
   };
 }

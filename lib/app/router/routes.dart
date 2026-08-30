@@ -26,6 +26,25 @@ class Routes {
   static const checkoutSuccess = '/cart/checkout/success';
   static const orders = '/orders';
   static const proposals = '/proposals';
+
+  /// Ports web's `?tab=diterima`. The market banner sends you where the work
+  /// is: incoming proposals need answering, so they outrank ones you're
+  /// waiting on.
+  static const proposalsReceived = '/proposals?tab=diterima';
+
+  /// Offers made on ask listings. Not a web route: web surfaces these in
+  /// the seller's offers list and inside chat, neither of which the app has.
+  static const offers = '/proposals/offers';
+
+  /// Everything happening on one card — web's `/proposals/card/[cardId]`.
+  static String cardProposals(int cardId) => '/proposals/card/$cardId';
+
+  /// Proposals this user sent as a seller. Web's `?tab=dikirim`.
+  static const proposalsSent = '/proposals?tab=dikirim';
+
+  /// The user's own WTB bids. Where "N bid aktif" points — those rows live
+  /// on this tab and nowhere else.
+  static const proposalsBids = '/proposals?tab=bid';
   static const wallet = '/wallet';
   static const lists = '/portfolio/list';
 
@@ -33,6 +52,16 @@ class Routes {
   static const seller = '/seller';
   static const sellerProducts = '/seller/products';
   static const sellerOrders = '/seller/orders';
+
+  /// Offers a buyer has made on one listing. Web keys this by
+  /// `listings.slug`, and so does the app.
+  static String sellerListingOffers(String listingSlug) =>
+      '/seller/products/offers/$listingSlug';
+
+  /// One order as its seller. Web calls the parameter `matchId`; the app
+  /// passes `orders.slug`, which is the same value that route resolves.
+  static String sellerOrderDetail(String orderSlug) =>
+      '/seller/orders/$orderSlug';
 
   /// Web's "Toko" section and its three pages. `/seller/settings` is the
   /// path web uses for the profile; kept as `/seller/store/profile` here so

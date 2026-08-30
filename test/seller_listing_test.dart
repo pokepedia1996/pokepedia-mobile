@@ -112,14 +112,11 @@ void main() {
 
   group('SellerListingBucket', () {
     test('only the three listing buckets read the listings table', () {
-      expect(
-        SellerListingBucket.values.where((b) => b.isListingBucket),
-        [
-          SellerListingBucket.active,
-          SellerListingBucket.inactive,
-          SellerListingBucket.archived,
-        ],
-      );
+      expect(SellerListingBucket.values.where((b) => b.isListingBucket), [
+        SellerListingBucket.active,
+        SellerListingBucket.inactive,
+        SellerListingBucket.archived,
+      ]);
       // Draft reads `listing_drafts`, Preferensi reads no list at all —
       // filtering them through the listings query would show the wrong rows.
       expect(SellerListingBucket.draft.isListingBucket, isFalse);
