@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -85,6 +86,72 @@ class PokepediaApi {
 
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
       _retrying(() => _send('POST', path, body));
+
+  /// `multipart/form-data` POST, for the routes that take a file rather than
+  /// JSON — today only `/api/scan`, which reads its image out of a `FormData`.
+  ///
+  /// Goes through the same [_retrying] ladder as [post], so a scan gets the
+  /// same one-refresh-one-retry treatment on 401 and the same bypass-key
+  /// recovery on a WAF challenge. [timeout] is separate from the default
+  /// because recognition is a genuinely long request: `/api/scan` declares
+  /// `maxDuration = 60` and budgets 50s internally, so a 30s client timeout
+  /// would abandon scans the server was still going to answer.
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    Map<String, String> fields = const {},
+    List<ApiMultipartFile> files = const [],
+    Duration? timeout,
+  }) => _retrying(
+    () => _send(
+      'POST',
+      path,
+      null,
+      multipart: _buildMultipart(fields, files),
+      timeout: timeout,
+    ),
+  );
+
+  /// Encodes [fields] and [files] into one RFC 7578 body.
+  ///
+  /// Built whole in memory rather than streamed: the only caller sends a
+  /// single card photo already capped well under `/api/scan`'s own 4.5 MB
+  /// limit, and a streamed body would have to be rebuilt from scratch for
+  /// [_retrying]'s second attempt anyway.
+  _MultipartBody _buildMultipart(
+    Map<String, String> fields,
+    List<ApiMultipartFile> files,
+  ) {
+    // Long and random-ish so it cannot occur inside a JPEG payload.
+    final boundary =
+        '----pokepediaMobile'
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+    final buffer = BytesBuilder(copy: false);
+
+    void writeLine(String value) => buffer.add(utf8.encode('$value\r\n'));
+
+    for (final entry in fields.entries) {
+      writeLine('--$boundary');
+      writeLine(
+        'Content-Disposition: form-data; name="${entry.key}"',
+      );
+      writeLine('');
+      writeLine(entry.value);
+    }
+    for (final file in files) {
+      writeLine('--$boundary');
+      writeLine(
+        'Content-Disposition: form-data; name="${file.field}"; '
+        'filename="${file.filename}"',
+      );
+      writeLine('Content-Type: ${file.contentType}');
+      writeLine('');
+      buffer.add(file.bytes);
+      buffer.add(utf8.encode('\r\n'));
+    }
+    writeLine('--$boundary--');
+
+    return _MultipartBody(boundary: boundary, bytes: buffer.takeBytes());
+  }
 
   /// Runs a request, escalating through the recoveries that exist.
   ///
@@ -205,8 +272,11 @@ class PokepediaApi {
   Future<Map<String, dynamic>> _send(
     String method,
     String path,
-    Map<String, dynamic>? body,
-  ) async {
+    Map<String, dynamic>? body, {
+    _MultipartBody? multipart,
+    Duration? timeout,
+  }) async {
+    final deadline = timeout ?? _timeout;
     // Awaited here so the very first request already carries the header.
     await _ensureBypassKey();
     final token = await _accessToken();
@@ -214,7 +284,7 @@ class PokepediaApi {
       throw const ApiAuthException('Sesi kamu berakhir. Masuk lagi ya.');
     }
 
-    final client = HttpClient()..connectionTimeout = _timeout;
+    final client = HttpClient()..connectionTimeout = deadline;
     try {
       final bypass = _bypassKey;
       var uri = Uri.parse('${AppConfig.appUrl}$path');
@@ -227,7 +297,7 @@ class PokepediaApi {
       // reads a field out of it sees a plausible-looking payload from a
       // request the route never ran.
       for (var hop = 0; ; hop++) {
-        final request = await client.openUrl(method, uri).timeout(_timeout);
+        final request = await client.openUrl(method, uri).timeout(deadline);
         request.followRedirects = false;
         request.headers
           ..set(HttpHeaders.acceptHeader, 'application/json')
@@ -238,12 +308,22 @@ class PokepediaApi {
           ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
         // Satisfies the Vercel firewall rule.
         if (bypass != null) request.headers.set(_bypassHeader, bypass);
-        if (body != null) {
+        if (multipart != null) {
+          // The boundary has to travel on the header, not just between the
+          // parts — without it the server sees an unparseable body and
+          // `formData()` throws, which /api/scan reports as a flat 400.
+          request.headers.contentType = ContentType(
+            'multipart',
+            'form-data',
+            parameters: {'boundary': multipart.boundary},
+          );
+          request.add(multipart.bytes);
+        } else if (body != null) {
           request.headers.contentType = ContentType.json;
           request.add(utf8.encode(jsonEncode(body)));
         }
 
-        response = await request.close().timeout(_timeout);
+        response = await request.close().timeout(deadline);
         text = await response.transform(utf8.decoder).join();
 
         final location = response.isRedirect
@@ -272,6 +352,11 @@ class PokepediaApi {
         );
         debugPrint('[api] token: ${_describeToken(token)}');
         if (body != null) debugPrint('[api] request: ${jsonEncode(body)}');
+        // Never the body itself — it's a JPEG, and dumping it would bury the
+        // rest of the log for the exact requests most in need of reading.
+        if (multipart != null) {
+          debugPrint('[api] request: multipart ${multipart.bytes.length}B');
+        }
         debugPrint(
           '[api] response: '
           '${text.length > 600 ? "${text.substring(0, 600)}..." : text}',
@@ -357,6 +442,33 @@ class PokepediaApi {
       return null;
     }
   }
+}
+
+/// One file part of a [PokepediaApi.postMultipart] request.
+class ApiMultipartFile {
+  const ApiMultipartFile({
+    required this.field,
+    required this.filename,
+    required this.bytes,
+    required this.contentType,
+  });
+
+  /// The `FormData` key the route reads this part out of.
+  final String field;
+  final String filename;
+  final Uint8List bytes;
+
+  /// Must be one of the route's allowed types — `/api/scan` rejects anything
+  /// outside `image/jpeg`, `image/png`, `image/webp`.
+  final String contentType;
+}
+
+/// An encoded `multipart/form-data` body plus the boundary its header needs.
+class _MultipartBody {
+  const _MultipartBody({required this.boundary, required this.bytes});
+
+  final String boundary;
+  final Uint8List bytes;
 }
 
 /// The header the firewall rule matches on.

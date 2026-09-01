@@ -47,6 +47,11 @@ dependencies:
   qr_flutter: ^4.1.0
   webview_flutter: ^4.10.0
   image_picker: ^1.2.3
+  # Live camera feed for the card scanner. image_picker can only hand back a
+  # finished still from the OS camera UI — the scanner needs the running
+  # preview (guide-box framing, torch, repeated capture without leaving the
+  # screen), which only this exposes.
+  camera: ^0.11.0+2
   google_sign_in: ^7.2.0
   shared_preferences: ^2.5.5
   share_plus: ^13.3.0

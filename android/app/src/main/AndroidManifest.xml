@@ -36,4 +36,11 @@
         </intent>
     </queries>
         <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The card scanner drives the camera directly (features/scanner). Declared
+         `required="false"` so the app still installs on a camera-less device —
+         every other surface works without one, and the scanner reports the
+         missing hardware itself rather than being filtered out of the Store. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 </manifest>

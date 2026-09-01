@@ -108,6 +108,11 @@ class AppTopBar extends ConsumerWidget {
             child: Row(
               children: [
                 const Expanded(child: _SearchField()),
+                // Sits beside search because it's the same job by another
+                // route: search is "I know what I'm looking for", scan is "I'm
+                // holding it". Kept out of the scroll-morph the cart does — the
+                // scanner is a primary action, not a contextual one.
+                const _ScanButton(),
                 if (showCart)
                   // The cart that takes over once the logo row's copy is gone.
                   // `widthFactor` animates the web's `width: 0 -> auto`, and
@@ -137,6 +142,26 @@ class AppTopBar extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the camera card scanner.
+class _ScanButton extends StatelessWidget {
+  const _ScanButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: IconButton(
+        onPressed: () => context.push(Routes.scan),
+        tooltip: 'Pindai kartu',
+        icon: Icon(
+          Icons.center_focus_strong_outlined,
+          color: context.appColors.onSurface,
+        ),
       ),
     );
   }

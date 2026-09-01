@@ -14,6 +14,12 @@ class Routes {
   // Search (opened from AppTopBar, not a bottom-nav tab).
   static const search = '/advanced-search';
 
+  /// Camera card scanner. Opened from [AppTopBar] alongside search, and
+  /// full-screen above the shell — it takes over the whole viewport (camera
+  /// preview plus its own controls), so the bottom nav would only be in the
+  /// way. Web serves the same feature at `/scan`.
+  static const scan = '/scan';
+
   // Auth.
   static const login = '/login';
   static const signup = '/signup';
