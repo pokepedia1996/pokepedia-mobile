@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -229,7 +230,7 @@ class _SellerGroup extends ConsumerWidget {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_right,
+                    LucideIcons.chevronRight,
                     size: 18,
                     color: context.mutedForeground,
                   ),
@@ -334,7 +335,7 @@ class _CartLine extends ConsumerWidget {
                         style: AppTypography.bodySmSemibold(colors.onSurface),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 19),
+                        icon: const Icon(LucideIcons.trash2, size: 19),
                         color: context.mutedForeground,
                         visualDensity: VisualDensity.compact,
                         onPressed: () => ref

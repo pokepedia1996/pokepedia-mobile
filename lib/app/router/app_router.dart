@@ -38,6 +38,7 @@ import '../../features/proposals/presentation/card_proposals_page.dart';
 import '../../features/proposals/presentation/offers_page.dart';
 import '../../features/proposals/presentation/proposals_page.dart';
 import '../../features/proposals/repository/models/proposal_card_group.dart';
+import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
 import '../../features/seller/presentation/seller_listing_offers_page.dart';
@@ -180,6 +181,9 @@ final appRouter = GoRouter(
       builder: (_, __) => const AdvancedSearchPage(),
     ),
 
+    // Card scanner (opened from AppTopBar's scan button).
+    GoRoute(path: Routes.scan, builder: (_, __) => const ScannerPage()),
+
     // Auth.
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
@@ -263,7 +267,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: Routes.sellerOrders,
-      builder: (_, __) => const SellerOrdersPage(),
+      builder: (_, state) =>
+          SellerOrdersPage(initialFilter: state.uri.queryParameters['filter']),
       routes: [
         GoRoute(
           path: ':slug',

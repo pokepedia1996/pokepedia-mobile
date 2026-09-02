@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
@@ -29,12 +30,12 @@ class ViewModeToggle extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ViewModeButton(
-            icon: Icons.grid_view_rounded,
+            icon: LucideIcons.layoutGrid,
             selected: value == CardViewMode.grid,
             onTap: () => onChanged(CardViewMode.grid),
           ),
           _ViewModeButton(
-            icon: Icons.view_list_rounded,
+            icon: LucideIcons.list,
             selected: value == CardViewMode.list,
             onTap: () => onChanged(CardViewMode.list),
           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -378,11 +379,7 @@ class _SalesHistoryTable extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 24,
-              color: context.mutedForeground,
-            ),
+            Icon(LucideIcons.receipt, size: 24, color: context.mutedForeground),
             const SizedBox(height: 6),
             Text(
               'Belum ada transaksi',
@@ -532,7 +529,7 @@ class _SaleDate extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Icon(
-            external ? Icons.open_in_new : Icons.photo_outlined,
+            external ? LucideIcons.externalLink : LucideIcons.image,
             size: 12,
             color: context.mutedForeground,
           ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
@@ -162,7 +163,7 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(LucideIcons.x),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -177,7 +178,7 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: 'Cari alamat atau nama tempat',
-                  prefixIcon: const Icon(Icons.search, size: 18),
+                  prefixIcon: const Icon(LucideIcons.search, size: 18),
                   suffixIcon: _searching
                       ? const Padding(
                           padding: EdgeInsets.all(12),
@@ -188,7 +189,7 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
                           ),
                         )
                       : IconButton(
-                          icon: const Icon(Icons.arrow_forward, size: 18),
+                          icon: const Icon(LucideIcons.arrowRight, size: 18),
                           onPressed: _runSearch,
                         ),
                 ),
@@ -221,7 +222,7 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 28),
                       child: Icon(
-                        Icons.location_on,
+                        LucideIcons.mapPin,
                         size: 40,
                         color: colors.primary,
                         shadows: const [
@@ -245,7 +246,7 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
-                        Icons.location_on_outlined,
+                        LucideIcons.mapPin,
                         size: 16,
                         color: context.mutedForeground,
                       ),

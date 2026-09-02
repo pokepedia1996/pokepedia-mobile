@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/router/routes.dart';
 import '../../core/theme/app_theme.dart';
@@ -73,7 +74,7 @@ class _CartAppBarButtonState extends ConsumerState<CartAppBarButton>
                   alignment: Alignment.center,
                   children: [
                     Icon(
-                      Icons.shopping_cart_outlined,
+                      LucideIcons.shoppingCart,
                       size: 20,
                       color: colors.onSurface,
                     ),

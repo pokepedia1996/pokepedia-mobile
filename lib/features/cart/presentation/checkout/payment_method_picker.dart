@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -88,12 +89,12 @@ class PaymentMethodPicker extends StatelessWidget {
               alignment: Alignment.center,
               child: Icon(
                 walletSelected
-                    ? Icons.account_balance_wallet_outlined
+                    ? LucideIcons.wallet
                     : meta != null
                     ? (meta.group == PaymentChannelGroup.qr
-                          ? Icons.qr_code
-                          : Icons.credit_card)
-                    : Icons.credit_card,
+                          ? LucideIcons.qrCode
+                          : LucideIcons.creditCard)
+                    : LucideIcons.creditCard,
                 size: 16,
                 color: (walletSelected || meta != null)
                     ? colors.primary
@@ -128,7 +129,7 @@ class PaymentMethodPicker extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 18,
               color: context.mutedForeground,
             ),
@@ -205,7 +206,7 @@ class _PaymentMethodSheet extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   _SectionHeader(
-                    icon: Icons.account_balance_wallet_outlined,
+                    icon: LucideIcons.wallet,
                     title: 'Saldo',
                     caption: 'Bayar pakai saldo pokepedia.id',
                   ),
@@ -231,7 +232,7 @@ class _PaymentMethodSheet extends StatelessWidget {
                         child: Row(
                           children: [
                             Icon(
-                              Icons.account_balance_wallet_outlined,
+                              LucideIcons.wallet,
                               size: 18,
                               color: context.mutedForeground,
                             ),
@@ -277,7 +278,7 @@ class _PaymentMethodSheet extends StatelessWidget {
                     ),
                   ),
                   _ChannelSection(
-                    icon: Icons.qr_code,
+                    icon: LucideIcons.qrCode,
                     title: 'QRIS',
                     caption: 'Bayar instan dengan QR',
                     unavailableHint:
@@ -287,7 +288,7 @@ class _PaymentMethodSheet extends StatelessWidget {
                     selectedChannel: selectedChannel,
                   ),
                   _ChannelSection(
-                    icon: Icons.credit_card,
+                    icon: LucideIcons.creditCard,
                     title: 'Virtual Account',
                     caption: 'Transfer bank',
                     unavailableHint:
@@ -378,7 +379,7 @@ class _ChannelSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.info_outline,
+                  LucideIcons.info,
                   size: 16,
                   color: context.mutedForeground,
                 ),
@@ -476,7 +477,7 @@ class _SelectedDot extends StatelessWidget {
         ),
       ),
       child: selected
-          ? Icon(Icons.check, size: 13, color: colors.onPrimary)
+          ? Icon(LucideIcons.check, size: 13, color: colors.onPrimary)
           : null,
     );
   }

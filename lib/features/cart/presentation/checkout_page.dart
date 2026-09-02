@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/navigation.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/theme/app_radius.dart';
@@ -121,7 +123,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   style: AppTypography.caption(context.mutedForeground),
                 ),
                 trailing: address.id == selectedId
-                    ? Icon(Icons.check, color: context.appColors.primary)
+                    ? Icon(LucideIcons.check, color: context.appColors.primary)
                     : null,
                 onTap: () => Navigator.of(sheetContext).pop(address),
               ),
@@ -132,7 +134,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   Navigator.of(sheetContext).pop();
                   showAddressFormSheet(context);
                 },
-                icon: const Icon(Icons.add, size: 16),
+                icon: const Icon(LucideIcons.plus, size: 16),
                 label: const Text('Tambah alamat baru'),
               ),
             ),
@@ -181,7 +183,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // there's nothing to show and nothing to poll.
       if (method == PaymentMethod.wallet) {
         await ref.read(cartProvider.notifier).refresh();
-        if (mounted) context.go(Routes.orders);
+        if (mounted) context.goHomeThen(Routes.orders);
         return;
       }
 
@@ -345,7 +347,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ? const EmptyCartCard()
             : items.isEmpty
             ? EmptyState(
-                icon: Icons.check_box_outline_blank,
+                icon: LucideIcons.square,
                 title: 'Belum ada kartu yang dipilih',
                 description: 'Pilih kartu di keranjang untuk dilanjutkan.',
                 action: ElevatedButton(
@@ -547,11 +549,7 @@ class _AddressSection extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              Icons.location_on_outlined,
-              size: 20,
-              color: context.mutedForeground,
-            ),
+            Icon(LucideIcons.mapPin, size: 20, color: context.mutedForeground),
             const SizedBox(width: 10),
             Expanded(
               child: address == null

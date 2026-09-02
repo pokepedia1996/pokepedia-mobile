@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -33,7 +34,7 @@ class SellerStorePage extends ConsumerWidget {
         child: async.when(
           loading: () => const PikachuLoader(),
           error: (_, __) => EmptyState(
-            icon: Icons.storefront_outlined,
+            icon: LucideIcons.store,
             title: 'Gagal memuat toko',
             action: OutlinedButton(
               onPressed: () => ref.invalidate(storeProfileProvider),
@@ -43,7 +44,7 @@ class SellerStorePage extends ConsumerWidget {
           data: (profile) {
             if (profile == null) {
               return const EmptyState(
-                icon: Icons.storefront_outlined,
+                icon: LucideIcons.store,
                 title: 'Belum punya toko',
                 description:
                     'Buka toko dulu di pokepedia.id, lalu kelola dari sini.',
@@ -88,7 +89,7 @@ class SellerStorePage extends ConsumerWidget {
           if (!profile.hasPickupAddress) ...[
             const SizedBox(height: 12),
             _Notice(
-              icon: Icons.location_off_outlined,
+              icon: LucideIcons.mapPinOff,
               tone: colors.error,
               message:
                   'Alamat pengirim belum lengkap. Kurir tidak bisa menjemput '
@@ -100,7 +101,7 @@ class SellerStorePage extends ConsumerWidget {
           if (profile.onVacation) ...[
             const SizedBox(height: 12),
             _Notice(
-              icon: Icons.beach_access_outlined,
+              icon: LucideIcons.palmtree,
               tone: context.appSemantic.condMp,
               message: _vacationMessage(profile),
               actionLabel: 'Atur',
@@ -119,14 +120,14 @@ class SellerStorePage extends ConsumerWidget {
             child: Column(
               children: [
                 _Row(
-                  icon: Icons.person_outline,
+                  icon: LucideIcons.user,
                   label: 'Profil toko',
                   description: 'Nama, URL, tentang, alamat, dan libur',
                   onTap: () => context.push(Routes.sellerStoreProfile),
                 ),
                 Divider(height: 1, color: context.borderColor),
                 _Row(
-                  icon: Icons.local_shipping_outlined,
+                  icon: LucideIcons.truck,
                   label: 'Kurir',
                   description: profile.acceptedCourierServices.isEmpty
                       ? 'Semua layanan diterima'
@@ -136,7 +137,7 @@ class SellerStorePage extends ConsumerWidget {
                 ),
                 Divider(height: 1, color: context.borderColor),
                 _Row(
-                  icon: Icons.chat_bubble_outline,
+                  icon: LucideIcons.messageCircle,
                   label: 'Chat',
                   description: 'Pesan dari pembeli',
                   onTap: () => context.push(Routes.chat),
@@ -150,7 +151,7 @@ class SellerStorePage extends ConsumerWidget {
             onPressed: handle == null
                 ? null
                 : () => context.push(Routes.storeDetail(handle)),
-            icon: const Icon(Icons.open_in_new, size: 15),
+            icon: const Icon(LucideIcons.externalLink, size: 15),
             label: const Text('Lihat toko seperti pembeli'),
           ),
         ],
@@ -196,7 +197,7 @@ class _StoreHeader extends StatelessWidget {
             child: profile.storeLogoUrl != null
                 ? null
                 : Icon(
-                    Icons.storefront_outlined,
+                    LucideIcons.store,
                     size: 20,
                     color: context.mutedForeground,
                   ),
@@ -218,7 +219,11 @@ class _StoreHeader extends StatelessWidget {
                     ),
                     if (profile.isVerified) ...[
                       const SizedBox(width: 4),
-                      Icon(Icons.verified, size: 15, color: colors.primary),
+                      Icon(
+                        LucideIcons.badgeCheck,
+                        size: 15,
+                        color: colors.primary,
+                      ),
                     ],
                   ],
                 ),
@@ -357,7 +362,11 @@ class _Row extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, size: 18, color: context.mutedForeground),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: context.mutedForeground,
+            ),
           ],
         ),
       ),

@@ -12,6 +12,7 @@ import '../../repository/models/checkout_models.dart';
 import '../../repository/models/cart_item.dart';
 import 'courier_picker.dart';
 import 'package:logging/logging.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// One seller's items within the cart, plus their shipping/insurance
 /// choices. Ports `features/checkout/ui/SellerGroupCard.tsx`.
@@ -109,7 +110,7 @@ class SellerGroupCard extends StatelessWidget {
                           if (first.isVerified) ...[
                             const SizedBox(width: 4),
                             Icon(
-                              Icons.verified,
+                              LucideIcons.badgeCheck,
                               size: 14,
                               color: colors.primary,
                             ),
@@ -120,7 +121,7 @@ class SellerGroupCard extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.place_outlined,
+                              LucideIcons.mapPin,
                               size: 12,
                               color: context.mutedForeground,
                             ),

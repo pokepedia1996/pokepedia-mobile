@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -118,7 +119,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
                   if (data.bids.isEmpty)
                     _Placeholder(
                       text: 'Belum ada bid aktif',
-                      icon: Icons.gavel_outlined,
+                      icon: LucideIcons.gavel,
                     )
                   else
                     for (final bid in data.bids) ...[
@@ -263,7 +264,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
           text: all.isEmpty
               ? 'Belum ada proposal untuk bid kamu'
               : 'Belum ada proposal dengan status ini.',
-          icon: Icons.inbox_outlined,
+          icon: LucideIcons.inbox,
         )
       else
         for (final proposal in visible) ...[
@@ -295,7 +296,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       return [
         _Placeholder(
           text: 'Kirim proposal pada bid pembeli dari halaman kartu.',
-          icon: Icons.send_outlined,
+          icon: LucideIcons.send,
         ),
       ];
     }
@@ -442,7 +443,7 @@ class _BidRow extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: busy ? null : onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 15),
+                    icon: const Icon(LucideIcons.pencil, size: 15),
                     label: const Text('Edit'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 36),
@@ -453,7 +454,7 @@ class _BidRow extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: busy ? null : onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 15),
+                    icon: const Icon(LucideIcons.trash2, size: 15),
                     label: const Text('Hapus'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: colors.error,
@@ -637,7 +638,7 @@ class _SentRow extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(
-                      Icons.delete_outline,
+                      LucideIcons.trash2,
                       size: 18,
                       color: context.mutedForeground,
                     ),

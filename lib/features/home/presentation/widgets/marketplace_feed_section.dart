@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -41,7 +42,11 @@ class MarketplaceFeedSection extends ConsumerWidget {
                       style: AppTypography.captionSemibold(colors.primary),
                     ),
                     const SizedBox(width: 2),
-                    Icon(Icons.north_east, size: 13, color: colors.primary),
+                    Icon(
+                      LucideIcons.arrowUpRight,
+                      size: 13,
+                      color: colors.primary,
+                    ),
                   ],
                 ),
               ),
@@ -135,7 +140,7 @@ class _SortRow extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.keyboard_arrow_down,
+                LucideIcons.chevronDown,
                 size: 16,
                 color: context.mutedForeground,
               ),
@@ -161,7 +166,7 @@ class _SortRow extends StatelessWidget {
                   style: AppTypography.bodySm(context.appColors.onSurface),
                 ),
                 trailing: entry.key == sort
-                    ? Icon(Icons.check, color: context.appColors.primary)
+                    ? Icon(LucideIcons.check, color: context.appColors.primary)
                     : null,
                 onTap: () => Navigator.of(sheetContext).pop(entry.key),
               ),

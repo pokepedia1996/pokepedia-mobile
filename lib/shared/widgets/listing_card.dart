@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/router/routes.dart';
 import '../../core/providers/auth_provider.dart';
@@ -323,7 +324,11 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                         ),
                         if (listing.isVerified) ...[
                           const SizedBox(width: 2),
-                          Icon(Icons.verified, size: 13, color: colors.primary),
+                          Icon(
+                            LucideIcons.badgeCheck,
+                            size: 13,
+                            color: colors.primary,
+                          ),
                         ],
                         const SizedBox(width: 4),
                         ReputationStar(score: listing.sellerFeedbackScore),
@@ -334,7 +339,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                     //   Row(
                     //     children: [
                     //       Icon(
-                    //         Icons.location_on_outlined,
+                    //         LucideIcons.mapPin,
                     //         size: 11,
                     //         color: context.mutedForeground,
                     //       ),
@@ -424,7 +429,7 @@ class _WishlistBadge extends StatelessWidget {
                 ),
               )
             : Icon(
-                wishlisted ? Icons.favorite : Icons.favorite_border,
+                wishlisted ? LucideIcons.heart : LucideIcons.heart,
                 size: 16,
                 color: wishlisted ? Colors.white : context.mutedForeground,
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -9,6 +10,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../repository/models/notification_model.dart';
+import '../usecase/notification_route.dart';
 import '../usecase/notifications_notifier.dart';
 
 /// Ports `app/notifications/notifications-client.tsx`.
@@ -23,48 +25,24 @@ class NotificationsPage extends ConsumerWidget {
       case NotificationType.orderCancelled:
       case NotificationType.shipmentPickedUp:
       case NotificationType.shipmentDelivered:
-        return Icons.local_shipping_outlined;
+        return LucideIcons.truck;
       case NotificationType.disputeOpened:
       case NotificationType.disputeResolved:
       case NotificationType.disputeMessage:
-        return Icons.gavel_outlined;
+        return LucideIcons.gavel;
       case NotificationType.bidProposalReceived:
       case NotificationType.bidProposalAccepted:
       case NotificationType.offerReceived:
       case NotificationType.offerAccepted:
       case NotificationType.offerCountered:
-        return Icons.local_offer_outlined;
+        return LucideIcons.tag;
       case NotificationType.ratingReceived:
-        return Icons.star_outline;
+        return LucideIcons.star;
       case NotificationType.chatMessage:
-        return Icons.chat_bubble_outline;
+        return LucideIcons.messageCircle;
       case NotificationType.other:
-        return Icons.notifications_none;
+        return LucideIcons.bell;
     }
-  }
-
-  /// `action_url` is written for the website. Most of its paths exist in the
-  /// app under the same name, but not all do — anything outside this list
-  /// would land on the router's error page, so those rows just mark read.
-  static const _navigablePrefixes = [
-    '/orders',
-    '/chat',
-    '/market',
-    '/expansions',
-    '/portfolio',
-    '/proposals',
-    '/wallet',
-    '/user',
-  ];
-
-  String? _appRouteFor(String? actionUrl) {
-    if (actionUrl == null || !actionUrl.startsWith('/')) return null;
-    for (final prefix in _navigablePrefixes) {
-      if (actionUrl == prefix || actionUrl.startsWith('$prefix/')) {
-        return actionUrl;
-      }
-    }
-    return null;
   }
 
   @override
@@ -89,7 +67,7 @@ class NotificationsPage extends ConsumerWidget {
       ),
       body: !signedIn
           ? EmptyState(
-              icon: Icons.notifications_none,
+              icon: LucideIcons.bell,
               title: 'Masuk untuk melihat notifikasi',
               action: ElevatedButton(
                 onPressed: () => context.push(Routes.login),
@@ -100,7 +78,7 @@ class NotificationsPage extends ConsumerWidget {
               data: (items) {
                 if (items.isEmpty) {
                   return const EmptyState(
-                    icon: Icons.notifications_none,
+                    icon: LucideIcons.bell,
                     title: 'Belum ada notifikasi',
                   );
                 }
@@ -118,7 +96,7 @@ class NotificationsPage extends ConsumerWidget {
                       return InkWell(
                         onTap: () {
                           notifier.markRead(item.id);
-                          final route = _appRouteFor(item.actionUrl);
+                          final route = appRouteForActionUrl(item.actionUrl);
                           if (route != null) context.push(route);
                         },
                         child: Container(
@@ -197,7 +175,7 @@ class NotificationsPage extends ConsumerWidget {
               },
               loading: () => const PikachuLoader(),
               error: (_, __) => EmptyState(
-                icon: Icons.error_outline,
+                icon: LucideIcons.circleAlert,
                 title: 'Gagal memuat notifikasi',
                 action: OutlinedButton(
                   onPressed: notifier.refresh,

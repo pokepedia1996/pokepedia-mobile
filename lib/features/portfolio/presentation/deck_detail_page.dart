@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -202,7 +203,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
         actions: [
           if (deck != null)
             IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 20),
+              icon: const Icon(LucideIcons.pencil, size: 20),
               onPressed: () => _editHeader(deck.name, deck.description),
             ),
         ],
@@ -211,7 +212,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
           ? const PikachuLoader()
           : deck == null
           ? const EmptyState(
-              icon: Icons.search_off,
+              icon: LucideIcons.searchX,
               title: 'Deck tidak ditemukan',
             )
           : entriesAsync.when(
@@ -239,7 +240,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () => _copyShareLink(deck.shareCode),
-                              icon: const Icon(Icons.link, size: 16),
+                              icon: const Icon(LucideIcons.link, size: 16),
                               label: const Text('Salin Link'),
                             ),
                           ),
@@ -255,7 +256,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Icon(Icons.copy_all, size: 16),
+                                  : const Icon(LucideIcons.copy, size: 16),
                               label: const Text('Duplikat'),
                             ),
                           ),
@@ -313,7 +314,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                             onPressed: entries.isEmpty
                                 ? null
                                 : () => _copyDeckList(entries, validation),
-                            icon: const Icon(Icons.checklist, size: 16),
+                            icon: const Icon(LucideIcons.listChecks, size: 16),
                             label: const Text('Salin Daftar Deck'),
                           ),
                         ),
@@ -468,7 +469,7 @@ class _SearchPane extends StatelessWidget {
               onChanged: onChanged,
               decoration: const InputDecoration(
                 hintText: 'Cari kartu untuk ditambahkan ke deck...',
-                prefixIcon: Icon(Icons.search, size: 20),
+                prefixIcon: Icon(LucideIcons.search, size: 20),
               ),
             ),
             const SizedBox(height: 12),
@@ -675,7 +676,7 @@ class _DeckPane extends StatelessWidget {
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
       return const EmptyState(
-        icon: Icons.style_outlined,
+        icon: LucideIcons.layers,
         title: 'Belum ada kartu',
         description: 'Cari dan tambahkan kartu dari tab Cari Kartu.',
       );
@@ -809,7 +810,7 @@ class _DeckCardRow extends StatelessWidget {
                 color: colors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.close, size: 14, color: colors.error),
+              child: Icon(LucideIcons.x, size: 14, color: colors.error),
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -277,8 +278,8 @@ class _HeaderRow extends StatelessWidget {
                         const SizedBox(width: 2),
                         Icon(
                           sort.ascending
-                              ? Icons.arrow_upward
-                              : Icons.arrow_downward,
+                              ? LucideIcons.arrowUp
+                              : LucideIcons.arrowDown,
                           size: 11,
                           color: colors.primary,
                         ),
@@ -406,7 +407,7 @@ List<Widget> _listingCells(
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock, size: 9, color: context.appSemantic.gold),
+              Icon(LucideIcons.lock, size: 9, color: context.appSemantic.gold),
               const SizedBox(width: 2),
               Text(
                 '${listing.qtyLocked}',
@@ -480,7 +481,7 @@ class _ActionsCell extends StatelessWidget {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          Icon(Icons.more_horiz, size: 18, color: context.mutedForeground),
+          Icon(LucideIcons.ellipsis, size: 18, color: context.mutedForeground),
           if (needsResponse > 0)
             Positioned(
               right: -1,
@@ -508,7 +509,7 @@ class _ActionsCell extends StatelessWidget {
         PopupMenuItem(
           value: 'offers',
           child: _MenuItem(
-            icon: Icons.handshake_outlined,
+            icon: LucideIcons.handshake,
             label: 'Lihat penawaran',
             trailing: needsResponse > 0 ? '$needsResponse' : null,
           ),
@@ -517,7 +518,7 @@ class _ActionsCell extends StatelessWidget {
           const PopupMenuItem(
             value: 'unarchive',
             child: _MenuItem(
-              icon: Icons.unarchive_outlined,
+              icon: LucideIcons.archiveRestore,
               label: 'Kembalikan',
             ),
           )
@@ -525,7 +526,7 @@ class _ActionsCell extends StatelessWidget {
           const PopupMenuItem(
             value: 'restock',
             child: _MenuItem(
-              icon: Icons.add_box_outlined,
+              icon: LucideIcons.squarePlus,
               label: 'Tambah stok',
             ),
           ),
@@ -535,7 +536,7 @@ class _ActionsCell extends StatelessWidget {
             // them, which is the same rule web enforces.
             enabled: !locked,
             child: const _MenuItem(
-              icon: Icons.archive_outlined,
+              icon: LucideIcons.archive,
               label: 'Arsipkan',
             ),
           ),
@@ -544,7 +545,7 @@ class _ActionsCell extends StatelessWidget {
           value: 'delete',
           enabled: !locked,
           child: _MenuItem(
-            icon: Icons.delete_outline,
+            icon: LucideIcons.trash2,
             label: 'Hapus permanen',
             color: colors.error,
           ),
@@ -682,11 +683,7 @@ List<Widget> _draftCells(
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       tooltip: 'Hapus draft',
-      icon: Icon(
-        Icons.delete_outline,
-        size: 18,
-        color: context.mutedForeground,
-      ),
+      icon: Icon(LucideIcons.trash2, size: 18, color: context.mutedForeground),
     ),
     SizedBox(
       width: 32,

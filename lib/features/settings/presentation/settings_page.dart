@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
@@ -356,7 +357,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onChanged: (value) => _onUsernameChanged(value, currentUsername),
           decoration: InputDecoration(
             hintText: 'username_kamu',
-            prefixIcon: const Icon(Icons.person_outline, size: 20),
+            prefixIcon: const Icon(LucideIcons.user, size: 20),
             counterText: '',
             errorText: _usernameError,
             suffixIcon: _checkingUsername
@@ -369,7 +370,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   )
                 : _usernameAvailable == true
-                ? Icon(Icons.check, color: context.appColors.primary, size: 20)
+                ? Icon(
+                    LucideIcons.check,
+                    color: context.appColors.primary,
+                    size: 20,
+                  )
                 : null,
           ),
         ),
@@ -393,8 +398,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children: [
             Icon(
               private.phoneVerified
-                  ? Icons.verified_outlined
-                  : Icons.error_outline,
+                  ? LucideIcons.badgeCheck
+                  : LucideIcons.circleAlert,
               size: 18,
               color: private.phoneVerified
                   ? context.appSemantic.success
@@ -529,7 +534,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       children: [
         _SocialField(
           controller: _whatsapp,
-          icon: Icons.phone_outlined,
+          icon: LucideIcons.phone,
           hint: 'Nomor WhatsApp',
           keyboardType: TextInputType.phone,
         ),
@@ -542,17 +547,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SizedBox(height: 10),
         _SocialField(
           controller: _instagram,
-          icon: Icons.camera_alt_outlined,
+          icon: LucideIcons.camera,
           hint: 'Username Instagram',
         ),
         const SizedBox(height: 10),
         _SocialField(
           controller: _tiktok,
-          icon: Icons.music_note_outlined,
+          icon: LucideIcons.music,
           hint: 'Username TikTok',
         ),
         const SizedBox(height: 10),
-        _SocialField(controller: _x, icon: Icons.close, hint: 'Username X'),
+        _SocialField(controller: _x, icon: LucideIcons.x, hint: 'Username X'),
         const SizedBox(height: 10),
         _SaveButton(
           label: 'Simpan',
@@ -715,12 +720,7 @@ class _PasswordFieldState extends State<_PasswordField> {
         helperText: widget.helper,
         suffixIcon: IconButton(
           onPressed: () => setState(() => _obscure = !_obscure),
-          icon: Icon(
-            _obscure
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            size: 18,
-          ),
+          icon: Icon(_obscure ? LucideIcons.eye : LucideIcons.eyeOff, size: 18),
         ),
       ),
     );

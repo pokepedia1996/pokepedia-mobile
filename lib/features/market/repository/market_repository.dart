@@ -5,6 +5,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../usecase/market_filters.dart';
+import 'models/listing_facets.dart';
 import 'models/store_feedback.dart';
 
 enum MarketBucket { all, listing, buylist, toko }
@@ -67,10 +68,17 @@ class MarketRepository {
                 if (filters.categories.isNotEmpty)
                   'p_categories': filters.categories.map((c) => c.raw).toList(),
                 if (filters.trainerSubtypes.isNotEmpty)
-                  'p_trainer_subtypes': filters.trainerSubtypes
-                      .map((s) => s.labelId)
+                  'p_trainer_subtypes': filters.trainerSubtypes.toList(),
+                if (filters.languages.isNotEmpty)
+                  'p_card_languages': filters.languages
+                      .map((l) => l.raw)
                       .toList(),
+                if (filters.cities.isNotEmpty)
+                  'p_cities': filters.cities.toList(),
+                if (filters.excludeRarities != null)
+                  'p_exclude_rarities': filters.excludeRarities,
                 if (filters.verifiedOnly) 'p_verified_only': true,
+                if (filters.wishlistOnly) 'p_wishlist_only': true,
                 if (filters.minPrice != null) 'p_min_price': filters.minPrice,
                 if (filters.maxPrice != null) 'p_max_price': filters.maxPrice,
               },
@@ -90,6 +98,28 @@ class MarketRepository {
       ),
       _client.auth.currentUser?.id,
     );
+  }
+
+  /// The filter sheet's option lists — `get_marketplace_listing_facets`,
+  /// the same aggregate web reads server-side. It counts what the open
+  /// listings hold, so the sheet can offer every rarity and city that
+  /// actually exists rather than a fixed shortlist.
+  ///
+  /// Counts depend only on the tab, never on the filters chosen inside it,
+  /// which is why this takes a bucket and nothing else.
+  Future<ListingFacets> fetchListingFacets(MarketBucket bucket) async {
+    final side = switch (bucket) {
+      MarketBucket.listing => 'ask',
+      MarketBucket.buylist => 'bid',
+      // Both sides at once: the RPC reads a null side as "don't filter".
+      MarketBucket.all || MarketBucket.toko => null,
+    };
+    final json = await _client.rpc(
+      'get_marketplace_listing_facets',
+      params: {'p_side': side},
+    );
+    if (json is! Map) return ListingFacets.empty;
+    return ListingFacets.fromJson(json.cast<String, dynamic>());
   }
 
   Future<List<StoreModel>> fetchStores({String query = ''}) async {

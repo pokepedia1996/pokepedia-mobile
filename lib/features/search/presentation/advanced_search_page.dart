@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -118,7 +119,7 @@ class AdvancedSearchPage extends ConsumerWidget {
       return [
         _placeholder(
           context,
-          icon: Icons.search,
+          icon: LucideIcons.search,
           message: 'Atur filter lalu tekan Cari untuk menemukan kartu.',
         ),
       ];
@@ -132,7 +133,7 @@ class AdvancedSearchPage extends ConsumerWidget {
       return [
         _placeholder(
           context,
-          icon: Icons.search_off,
+          icon: LucideIcons.searchX,
           message: 'Tidak ada kartu yang cocok dengan filter.',
         ),
       ];
@@ -267,7 +268,7 @@ class _FilterFormState extends State<_FilterForm> {
               value: query.illustrator,
               hint: 'Cari ilustrator...',
               prefix: Icon(
-                Icons.brush_outlined,
+                LucideIcons.brush,
                 size: 18,
                 color: context.mutedForeground,
               ),
@@ -416,7 +417,7 @@ class _FilterFormState extends State<_FilterForm> {
               if (state.hasAnyFilter) ...[
                 OutlinedButton.icon(
                   onPressed: notifier.reset,
-                  icon: const Icon(Icons.refresh, size: 14),
+                  icon: const Icon(LucideIcons.refreshCw, size: 14),
                   label: const Text('Reset'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: context.appColors.error,
@@ -432,7 +433,7 @@ class _FilterFormState extends State<_FilterForm> {
                 onPressed: !state.hasAnyFilter || state.loading
                     ? null
                     : () => _submit(context),
-                icon: const Icon(Icons.search, size: 16),
+                icon: const Icon(LucideIcons.search, size: 16),
                 label: const Text('Cari'),
                 style: ElevatedButton.styleFrom(minimumSize: const Size(0, 38)),
               ),
@@ -594,7 +595,7 @@ class _SearchTextFieldState extends State<SearchTextField> {
         suffixIcon: _controller.text.isEmpty
             ? null
             : IconButton(
-                icon: const Icon(Icons.close, size: 16),
+                icon: const Icon(LucideIcons.x, size: 16),
                 onPressed: () {
                   _controller.clear();
                   widget.onChanged('');

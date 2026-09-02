@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
@@ -54,15 +55,16 @@ class AppBottomNav extends StatelessWidget {
   }
 
   static const items = [
-    BottomNavItem(label: 'Beranda', icon: Icons.home_outlined),
-    BottomNavItem(label: 'Ekspansi', icon: Icons.circle, usePokeball: true),
-    BottomNavItem(label: 'Pencarian', icon: Icons.search),
+    BottomNavItem(label: 'Beranda', icon: LucideIcons.house),
     BottomNavItem(
-      label: 'Koleksi',
-      icon: Icons.account_balance_wallet_outlined,
+      label: 'Ekspansi',
+      icon: LucideIcons.circle,
+      usePokeball: true,
     ),
-    BottomNavItem(label: 'Market', icon: Icons.storefront_outlined),
-    BottomNavItem(label: 'Akun', icon: Icons.person_outline),
+    BottomNavItem(label: 'Pencarian', icon: LucideIcons.search),
+    BottomNavItem(label: 'Koleksi', icon: LucideIcons.wallet),
+    BottomNavItem(label: 'Market', icon: LucideIcons.store),
+    BottomNavItem(label: 'Akun', icon: LucideIcons.user),
   ];
 
   final int currentIndex;

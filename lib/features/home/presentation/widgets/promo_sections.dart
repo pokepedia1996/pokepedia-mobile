@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -101,7 +102,7 @@ class _PromoCard extends StatelessWidget {
                 children: [
                   Text(ctaLabel),
                   const SizedBox(width: 6),
-                  const Icon(Icons.arrow_forward, size: 16),
+                  const Icon(LucideIcons.arrowRight, size: 16),
                 ],
               ),
             ),
@@ -124,7 +125,7 @@ class SearchPromoSection extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: _PromoCard(
         eyebrow: 'PENCARIAN LANJUTAN',
-        icon: Icons.search,
+        icon: LucideIcons.search,
         title: 'Cari kartu spesifik?',
         description:
             'Filter nama, ilustrator, tipe, rarity, dan lebih banyak lagi.',
@@ -233,7 +234,7 @@ class DeckbuilderPromoSection extends StatelessWidget {
                           children: [
                             Text('Mulai Deckbuilder'),
                             SizedBox(width: 6),
-                            Icon(Icons.arrow_forward, size: 16),
+                            Icon(LucideIcons.arrowRight, size: 16),
                           ],
                         ),
                       ),
@@ -300,7 +301,7 @@ class CollectionPromoSection extends StatelessWidget {
                   children: [
                     Text('Kelola Koleksimu'),
                     SizedBox(width: 6),
-                    Icon(Icons.arrow_forward, size: 16),
+                    Icon(LucideIcons.arrowRight, size: 16),
                   ],
                 ),
               ),

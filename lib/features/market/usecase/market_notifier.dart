@@ -5,10 +5,12 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../repository/market_repository.dart';
+import '../repository/models/listing_facets.dart';
 import '../repository/models/store_feedback.dart';
 import 'market_filters.dart';
 
 export '../repository/market_repository.dart' show MarketBucket;
+export '../repository/models/listing_facets.dart';
 export 'market_filters.dart';
 
 final marketRepositoryProvider = Provider(
@@ -23,6 +25,14 @@ final marketSortProvider = StateProvider<MarketSort>(
 final marketFiltersProvider = StateProvider<MarketFilters>(
   (ref) => const MarketFilters(),
 );
+
+/// The option lists behind the filter sheet. Keyed by tab only — the counts
+/// describe what the tab holds, not what the current filters leave, so they
+/// survive every tick inside the sheet instead of refetching on each one.
+final marketFacetsProvider = FutureProvider<ListingFacets>((ref) {
+  final bucket = ref.watch(bucketProvider);
+  return ref.read(marketRepositoryProvider).fetchListingFacets(bucket);
+});
 
 final marketListingsProvider = FutureProvider<List<ListingModel>>((ref) {
   final bucket = ref.watch(bucketProvider);

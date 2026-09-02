@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -57,7 +58,7 @@ class _PortfolioPageState extends ConsumerState<PortfolioPage> {
             if (user == null)
               Expanded(
                 child: EmptyState(
-                  icon: Icons.style_outlined,
+                  icon: LucideIcons.layers,
                   title: 'Masuk untuk melihat koleksimu',
                   description: 'Kelola koleksi dan wishlist kartu Pokemon-mu.',
                   action: ElevatedButton(
@@ -478,7 +479,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                 ),
                 child: selected
                     ? Icon(
-                        Icons.check,
+                        LucideIcons.check,
                         size: 15,
                         color: context.appColors.onPrimary,
                       )
@@ -631,7 +632,7 @@ class _CollectionHeader extends StatelessWidget {
                 if (cards.isNotEmpty)
                   OutlinedButton.icon(
                     onPressed: onManage,
-                    icon: const Icon(Icons.edit_outlined, size: 15),
+                    icon: const Icon(LucideIcons.pencil, size: 15),
                     label: const Text('Kelola'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 36),
@@ -669,7 +670,7 @@ class _SearchRow extends ConsumerWidget {
           IconButton(
             // Filled while the wishlist is what's on screen, so the heart
             // reads as a switch rather than a link.
-            icon: Icon(showWishlist ? Icons.favorite : Icons.favorite_border),
+            icon: Icon(showWishlist ? LucideIcons.heart : LucideIcons.heart),
             color: context.appColors.primary,
             tooltip: showWishlist ? 'Kembali ke koleksi' : 'Wishlist',
             onPressed: () =>

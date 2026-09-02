@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -137,7 +138,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
 
     if (!signedIn) {
       return EmptyState(
-        icon: Icons.favorite_border,
+        icon: LucideIcons.heart,
         title: 'Masuk untuk melihat wishlist',
         action: ElevatedButton(
           onPressed: () => context.push(Routes.login),
@@ -170,7 +171,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
       ),
       loading: () => const PikachuLoader(),
       error: (_, __) => EmptyState(
-        icon: Icons.error_outline,
+        icon: LucideIcons.circleAlert,
         title: 'Gagal memuat wishlist',
         action: OutlinedButton(
           onPressed: () => ref.invalidate(wishlistProvider),
@@ -183,7 +184,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
   Widget _buildBody(List<CardModel> cards) {
     if (cards.isEmpty) {
       return const EmptyState(
-        icon: Icons.favorite_border,
+        icon: LucideIcons.heart,
         title: 'Wishlist masih kosong',
         description:
             'Belum ada kartu di wishlist. Tekan ikon hati pada kartu untuk '
@@ -332,7 +333,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
                 ),
                 child: selected
                     ? Icon(
-                        Icons.check,
+                        LucideIcons.check,
                         size: 15,
                         color: context.appColors.onPrimary,
                       )
@@ -377,7 +378,7 @@ class _WishlistHeader extends StatelessWidget {
             else
               OutlinedButton.icon(
                 onPressed: onManage,
-                icon: const Icon(Icons.edit_outlined, size: 15),
+                icon: const Icon(LucideIcons.pencil, size: 15),
                 label: const Text('Kelola'),
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36)),
               ),

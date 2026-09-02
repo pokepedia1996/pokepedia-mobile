@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -37,7 +38,7 @@ class EmptyCartCard extends StatelessWidget {
                 color: colors.secondary.withValues(alpha: 0.5),
               ),
               child: Icon(
-                Icons.shopping_cart_outlined,
+                LucideIcons.shoppingCart,
                 size: 40,
                 color: context.mutedForeground,
               ),

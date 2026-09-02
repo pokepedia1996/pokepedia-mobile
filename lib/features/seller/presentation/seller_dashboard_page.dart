@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -11,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/repository/models/seller_order.dart';
 import '../repository/models/seller_dashboard.dart';
 import '../repository/seller_repository.dart';
 import '../usecase/seller_notifier.dart';
@@ -36,7 +38,7 @@ class SellerDashboardPage extends ConsumerWidget {
       body: AppBarOverlayBody(
         child: user == null
             ? EmptyState(
-                icon: Icons.storefront_outlined,
+                icon: LucideIcons.store,
                 title: 'Masuk untuk membuka dasbor',
                 description: 'Dasbor penjual hanya untuk pemilik toko.',
                 action: ElevatedButton(
@@ -73,7 +75,7 @@ class _NoStoreState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EmptyState(
-      icon: Icons.storefront_outlined,
+      icon: LucideIcons.store,
       title: 'Belum punya toko',
       description:
           'Buka toko dulu di pokepedia.id, lalu kelola penjualannya dari sini.',
@@ -130,7 +132,7 @@ class _DashboardScroll extends ConsumerWidget {
                 OutlinedButton.icon(
                   onPressed: () =>
                       context.push(Routes.storeDetail(identity.storeHandle!)),
-                  icon: const Icon(Icons.open_in_new, size: 14),
+                  icon: const Icon(LucideIcons.externalLink, size: 14),
                   label: const Text('Toko'),
                 ),
               ],
@@ -206,11 +208,7 @@ class _WalletPill extends StatelessWidget {
                 color: colors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 16,
-                color: colors.primary,
-              ),
+              child: Icon(LucideIcons.wallet, size: 16, color: colors.primary),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -228,7 +226,11 @@ class _WalletPill extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward, size: 16, color: context.mutedForeground),
+            Icon(
+              LucideIcons.arrowRight,
+              size: 16,
+              color: context.mutedForeground,
+            ),
           ],
         ),
       ),
@@ -266,9 +268,8 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-/// Ports `KpiStrip` — the three counters worth acting on today. The web's
-/// links carry a `?filter=` the mobile orders screen doesn't read yet, so
-/// these are plain counters for now.
+/// Ports `KpiStrip` — the three counters worth acting on today, each one a
+/// link into the orders list filtered to what it counted, as on web.
 class _KpiStrip extends StatelessWidget {
   const _KpiStrip({required this.kpi});
 
@@ -288,22 +289,25 @@ class _KpiStrip extends StatelessWidget {
           _KpiCell(
             label: 'Perlu dikirim',
             count: kpi.toShip,
-            icon: Icons.inventory_2_outlined,
+            icon: LucideIcons.package,
             tone: kpi.toShip > 0 ? _KpiTone.warning : _KpiTone.neutral,
+            tab: SellerOrderTab.urgent,
           ),
           Divider(height: 1, color: context.borderColor),
           _KpiCell(
             label: 'Sedang dikirim',
             count: kpi.inTransit,
-            icon: Icons.local_shipping_outlined,
+            icon: LucideIcons.truck,
             tone: _KpiTone.neutral,
+            tab: SellerOrderTab.inTransit,
           ),
           Divider(height: 1, color: context.borderColor),
           _KpiCell(
             label: 'Komplain terbuka',
             count: kpi.disputesOpen,
-            icon: Icons.gpp_maybe_outlined,
+            icon: LucideIcons.shieldAlert,
             tone: kpi.disputesOpen > 0 ? _KpiTone.danger : _KpiTone.neutral,
+            tab: SellerOrderTab.disputed,
           ),
         ],
       ),
@@ -319,12 +323,16 @@ class _KpiCell extends StatelessWidget {
     required this.count,
     required this.icon,
     required this.tone,
+    required this.tab,
   });
 
   final String label;
   final int count;
   final IconData icon;
   final _KpiTone tone;
+
+  /// The orders tab this counter describes — tapping it opens that list.
+  final SellerOrderTab tab;
 
   @override
   Widget build(BuildContext context) {
@@ -336,44 +344,54 @@ class _KpiCell extends StatelessWidget {
       _KpiTone.neutral => context.mutedForeground,
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: active ? accent.withValues(alpha: 0.12) : colors.secondary,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
+    return InkWell(
+      onTap: () => context.push(Routes.sellerOrdersFiltered(tab.filterKey)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: active
+                    ? accent.withValues(alpha: 0.12)
+                    : colors.secondary,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(
+                icon,
+                size: 17,
+                color: active ? accent : context.mutedForeground,
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 17,
-              color: active ? accent : context.mutedForeground,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$count',
-                  style: AppTypography.bodySemibold(
-                    active && tone != _KpiTone.neutral
-                        ? accent
-                        : colors.onSurface,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count',
+                    style: AppTypography.bodySemibold(
+                      active && tone != _KpiTone.neutral
+                          ? accent
+                          : colors.onSurface,
+                    ),
                   ),
-                ),
-                Text(
-                  label,
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-              ],
+                  Text(
+                    label,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: context.mutedForeground,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -532,7 +550,7 @@ class _MetricCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  positive ? Icons.trending_up : Icons.trending_down,
+                  positive ? LucideIcons.trendingUp : LucideIcons.trendingDown,
                   size: 13,
                   color: positive ? context.appSemantic.success : colors.error,
                 ),
@@ -666,24 +684,35 @@ class _SellerTools extends StatelessWidget {
           child: Column(
             children: [
               _ToolRow(
-                icon: Icons.inventory_2_outlined,
+                icon: LucideIcons.package,
                 label: 'Listing',
                 description: 'Kelola produk, stok, dan arsip',
                 onTap: () => context.push(Routes.sellerProducts),
               ),
               Divider(height: 1, color: context.borderColor),
               _ToolRow(
-                icon: Icons.receipt_long_outlined,
+                icon: LucideIcons.receipt,
                 label: 'Pesanan',
                 description: 'Pesanan masuk dan pengiriman',
                 onTap: () => context.push(Routes.sellerOrders),
               ),
               Divider(height: 1, color: context.borderColor),
               _ToolRow(
-                icon: Icons.storefront_outlined,
+                icon: LucideIcons.store,
                 label: 'Toko',
                 description: 'Profil toko, kurir, dan chat pembeli',
                 onTap: () => context.push(Routes.sellerStore),
+              ),
+              Divider(height: 1, color: context.borderColor),
+              _ToolRow(
+                icon: LucideIcons.shieldAlert,
+                label: 'Komplain',
+                description: 'Pesanan yang sedang dikomplain pembeli',
+                onTap: () => context.push(
+                  Routes.sellerOrdersFiltered(
+                    SellerOrderTab.disputed.filterKey,
+                  ),
+                ),
               ),
             ],
           ),
@@ -738,7 +767,7 @@ class _ToolRow extends StatelessWidget {
             ),
             if (enabled)
               Icon(
-                Icons.chevron_right,
+                LucideIcons.chevronRight,
                 size: 18,
                 color: context.mutedForeground,
               ),

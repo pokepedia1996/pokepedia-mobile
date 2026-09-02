@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Ports `components/ui/image-lightbox.tsx` — a fullscreen dark overlay
 /// showing [imageUrl] pinch-zoomable via [InteractiveViewer], dismissible
@@ -72,7 +73,7 @@ class _ImageLightbox extends StatelessWidget {
               child: SafeArea(
                 child: IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(LucideIcons.x),
                   color: Colors.white,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.black.withValues(alpha: 0.4),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -282,7 +283,11 @@ class _PasswordStep extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.arrow_back, size: 14, color: context.mutedForeground),
+              Icon(
+                LucideIcons.arrowLeft,
+                size: 14,
+                color: context.mutedForeground,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Kembali',
@@ -313,7 +318,11 @@ class _PasswordStep extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Icon(Icons.edit, size: 12, color: context.mutedForeground),
+                Icon(
+                  LucideIcons.pencil,
+                  size: 12,
+                  color: context.mutedForeground,
+                ),
               ],
             ),
           ),
@@ -330,7 +339,7 @@ class _PasswordStep extends StatelessWidget {
             labelText: 'Password',
             errorText: error,
             suffixIcon: IconButton(
-              icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+              icon: Icon(obscure ? LucideIcons.eyeOff : LucideIcons.eye),
               onPressed: onToggleObscure,
             ),
           ),
@@ -391,7 +400,7 @@ class _ErrorAlert extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, size: 16, color: colors.error),
+          Icon(LucideIcons.circleAlert, size: 16, color: colors.error),
           const SizedBox(width: 8),
           Expanded(
             child: Text(message, style: AppTypography.bodySm(colors.error)),

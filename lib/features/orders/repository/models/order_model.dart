@@ -273,6 +273,7 @@ class OrderModel {
       items: embeddedRows(
         row['order_items'],
       ).map(OrderItemModel.fromRow).toList(),
+      shipmentSlug: shipment?['slug'] as String?,
       trackingNumber: shipment?['tracking_number'] as String?,
       courier: shipment?['courier'] as String?,
       shipmentStatus: shipment?['status'] as String?,
@@ -295,6 +296,7 @@ class OrderModel {
     required this.items,
     this.trackingNumber,
     this.courier,
+    this.shipmentSlug,
     this.shipmentStatus,
     this.shipmentDeadline,
     this.biteshipOrderId,
@@ -317,6 +319,10 @@ class OrderModel {
   final List<OrderItemModel> items;
   final String? trackingNumber;
   final String? courier;
+
+  /// `shipments.slug`, the id the shipment routes take. Only the seller's
+  /// query selects it; a buyer has nothing to dispatch.
+  final String? shipmentSlug;
 
   /// `shipments.status` — distinct from [status] (`orders.status`), and what
   /// the seller buckets actually test.

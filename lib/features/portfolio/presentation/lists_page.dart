@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/config/app_config.dart';
@@ -177,7 +178,7 @@ class _ListsPageState extends ConsumerState<ListsPage> {
       body: AppBarOverlayBody(
         child: user == null
             ? EmptyState(
-                icon: Icons.checklist,
+                icon: LucideIcons.listChecks,
                 title: 'Masuk untuk melihat list',
                 description: 'Silakan masuk untuk melihat list kartu kamu.',
                 action: ElevatedButton(
@@ -213,7 +214,7 @@ class _ListsPageState extends ConsumerState<ListsPage> {
                           const Spacer(),
                           ElevatedButton.icon(
                             onPressed: _create,
-                            icon: const Icon(Icons.add, size: 15),
+                            icon: const Icon(LucideIcons.plus, size: 15),
                             label: const Text('Buat List Baru'),
                           ),
                         ],
@@ -223,7 +224,7 @@ class _ListsPageState extends ConsumerState<ListsPage> {
                         const Padding(
                           padding: EdgeInsets.only(top: 40),
                           child: EmptyState(
-                            icon: Icons.checklist,
+                            icon: LucideIcons.listChecks,
                             title: 'Belum ada list',
                             description:
                                 'Buat list pertamamu untuk mulai mengatur kartu!',
@@ -298,7 +299,7 @@ class _ListCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                     child: Icon(
-                      Icons.checklist,
+                      LucideIcons.listChecks,
                       size: 20,
                       color: colors.primary,
                     ),
@@ -333,7 +334,10 @@ class _ListCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: context.mutedForeground),
+                  Icon(
+                    LucideIcons.chevronRight,
+                    color: context.mutedForeground,
+                  ),
                 ],
               ),
             ),
@@ -344,24 +348,24 @@ class _ListCard extends StatelessWidget {
             child: Row(
               children: [
                 _ListAction(
-                  icon: Icons.link,
+                  icon: LucideIcons.link,
                   label: 'Salin Link',
                   onTap: onCopyLink,
                 ),
                 _ListAction(
-                  icon: Icons.copy_all_outlined,
+                  icon: LucideIcons.copy,
                   label: 'Duplikat',
                   onTap: onDuplicate,
                   busy: duplicating,
                 ),
                 const Spacer(),
                 _ListAction(
-                  icon: Icons.edit_outlined,
+                  icon: LucideIcons.pencil,
                   label: 'Edit',
                   onTap: onEdit,
                 ),
                 _ListAction(
-                  icon: Icons.delete_outline,
+                  icon: LucideIcons.trash2,
                   label: 'Hapus',
                   onTap: onDelete,
                   destructive: true,

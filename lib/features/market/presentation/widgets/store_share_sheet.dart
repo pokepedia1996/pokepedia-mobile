@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -263,7 +264,7 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(LucideIcons.x),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -357,7 +358,7 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
                       height: 15,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.download_outlined, size: 16),
+                  : const Icon(LucideIcons.download, size: 16),
               label: Text(
                 _progress ??
                     (selection.isEmpty
@@ -373,7 +374,7 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _copyLink,
-              icon: const Icon(Icons.link, size: 16),
+              icon: const Icon(LucideIcons.link, size: 16),
               label: const Text('Salin link toko'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(46),
@@ -487,7 +488,7 @@ class _SelectTick extends StatelessWidget {
         ],
       ),
       child: selected
-          ? Icon(Icons.check, size: 15, color: colors.onPrimary)
+          ? Icon(LucideIcons.check, size: 15, color: colors.onPrimary)
           : null,
     );
   }
@@ -571,7 +572,7 @@ class _BulkSelect extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: onSelectAll,
             style: style,
-            icon: const Icon(Icons.done_all, size: 16),
+            icon: const Icon(LucideIcons.checkCheck, size: 16),
             label: const Text('Pilih semua'),
           ),
         ),
@@ -580,7 +581,7 @@ class _BulkSelect extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: onClear,
             style: style,
-            icon: const Icon(Icons.remove_done, size: 16),
+            icon: const Icon(LucideIcons.listX, size: 16),
             label: const Text('Batal pilih'),
           ),
         ),

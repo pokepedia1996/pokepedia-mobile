@@ -14,6 +14,12 @@ class Routes {
   // Search (opened from AppTopBar, not a bottom-nav tab).
   static const search = '/advanced-search';
 
+  /// Camera card scanner. Opened from [AppTopBar] alongside search, and
+  /// full-screen above the shell — it takes over the whole viewport (camera
+  /// preview plus its own controls), so the bottom nav would only be in the
+  /// way. Web serves the same feature at `/scan`.
+  static const scan = '/scan';
+
   // Auth.
   static const login = '/login';
   static const signup = '/signup';
@@ -27,10 +33,11 @@ class Routes {
   static const orders = '/orders';
   static const proposals = '/proposals';
 
-  /// Ports web's `?tab=diterima`. The market banner sends you where the work
-  /// is: incoming proposals need answering, so they outrank ones you're
-  /// waiting on.
-  static const proposalsReceived = '/proposals?tab=diterima';
+  /// Where the work is: proposals somebody sent you need answering, so they
+  /// outrank the ones you are waiting on. Web splits this feed by direction
+  /// (`?tab=diterima`); the app's page filters by what a proposal is waiting
+  /// on, and "perlu aksi" is exactly the received-and-pending ones.
+  static const proposalsReceived = '/proposals?filter=perlu_aksi';
 
   /// Offers made on ask listings. Not a web route: web surfaces these in
   /// the seller's offers list and inside chat, neither of which the app has.
@@ -39,12 +46,13 @@ class Routes {
   /// Everything happening on one card — web's `/proposals/card/[cardId]`.
   static String cardProposals(int cardId) => '/proposals/card/$cardId';
 
-  /// Proposals this user sent as a seller. Web's `?tab=dikirim`.
-  static const proposalsSent = '/proposals?tab=dikirim';
+  /// Proposals this user sent and is waiting on — web's `?tab=dikirim`.
+  static const proposalsSent = '/proposals?filter=menunggu';
 
-  /// The user's own WTB bids. Where "N bid aktif" points — those rows live
-  /// on this tab and nowhere else.
-  static const proposalsBids = '/proposals?tab=bid';
+  /// The user's own WTB bids. Where "N bid aktif" points. The page has no
+  /// bids-only filter — they are spread across the lifecycle ones — so this
+  /// opens the whole feed rather than a filter that would hide half of them.
+  static const proposalsBids = proposals;
   static const wallet = '/wallet';
   static const lists = '/portfolio/list';
 
@@ -52,6 +60,11 @@ class Routes {
   static const seller = '/seller';
   static const sellerProducts = '/seller/products';
   static const sellerOrders = '/seller/orders';
+
+  /// The orders list opened on one tab — web's `?filter=` links, which the
+  /// dashboard's counters carry so a number opens the list it counted.
+  static String sellerOrdersFiltered(String filterKey) =>
+      '/seller/orders?filter=$filterKey';
 
   /// Offers a buyer has made on one listing. Web keys this by
   /// `listings.slug`, and so does the app.

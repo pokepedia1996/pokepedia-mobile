@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
@@ -41,7 +42,7 @@ class SellerStoreProfilePage extends ConsumerWidget {
         child: async.when(
           loading: () => const PikachuLoader(),
           error: (_, __) => EmptyState(
-            icon: Icons.storefront_outlined,
+            icon: LucideIcons.store,
             title: 'Gagal memuat profil penjual',
             action: OutlinedButton(
               onPressed: () => ref.invalidate(storeProfileProvider),
@@ -51,7 +52,7 @@ class SellerStoreProfilePage extends ConsumerWidget {
           data: (profile) {
             if (profile == null) {
               return const EmptyState(
-                icon: Icons.storefront_outlined,
+                icon: LucideIcons.store,
                 title: 'Belum punya toko',
                 description:
                     'Buka toko dulu di pokepedia.id, lalu kelola dari sini.',
@@ -426,7 +427,7 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
                           hintText: 'Misal: Toko Pikachu',
                           counterText: '',
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.check, size: 18),
+                            icon: const Icon(LucideIcons.check, size: 18),
                             onPressed: saving ? null : _commitName,
                           ),
                         ),
@@ -445,7 +446,7 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
                           IconButton(
                             visualDensity: VisualDensity.compact,
                             icon: Icon(
-                              Icons.edit_outlined,
+                              LucideIcons.pencil,
                               size: 16,
                               color: context.mutedForeground,
                             ),
@@ -500,7 +501,7 @@ class _PencilButton extends StatelessWidget {
           width: size,
           height: size,
           child: Icon(
-            Icons.edit_outlined,
+            LucideIcons.pencil,
             size: size * 0.45,
             color: busy ? context.mutedForeground : context.appColors.onSurface,
           ),
@@ -806,7 +807,7 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
                 // Web leads with the map: pinning the spot fills in the rest.
                 OutlinedButton.icon(
                   onPressed: saving ? null : () => _pickOnMap(catalog),
-                  icon: const Icon(Icons.map_outlined, size: 16),
+                  icon: const Icon(LucideIcons.map, size: 16),
                   label: Text(
                     lat == null
                         ? 'Pilih lokasi di peta'
@@ -819,7 +820,7 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
                     child: Row(
                       children: [
                         Icon(
-                          Icons.location_on_outlined,
+                          LucideIcons.mapPin,
                           size: 14,
                           color: context.mutedForeground,
                         ),
@@ -1207,9 +1208,7 @@ class _ModeTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-              selected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
+              selected ? LucideIcons.circleDot : LucideIcons.circle,
               size: 18,
               color: selected ? colors.primary : context.mutedForeground,
             ),

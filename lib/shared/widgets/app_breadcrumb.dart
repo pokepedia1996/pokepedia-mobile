@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
@@ -26,7 +27,7 @@ class AppBreadcrumb extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Icon(
-                  Icons.chevron_right,
+                  LucideIcons.chevronRight,
                   size: 14,
                   color: context.mutedForeground,
                 ),

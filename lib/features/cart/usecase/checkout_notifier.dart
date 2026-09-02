@@ -55,6 +55,7 @@ class CheckoutState {
     this.paymentMethod = PaymentMethod.xendit,
     this.paymentChannel,
     this.walletBalance = 0,
+    this.sellerOrigins = const {},
     this.phoneVerified = true,
     this.contextLoading = true,
     this.contextError,
@@ -71,6 +72,10 @@ class CheckoutState {
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
   final int walletBalance;
+
+  /// Where each seller ships from, keyed by seller id. Needed before a quote
+  /// can be asked for, and only the server can read it.
+  final Map<String, SellerOrigin> sellerOrigins;
 
   /// The server rejects an unverified buyer, so the button is gated locally
   /// rather than letting the submit come back 403.
@@ -95,6 +100,7 @@ class CheckoutState {
     PaymentMethod? paymentMethod,
     PaymentChannel? paymentChannel,
     int? walletBalance,
+    Map<String, SellerOrigin>? sellerOrigins,
     bool? phoneVerified,
     bool? contextLoading,
     String? contextError,
@@ -117,6 +123,7 @@ class CheckoutState {
           ? null
           : (paymentChannel ?? this.paymentChannel),
       walletBalance: walletBalance ?? this.walletBalance,
+      sellerOrigins: sellerOrigins ?? this.sellerOrigins,
       phoneVerified: phoneVerified ?? this.phoneVerified,
       contextLoading: contextLoading ?? this.contextLoading,
       contextError: clearContextError
@@ -156,11 +163,18 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
 
   Future<void> loadContext() async {
     state = state.copyWith(contextLoading: true, clearContextError: true);
+    final gateway = ref.read(checkoutGatewayProvider);
     try {
-      final context = await ref.read(checkoutGatewayProvider).fetchContext();
+      // Both before the first quote: an origin is as necessary to price a
+      // parcel as the destination is.
+      final results = await Future.wait([
+        gateway.fetchContext(),
+        gateway.fetchSellerOrigins(),
+      ]);
       state = state.copyWith(
         contextLoading: false,
-        phoneVerified: context.phoneVerified,
+        phoneVerified: (results[0] as CheckoutContext).phoneVerified,
+        sellerOrigins: results[1] as Map<String, SellerOrigin>,
       );
       await _refreshAllRates();
     } on ApiException catch (e) {
@@ -194,6 +208,41 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
 
     _setShipping(sellerId, const SellerShipping(loading: true));
 
+    var origins = state.sellerOrigins;
+    if (origins.isEmpty) {
+      // One call covers the whole cart, so a per-seller retry re-fetches it
+      // rather than reporting a missing store address that is really a
+      // missing round trip.
+      try {
+        origins = await ref.read(checkoutGatewayProvider).fetchSellerOrigins();
+        state = state.copyWith(sellerOrigins: origins);
+      } on ApiException catch (e) {
+        _setShipping(sellerId, SellerShipping(error: e.message));
+        return;
+      }
+    }
+
+    final origin = origins[sellerId];
+    final originCityId = origin?.cityId;
+    if (originCityId == null || originCityId.isEmpty) {
+      // Web simply skips the call; on a phone an empty courier list with no
+      // explanation reads as a bug, so say whose side it is on.
+      _setShipping(
+        sellerId,
+        const SellerShipping(
+          error: 'Toko ini belum melengkapi alamat pengiriman.',
+        ),
+      );
+      return;
+    }
+    if (destination.cityId.isEmpty) {
+      _setShipping(
+        sellerId,
+        const SellerShipping(error: 'Alamat tujuan belum lengkap.'),
+      );
+      return;
+    }
+
     final sellerItems = _itemsBySeller[sellerId] ?? const [];
     final quantity = sellerItems.fold(0, (sum, item) => sum + item.quantity);
     final subtotal = sellerItems.fold(0, (sum, item) => sum + item.subtotal);
@@ -202,10 +251,17 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       final options = await ref
           .read(checkoutGatewayProvider)
           .fetchRates(
-            sellerId: sellerId,
-            addressSlug: destination.slug,
+            originCityId: originCityId,
+            destinationCityId: destination.cityId,
             quantity: quantity < 1 ? 1 : quantity,
             itemValue: subtotal,
+            originLat: origin?.pickupLat,
+            originLng: origin?.pickupLng,
+            destinationLat: destination.latitude,
+            destinationLng: destination.longitude,
+            acceptedCouriers: origin?.acceptedCouriers ?? const [],
+            acceptedCourierServices:
+                origin?.acceptedCourierServices ?? const [],
           );
 
       // Instant couriers need a map pinpoint on the destination; without one

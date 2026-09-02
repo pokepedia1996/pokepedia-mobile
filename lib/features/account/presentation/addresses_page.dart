@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -27,7 +28,7 @@ class AddressesPage extends ConsumerWidget {
       appBar: const TransparentAppBar(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showAddressFormSheet(context),
-        icon: const Icon(Icons.add, size: 18),
+        icon: const Icon(LucideIcons.plus, size: 18),
         label: const Text('Tambah Alamat'),
         backgroundColor: colors.primary,
         foregroundColor: colors.onPrimary,
@@ -47,7 +48,7 @@ class AddressesPage extends ConsumerWidget {
               const SizedBox(height: 18),
               if (addresses.isEmpty)
                 const EmptyState(
-                  icon: Icons.location_on_outlined,
+                  icon: LucideIcons.mapPin,
                   title: 'Belum ada alamat tersimpan',
                   description:
                       'Tambahkan alamat pengiriman supaya checkout bisa '
@@ -63,7 +64,7 @@ class AddressesPage extends ConsumerWidget {
           ),
           loading: () => const PikachuLoader(),
           error: (_, __) => const EmptyState(
-            icon: Icons.error_outline,
+            icon: LucideIcons.circleAlert,
             title: 'Gagal memuat alamat',
           ),
         ),

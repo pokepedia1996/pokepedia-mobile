@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Bucket used to group [CourierOption]s in the courier picker sheet.
 /// Ports `CourierBucket` from `lib/cart/shared.ts`.
@@ -23,25 +24,25 @@ const courierBucketMetas = [
     bucket: CourierBucket.instant,
     title: 'Pengiriman Instan',
     caption: '1-3 jam',
-    icon: Icons.bolt,
+    icon: LucideIcons.zap,
   ),
   CourierBucketMeta(
     bucket: CourierBucket.sameDay,
     title: 'Same Day',
     caption: '6-12 jam',
-    icon: Icons.bolt,
+    icon: LucideIcons.zap,
   ),
   CourierBucketMeta(
     bucket: CourierBucket.overnight,
     title: 'Overnight',
     caption: 'Besok sampai',
-    icon: Icons.local_shipping_outlined,
+    icon: LucideIcons.truck,
   ),
   CourierBucketMeta(
     bucket: CourierBucket.regular,
     title: 'Reguler',
     caption: '2-5 hari',
-    icon: Icons.local_shipping_outlined,
+    icon: LucideIcons.truck,
   ),
 ];
 
@@ -104,6 +105,54 @@ class CourierOption {
 
   String get optionKey => '$courier-$service';
 }
+
+/// Where a seller's parcels leave from, and which couriers they accept —
+/// one entry of `GET /api/cart`'s `sellerOrigins`.
+///
+/// It has to come from the server: every `seller_profiles` policy is
+/// `auth.uid() = user_id`, so a buyer selecting the seller's pickup point
+/// gets nothing back. That route reads it with a service client on the
+/// buyer's behalf, which is the same thing web's checkout does.
+class SellerOrigin {
+  const SellerOrigin({
+    this.cityId,
+    this.cityName,
+    this.pickupLat,
+    this.pickupLng,
+    this.acceptedCouriers = const [],
+    this.acceptedCourierServices = const [],
+    this.isActive = false,
+  });
+
+  factory SellerOrigin.fromJson(Map<String, dynamic> json) {
+    List<String> strings(Object? raw) =>
+        raw is List ? raw.whereType<String>().toList() : const <String>[];
+    return SellerOrigin(
+      cityId: json['cityId'] as String?,
+      cityName: json['cityName'] as String?,
+      pickupLat: (json['pickupLat'] as num?)?.toDouble(),
+      pickupLng: (json['pickupLng'] as num?)?.toDouble(),
+      acceptedCouriers: strings(json['acceptedCouriers']),
+      acceptedCourierServices: strings(json['acceptedCourierServices']),
+      isActive: json['isActive'] as bool? ?? false,
+    );
+  }
+
+  /// The BPS city code Biteship prices against ("31.71"). Null for a seller
+  /// who has not finished setting their store's address up — nothing can be
+  /// quoted from them until they do.
+  final String? cityId;
+  final String? cityName;
+  final double? pickupLat;
+  final double? pickupLng;
+  final List<String> acceptedCouriers;
+  final List<String> acceptedCourierServices;
+  final bool isActive;
+}
+
+/// `SHIPPING_WEIGHT_PER_UNIT_GRAMS` in `lib/shipping/core/constants.ts` —
+/// what one card is quoted as weighing.
+const kShippingWeightPerUnitGrams = 10;
 
 /// A saved shipping destination. Ports the relevant subset of `Address`
 /// from `lib/location/addresses.ts`.

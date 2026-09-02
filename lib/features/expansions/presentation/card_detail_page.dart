@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -59,7 +60,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
         data: (card) {
           if (card == null) {
             return const EmptyState(
-              icon: Icons.search_off,
+              icon: LucideIcons.searchX,
               title: 'Kartu tidak ditemukan',
             );
           }
@@ -127,7 +128,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
         },
         loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
           title: 'Gagal memuat kartu',
         ),
       ),
@@ -171,7 +172,11 @@ class _Artwork extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check, size: 12, color: Colors.white),
+                    const Icon(
+                      LucideIcons.check,
+                      size: 12,
+                      color: Colors.white,
+                    ),
                     const SizedBox(width: 3),
                     Text('$owned', style: AppTypography.badge(Colors.white)),
                   ],
@@ -238,7 +243,7 @@ class _NavChip extends StatelessWidget {
       ),
     );
     final chevron = Icon(
-      isNext ? Icons.chevron_right : Icons.chevron_left,
+      isNext ? LucideIcons.chevronRight : LucideIcons.chevronLeft,
       size: 16,
       color: context.mutedForeground,
     );

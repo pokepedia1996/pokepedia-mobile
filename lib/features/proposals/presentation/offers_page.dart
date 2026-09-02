@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -59,7 +60,7 @@ class _OffersTab extends ConsumerWidget {
       data: (items) {
         if (items.isEmpty) {
           return const EmptyState(
-            icon: Icons.local_offer_outlined,
+            icon: LucideIcons.tag,
             title: 'Belum ada penawaran terkirim',
           );
         }
@@ -234,7 +235,7 @@ class _OfferTileState extends ConsumerState<_OfferTile> {
                               .rejectOffer(offerSlug: offer.slug),
                           'Penawaran ditolak',
                         ),
-                  icon: Icon(Icons.close, color: colors.error, size: 20),
+                  icon: Icon(LucideIcons.x, color: colors.error, size: 20),
                 ),
               ],
             ),

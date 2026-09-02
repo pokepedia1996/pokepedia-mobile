@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -52,17 +53,17 @@ class AccountPage extends ConsumerWidget {
                       title: 'Portofolio',
                       children: [
                         _Row(
-                          icon: Icons.checklist,
+                          icon: LucideIcons.listChecks,
                           label: 'List',
                           onTap: () => context.push(Routes.lists),
                         ),
                         _Row(
-                          icon: Icons.grid_view_rounded,
+                          icon: LucideIcons.layoutGrid,
                           label: 'Deck',
                           onTap: () => context.push(Routes.decks),
                         ),
                         _Row(
-                          icon: Icons.inventory_2_outlined,
+                          icon: LucideIcons.package,
                           label: 'Inventori',
                           onTap: () => context.push(Routes.inventory),
                         ),
@@ -73,29 +74,29 @@ class AccountPage extends ConsumerWidget {
                       title: 'Aktivitas',
                       children: [
                         _Row(
-                          icon: Icons.inventory_2_outlined,
+                          icon: LucideIcons.package,
                           label: 'Pesanan',
                           onTap: () => context.push(Routes.orders),
                         ),
                         _Row(
-                          icon: Icons.chat_bubble_outline,
+                          icon: LucideIcons.messageCircle,
                           label: 'Pesan',
                           badge: ref.watch(chatUnreadCountProvider),
                           onTap: () => context.push(Routes.chat),
                         ),
                         _Row(
-                          icon: Icons.people_outline,
+                          icon: LucideIcons.users,
                           label: 'Cari Pengguna',
                           onTap: () => context.push(Routes.users),
                         ),
                         _Row(
-                          icon: Icons.storefront_outlined,
+                          icon: LucideIcons.store,
                           label: 'Dashboard Penjual',
                           onTap: () => context.push(Routes.seller),
                         ),
                         if (user.username != null)
                           _Row(
-                            icon: Icons.shopping_bag_outlined,
+                            icon: LucideIcons.shoppingBag,
                             label: 'Lihat Toko',
                             onTap: () => context.push(
                               Routes.storeDetail(user.username!),
@@ -107,7 +108,7 @@ class AccountPage extends ConsumerWidget {
                     _Group(
                       children: [
                         _Row(
-                          icon: Icons.people_outline,
+                          icon: LucideIcons.users,
                           label: 'Cari Pengguna',
                           onTap: () => context.push(Routes.users),
                         ),
@@ -117,24 +118,24 @@ class AccountPage extends ConsumerWidget {
                     title: 'Informasi',
                     children: [
                       _Row(
-                        icon: Icons.menu_book_outlined,
+                        icon: LucideIcons.bookOpen,
                         label: 'Tutorial',
                         onTap: () => context.push(Routes.tutorial),
                       ),
                       _Row(
-                        icon: Icons.description_outlined,
+                        icon: LucideIcons.fileText,
                         label: 'Syarat & Ketentuan',
                         onTap: () =>
                             context.push(Routes.terms('syarat-dan-ketentuan')),
                       ),
                       _Row(
-                        icon: Icons.description_outlined,
+                        icon: LucideIcons.fileText,
                         label: 'Kebijakan Privasi',
                         onTap: () =>
                             context.push(Routes.terms('kebijakan-privasi')),
                       ),
                       _Row(
-                        icon: Icons.description_outlined,
+                        icon: LucideIcons.fileText,
                         label: 'Panduan Kondisi Kartu',
                         onTap: () =>
                             context.push(Routes.terms('kondisi-kartu')),
@@ -150,9 +151,9 @@ class AccountPage extends ConsumerWidget {
                         ThemeMode.light => 'Terang',
                       };
                       final icon = switch (mode) {
-                        ThemeMode.system => Icons.brightness_auto,
-                        ThemeMode.dark => Icons.dark_mode_outlined,
-                        ThemeMode.light => Icons.light_mode_outlined,
+                        ThemeMode.system => LucideIcons.sunMoon,
+                        ThemeMode.dark => LucideIcons.moon,
+                        ThemeMode.light => LucideIcons.sun,
                       };
                       return _Group(
                         title: 'Pengaturan',
@@ -166,19 +167,19 @@ class AccountPage extends ConsumerWidget {
                           ),
                           if (!isGuest)
                             _Row(
-                              icon: Icons.settings_outlined,
+                              icon: LucideIcons.settings,
                               label: 'Pengaturan akun',
                               onTap: () => context.push(Routes.settings),
                             ),
                           if (isGuest)
                             _Row(
-                              icon: Icons.person_outline,
+                              icon: LucideIcons.user,
                               label: 'Masuk / Daftar',
                               onTap: () => context.push(Routes.login),
                             )
                           else
                             _Row(
-                              icon: Icons.logout,
+                              icon: LucideIcons.logOut,
                               label: 'Keluar',
                               destructive: true,
                               onTap: () => _confirmLogout(context, ref),
@@ -263,7 +264,7 @@ class _IdentityHeader extends StatelessWidget {
                 border: Border.all(color: context.borderColor),
               ),
               child: Icon(
-                Icons.person_add_alt,
+                LucideIcons.userPlus,
                 size: 20,
                 color: context.mutedForeground,
               ),
@@ -343,7 +344,7 @@ class _QuickActions extends ConsumerWidget {
           children: [
             Expanded(
               child: _QuickAction(
-                icon: Icons.account_balance_wallet_outlined,
+                icon: LucideIcons.wallet,
                 label: 'Saldo',
                 // The number is the reason to look, so it's shown here
                 // rather than behind a tap. A dash until it loads, not
@@ -357,7 +358,7 @@ class _QuickActions extends ConsumerWidget {
             VerticalDivider(width: 1, color: context.borderColor),
             Expanded(
               child: _QuickAction(
-                icon: Icons.notifications_none,
+                icon: LucideIcons.bell,
                 label: 'Notifikasi',
                 badge: ref.watch(unreadNotificationCountProvider),
                 onTap: () => context.push(Routes.notifications),
@@ -366,7 +367,7 @@ class _QuickActions extends ConsumerWidget {
             VerticalDivider(width: 1, color: context.borderColor),
             Expanded(
               child: _QuickAction(
-                icon: Icons.checklist,
+                icon: LucideIcons.listChecks,
                 label: 'Proposal',
                 onTap: () => context.push(Routes.proposals),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -162,7 +163,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         appBar: const TransparentAppBar(),
         body: AppBarOverlayBody(
           child: EmptyState(
-            icon: Icons.inventory_2_outlined,
+            icon: LucideIcons.package,
             title: 'Masuk untuk mengelola listing',
             action: ElevatedButton(
               onPressed: () => context.push(Routes.login),
@@ -221,7 +222,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                       alignment: Alignment.centerLeft,
                       child: ElevatedButton.icon(
                         onPressed: _addListing,
-                        icon: const Icon(Icons.add, size: 16),
+                        icon: const Icon(LucideIcons.plus, size: 16),
                         label: const Text('Tambahkan Listing'),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(0, 42),
@@ -249,7 +250,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                     ),
                     hintText: 'Cari nama, ekspansi, nomor, kondisi...',
                     hintStyle: AppTypography.bodySm(context.mutedForeground),
-                    prefixIcon: const Icon(Icons.search, size: 18),
+                    prefixIcon: const Icon(LucideIcons.search, size: 18),
                     // Without this the icon claims a 48dp box and sets the
                     // field's height on its own.
                     prefixIconConstraints: const BoxConstraints(
@@ -389,11 +390,7 @@ class _EmptyCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              size: 32,
-              color: context.mutedForeground,
-            ),
+            Icon(LucideIcons.package, size: 32, color: context.mutedForeground),
             const SizedBox(height: 12),
             Text(
               title,
@@ -427,11 +424,11 @@ class _BucketChip extends StatelessWidget {
   final VoidCallback onTap;
 
   static IconData _icon(SellerListingBucket bucket) => switch (bucket) {
-    SellerListingBucket.active => Icons.check_circle_outline,
-    SellerListingBucket.inactive => Icons.pause_circle_outline,
-    SellerListingBucket.archived => Icons.archive_outlined,
-    SellerListingBucket.draft => Icons.edit_note,
-    SellerListingBucket.preferences => Icons.tune,
+    SellerListingBucket.active => LucideIcons.circleCheck,
+    SellerListingBucket.inactive => LucideIcons.circlePause,
+    SellerListingBucket.archived => LucideIcons.archive,
+    SellerListingBucket.draft => LucideIcons.squarePen,
+    SellerListingBucket.preferences => LucideIcons.slidersHorizontal,
   };
 
   @override
@@ -670,7 +667,7 @@ class _OfferFilterChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.handshake_outlined, size: 14, color: foreground),
+            Icon(LucideIcons.handshake, size: 14, color: foreground),
             const SizedBox(width: 6),
             Text(
               'Dengan penawaran',

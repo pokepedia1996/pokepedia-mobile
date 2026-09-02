@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -286,7 +287,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
         data: (data) {
           if (data == null || data.listings.isEmpty) {
             return EmptyState(
-              icon: Icons.storefront_outlined,
+              icon: LucideIcons.store,
               title: 'Listing tidak lagi tersedia',
               description:
                   'Penjual ini mungkin sudah kehabisan atau menghentikan listing kartu ini.',
@@ -469,7 +470,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
         },
         loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
           title: 'Gagal memuat listing',
         ),
       ),
@@ -694,7 +695,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
     if (widget.isOwnListing) {
       return OutlinedButton.icon(
         onPressed: () => context.push(Routes.sellerProducts),
-        icon: const Icon(Icons.edit_outlined, size: 15),
+        icon: const Icon(LucideIcons.pencil, size: 15),
         label: const Text(
           'Kelola listing',
           maxLines: 1,
@@ -708,7 +709,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
     if (mine != null) {
       return OutlinedButton.icon(
         onPressed: () => context.push(Routes.proposals),
-        icon: const Icon(Icons.schedule, size: 15),
+        icon: const Icon(LucideIcons.clock, size: 15),
         label: Text(
           mine.status == OfferStatus.accepted
               ? 'Penawaran diterima'
@@ -724,7 +725,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
 
     return ElevatedButton.icon(
       onPressed: widget.onMakeOffer,
-      icon: const Icon(Icons.handshake_outlined, size: 15),
+      icon: const Icon(LucideIcons.handshake, size: 15),
       label: const Text('Tawar', maxLines: 1, overflow: TextOverflow.ellipsis),
       style: ElevatedButton.styleFrom(
         backgroundColor: context.appSemantic.success,
@@ -904,10 +905,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                                     color: colors.surface,
                                   ),
                                 )
-                              : const Icon(
-                                  Icons.shopping_cart_outlined,
-                                  size: 15,
-                                ),
+                              : const Icon(LucideIcons.shoppingCart, size: 15),
                           label: Text(
                             _adding ? 'Menambahkan...' : 'Keranjang',
                             maxLines: 1,
@@ -952,7 +950,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: widget.onReport,
-              icon: const Icon(Icons.flag_outlined, size: 15),
+              icon: const Icon(LucideIcons.flag, size: 15),
               label: const Text('Laporkan'),
               style: TextButton.styleFrom(
                 foregroundColor: context.mutedForeground,
@@ -988,7 +986,7 @@ class _OtherListingsCta extends StatelessWidget {
 
         child: Row(
           children: [
-            Icon(Icons.storefront_outlined, size: 16, color: colors.primary),
+            Icon(LucideIcons.store, size: 16, color: colors.primary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1002,7 +1000,7 @@ class _OtherListingsCta extends StatelessWidget {
                 style: AppTypography.bodySmSemibold(colors.primary),
               ),
             ),
-            Icon(Icons.arrow_forward, size: 15, color: colors.primary),
+            Icon(LucideIcons.arrowRight, size: 15, color: colors.primary),
           ],
         ),
       ),
@@ -1135,7 +1133,7 @@ class _SellerStrip extends StatelessWidget {
                           if (listing.isVerified) ...[
                             const SizedBox(width: 4),
                             Icon(
-                              Icons.verified,
+                              LucideIcons.badgeCheck,
                               size: 14,
                               color: colors.primary,
                             ),
@@ -1157,7 +1155,7 @@ class _SellerStrip extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.location_on_outlined,
+                              LucideIcons.mapPin,
                               size: 11,
                               color: context.mutedForeground,
                             ),
@@ -1187,7 +1185,7 @@ class _SellerStrip extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onContact,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 15),
+                  icon: const Icon(LucideIcons.messageCircle, size: 15),
                   label: const Text('Hubungi'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1199,7 +1197,7 @@ class _SellerStrip extends StatelessWidget {
                 child: following
                     ? ElevatedButton.icon(
                         onPressed: onToggleFollow,
-                        icon: const Icon(Icons.check, size: 15),
+                        icon: const Icon(LucideIcons.check, size: 15),
                         label: const Text('Mengikuti'),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1207,7 +1205,7 @@ class _SellerStrip extends StatelessWidget {
                       )
                     : OutlinedButton.icon(
                         onPressed: onToggleFollow,
-                        icon: const Icon(Icons.person_add_alt, size: 15),
+                        icon: const Icon(LucideIcons.userPlus, size: 15),
                         label: const Text('Ikuti'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1218,7 +1216,7 @@ class _SellerStrip extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onShare,
-                  icon: const Icon(Icons.ios_share, size: 15),
+                  icon: const Icon(LucideIcons.share, size: 15),
                   label: const Text('Bagikan'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1252,7 +1250,7 @@ class _WishlistButton extends StatelessWidget {
             height: 15,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        : Icon(wishlisted ? Icons.favorite : Icons.favorite_border, size: 15);
+        : Icon(wishlisted ? LucideIcons.heart : LucideIcons.heart, size: 15);
     final label = Text(wishlisted ? 'Tersimpan' : 'Wishlist');
     return wishlisted
         ? ElevatedButton.icon(

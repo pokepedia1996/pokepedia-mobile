@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/card_ownership_controller.dart';
@@ -226,7 +227,7 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
       data: (records) {
         if (records.isEmpty) {
           return const EmptyState(
-            icon: Icons.inventory_2_outlined,
+            icon: LucideIcons.package,
             title: 'Inventori kosong',
             description: 'Tambahkan kartu lewat tab Tambahkan.',
           );
@@ -248,7 +249,7 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
                 onChanged: (v) => setState(() => _query = v),
                 decoration: const InputDecoration(
                   hintText: 'Cari nama, ekspansi, atau nomor...',
-                  prefixIcon: Icon(Icons.search, size: 20),
+                  prefixIcon: Icon(LucideIcons.search, size: 20),
                 ),
               ),
             ),
@@ -444,7 +445,7 @@ class _AddSectionState extends ConsumerState<_AddSection> {
           onChanged: _onSearchChanged,
           decoration: const InputDecoration(
             hintText: 'Cari kartu untuk ditambahkan...',
-            prefixIcon: Icon(Icons.search, size: 20),
+            prefixIcon: Icon(LucideIcons.search, size: 20),
           ),
         ),
         if (resultsAsync != null) ...[
@@ -557,7 +558,7 @@ class _SearchResultTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.add_circle_outline, color: colors.primary),
+            Icon(LucideIcons.circlePlus, color: colors.primary),
           ],
         ),
       ),
@@ -609,7 +610,7 @@ class _DraftTile extends ConsumerWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 18),
+            icon: const Icon(LucideIcons.pencil, size: 18),
             onPressed: () async {
               final result =
                   await showModalBottomSheet<({int quantity, int unitPrice})>(
@@ -637,7 +638,7 @@ class _DraftTile extends ConsumerWidget {
           ),
           IconButton(
             icon: Icon(
-              Icons.check_circle_outline,
+              LucideIcons.circleCheck,
               size: 18,
               color: context.appSemantic.success,
             ),
@@ -661,7 +662,7 @@ class _DraftTile extends ConsumerWidget {
             },
           ),
           IconButton(
-            icon: Icon(Icons.close, size: 18, color: colors.error),
+            icon: Icon(LucideIcons.x, size: 18, color: colors.error),
             onPressed: () async {
               final user = ref.read(authProvider).valueOrNull;
               if (user == null) return;
@@ -869,7 +870,7 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
       data: (records) {
         if (records.isEmpty) {
           return const EmptyState(
-            icon: Icons.inventory_2_outlined,
+            icon: LucideIcons.package,
             title: 'Inventori kosong',
           );
         }
@@ -891,7 +892,7 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
                 onChanged: (v) => setState(() => _query = v),
                 decoration: const InputDecoration(
                   hintText: 'Cari kartu untuk dihapus...',
-                  prefixIcon: Icon(Icons.search, size: 20),
+                  prefixIcon: Icon(LucideIcons.search, size: 20),
                 ),
               ),
             ),
@@ -1062,7 +1063,7 @@ class _ActivitySection extends ConsumerWidget {
       data: (activity) {
         if (activity.isEmpty) {
           return const EmptyState(
-            icon: Icons.history,
+            icon: LucideIcons.history,
             title: 'Belum ada aktivitas',
           );
         }
@@ -1089,17 +1090,17 @@ class _ActivityTile extends StatelessWidget {
     final colors = context.appColors;
     final (icon, color, label) = switch (entry.action) {
       InventoryActivityAction.addedIn => (
-        Icons.add_circle_outline,
+        LucideIcons.circlePlus,
         context.appSemantic.success,
         'Ditambahkan',
       ),
       InventoryActivityAction.removedOut => (
-        Icons.remove_circle_outline,
+        LucideIcons.circleMinus,
         colors.error,
         'Dihapus',
       ),
       InventoryActivityAction.updated => (
-        Icons.edit_outlined,
+        LucideIcons.pencil,
         context.mutedForeground,
         'Diperbarui',
       ),

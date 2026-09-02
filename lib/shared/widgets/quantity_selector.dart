@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
@@ -31,7 +32,7 @@ class QuantitySelector extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _StepButton(
-            icon: Icons.remove,
+            icon: LucideIcons.minus,
             onTap: value > min ? () => onChanged(value - 1) : null,
           ),
           SizedBox(
@@ -43,7 +44,7 @@ class QuantitySelector extends StatelessWidget {
             ),
           ),
           _StepButton(
-            icon: Icons.add,
+            icon: LucideIcons.plus,
             onTap: value < max ? () => onChanged(value + 1) : null,
           ),
         ],

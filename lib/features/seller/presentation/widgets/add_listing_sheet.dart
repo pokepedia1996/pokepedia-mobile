@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -110,7 +111,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(LucideIcons.x),
                         onPressed: () => Navigator.of(context).pop(_postedAny),
                       ),
                     ],
@@ -124,7 +125,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                     onChanged: _onChanged,
                     decoration: const InputDecoration(
                       hintText: 'Cari kartu yang mau dijual...',
-                      prefixIcon: Icon(Icons.search, size: 20),
+                      prefixIcon: Icon(LucideIcons.search, size: 20),
                     ),
                   ),
                 ),
@@ -246,7 +247,11 @@ class _CardRow extends StatelessWidget {
               ),
             ],
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 18, color: context.mutedForeground),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: context.mutedForeground,
+            ),
           ],
         ),
       ),

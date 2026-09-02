@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -26,7 +27,11 @@ import '../../orders/usecase/orders_notifier.dart';
 /// in `orders` at all, because the order doesn't exist until the money
 /// lands.
 class SellerOrdersPage extends ConsumerStatefulWidget {
-  const SellerOrdersPage({super.key});
+  const SellerOrdersPage({super.key, this.initialFilter});
+
+  /// Web's `?filter=` — the tab a link asked for, e.g. from a dashboard
+  /// counter. Null keeps whichever tab was last open.
+  final String? initialFilter;
 
   @override
   ConsumerState<SellerOrdersPage> createState() => _SellerOrdersPageState();
@@ -34,6 +39,18 @@ class SellerOrdersPage extends ConsumerStatefulWidget {
 
 class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
   final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final requested = SellerOrderTab.fromFilterKey(widget.initialFilter);
+    if (requested == null) return;
+    // After the frame: the tab lives in a provider the tree is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(sellerOrderTabProvider.notifier).state = requested;
+    });
+  }
 
   @override
   void dispose() {
@@ -90,7 +107,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
       body: AppBarOverlayBody(
         child: !signedIn
             ? EmptyState(
-                icon: Icons.receipt_long_outlined,
+                icon: LucideIcons.receipt,
                 title: 'Masuk untuk melihat pesanan',
                 action: ElevatedButton(
                   onPressed: () => context.push(Routes.login),
@@ -100,7 +117,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
             : async.when(
                 loading: () => const PikachuLoader(),
                 error: (error, _) => EmptyState(
-                  icon: Icons.error_outline,
+                  icon: LucideIcons.circleAlert,
                   title: 'Gagal memuat pesanan',
                   description: _describe(error),
                   action: OutlinedButton(
@@ -200,7 +217,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
               ),
               hintText: 'Cari order ID, kartu, pembeli, atau no. resi',
               hintStyle: AppTypography.bodySm(context.mutedForeground),
-              prefixIcon: const Icon(Icons.search, size: 18),
+              prefixIcon: const Icon(LucideIcons.search, size: 18),
               prefixIconConstraints: const BoxConstraints(
                 minWidth: 36,
                 minHeight: 0,
@@ -208,7 +225,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
               suffixIcon: needle.isEmpty
                   ? null
                   : IconButton(
-                      icon: const Icon(Icons.close, size: 16),
+                      icon: const Icon(LucideIcons.x, size: 16),
                       onPressed: () {
                         _search.clear();
                         ref.read(sellerOrderQueryProvider.notifier).state = '';
@@ -278,7 +295,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
       children: [
         const SizedBox(height: 40),
         EmptyState(
-          icon: Icons.inventory_2_outlined,
+          icon: LucideIcons.package,
           title: hasAny ? tab.emptyHeadline : 'Belum ada pesanan',
           description: hasAny
               ? (tab.emptySub ?? 'Coba ganti filter atau tab.')
@@ -396,7 +413,7 @@ class _FilterBar extends StatelessWidget {
           if (showCourier && couriers.isNotEmpty) ...[
             Flexible(
               child: _Dropdown<String?>(
-                icon: Icons.local_shipping_outlined,
+                icon: LucideIcons.truck,
                 value: courier,
                 label: courier == null
                     ? 'Semua kurir'
@@ -419,7 +436,7 @@ class _FilterBar extends StatelessWidget {
           ],
           Flexible(
             child: _Dropdown<SellerOrderSort>(
-              icon: Icons.swap_vert,
+              icon: LucideIcons.arrowUpDown,
               value: sort,
               label: sort.label,
               items: [
@@ -478,7 +495,7 @@ class _Dropdown<T> extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 15,
               color: context.mutedForeground,
             ),
@@ -642,7 +659,7 @@ class SellerOrderCard extends StatelessWidget {
       content = Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, size: 14, color: colors.error),
+          Icon(LucideIcons.circleAlert, size: 14, color: colors.error),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -655,7 +672,7 @@ class SellerOrderCard extends StatelessWidget {
     } else if (needsDispatch) {
       content = Row(
         children: [
-          Icon(Icons.local_shipping_outlined, size: 14, color: colors.primary),
+          Icon(LucideIcons.truck, size: 14, color: colors.primary),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -663,17 +680,13 @@ class SellerOrderCard extends StatelessWidget {
               style: AppTypography.captionSemibold(colors.primary),
             ),
           ),
-          Icon(Icons.chevron_right, size: 15, color: colors.primary),
+          Icon(LucideIcons.chevronRight, size: 15, color: colors.primary),
         ],
       );
     } else if (awaitingPickup) {
       content = Row(
         children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 14,
-            color: context.mutedForeground,
-          ),
+          Icon(LucideIcons.package, size: 14, color: context.mutedForeground),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -687,7 +700,7 @@ class SellerOrderCard extends StatelessWidget {
       content = Row(
         children: [
           Icon(
-            Icons.check_circle_outline,
+            LucideIcons.circleCheck,
             size: 14,
             color: context.appSemantic.bid,
           ),
@@ -889,7 +902,7 @@ class _PendingCard extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.schedule, size: 14, color: context.mutedForeground),
+              Icon(LucideIcons.clock, size: 14, color: context.mutedForeground),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(

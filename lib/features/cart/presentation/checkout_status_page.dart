@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/navigation.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -110,7 +112,7 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
               children: [
                 if (status == CheckoutStatus.paid) ...[
                   Icon(
-                    Icons.check_circle,
+                    LucideIcons.circleCheckBig,
                     size: 56,
                     color: context.appSemantic.success,
                   ),
@@ -126,7 +128,7 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
                 ] else if (status == CheckoutStatus.cancelled) ...[
-                  Icon(Icons.cancel_outlined, size: 56, color: colors.error),
+                  Icon(LucideIcons.circleX, size: 56, color: colors.error),
                   const SizedBox(height: 12),
                   Text(
                     _cancelledTitle(_progress!.raw),
@@ -140,7 +142,7 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
                   ),
                 ] else if (_timedOut) ...[
                   Icon(
-                    Icons.hourglass_empty,
+                    LucideIcons.hourglass,
                     size: 56,
                     color: context.mutedForeground,
                   ),
@@ -193,7 +195,7 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => context.go(Routes.orders),
+                    onPressed: () => context.goHomeThen(Routes.orders),
                     child: const Text('Lihat Pesanan'),
                   ),
                 ),

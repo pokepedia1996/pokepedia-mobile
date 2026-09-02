@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -181,7 +182,7 @@ class _HeroSectionState extends State<HeroSection>
                             children: [
                               Text('Jelajahi Market'),
                               SizedBox(width: 6),
-                              Icon(Icons.arrow_forward, size: 16),
+                              Icon(LucideIcons.arrowRight, size: 16),
                             ],
                           ),
                         ),

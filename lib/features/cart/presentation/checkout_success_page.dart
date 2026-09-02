@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/navigation.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -38,7 +40,7 @@ class CheckoutSuccessPage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.check_circle,
+                    LucideIcons.circleCheckBig,
                     size: 48,
                     color: context.appSemantic.success,
                   ),
@@ -79,7 +81,7 @@ class CheckoutSuccessPage extends StatelessWidget {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () => context.go(Routes.orders),
+                          onPressed: () => context.goHomeThen(Routes.orders),
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size.fromHeight(44),
                           ),

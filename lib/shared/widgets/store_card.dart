@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
@@ -61,7 +62,7 @@ class StoreCard extends StatelessWidget {
                           if (store.isVerified) ...[
                             const SizedBox(width: 4),
                             Icon(
-                              Icons.verified,
+                              LucideIcons.badgeCheck,
                               size: 15,
                               color: colors.primary,
                             ),
@@ -87,7 +88,7 @@ class StoreCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      Icons.shopping_bag_outlined,
+                      LucideIcons.shoppingBag,
                       size: 14,
                       color: context.mutedForeground,
                     ),
@@ -101,7 +102,7 @@ class StoreCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      Icons.place_outlined,
+                      LucideIcons.mapPin,
                       size: 14,
                       color: context.mutedForeground,
                     ),

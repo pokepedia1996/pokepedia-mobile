@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -56,7 +57,7 @@ Future<void> showPortfolioPicker(BuildContext context, WidgetRef ref) async {
                       onPressed: () => Navigator.of(
                         sheetContext,
                       ).pop(const _CreateListRequest()),
-                      icon: const Icon(Icons.add, size: 16),
+                      icon: const Icon(LucideIcons.plus, size: 16),
                       label: const Text('Buat list'),
                       style: TextButton.styleFrom(
                         foregroundColor: colors.primary,
@@ -316,7 +317,7 @@ class _TargetRow extends StatelessWidget {
         child: Row(
           children: [
             if (selected) ...[
-              Icon(Icons.check, size: 18, color: colors.primary),
+              Icon(LucideIcons.check, size: 18, color: colors.primary),
               const SizedBox(width: 8),
             ],
             Expanded(
@@ -330,7 +331,7 @@ class _TargetRow extends StatelessWidget {
               ),
             ),
             _RowAction(
-              icon: isDefault ? Icons.star : Icons.star_border,
+              icon: isDefault ? LucideIcons.star : LucideIcons.star,
               color: isDefault ? const Color(0xFFE0A83A) : null,
               tooltip: isDefault
                   ? 'Portofolio default'
@@ -339,13 +340,13 @@ class _TargetRow extends StatelessWidget {
             ),
             if (onEdit != null)
               _RowAction(
-                icon: Icons.edit_outlined,
+                icon: LucideIcons.pencil,
                 tooltip: 'Edit list',
                 onPressed: onEdit!,
               ),
             if (onDelete != null)
               _RowAction(
-                icon: Icons.delete_outline,
+                icon: LucideIcons.trash2,
                 color: colors.error,
                 tooltip: 'Hapus list',
                 onPressed: onDelete!,
@@ -424,7 +425,7 @@ Future<WantlistModel?> showListPicker(
                 ),
                 TextButton.icon(
                   onPressed: () => Navigator.of(sheetContext).pop(_MakeList()),
-                  icon: const Icon(Icons.add, size: 16),
+                  icon: const Icon(LucideIcons.plus, size: 16),
                   label: const Text('Buat list'),
                   style: TextButton.styleFrom(
                     foregroundColor: context.appColors.primary,

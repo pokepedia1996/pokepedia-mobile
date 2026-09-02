@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -47,7 +48,7 @@ class AdvancedFilterToggle extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              Icons.tune,
+              LucideIcons.slidersHorizontal,
               size: 18,
               color: active ? colors.primary : context.mutedForeground,
             ),
@@ -74,7 +75,7 @@ class AdvancedFilterToggle extends StatelessWidget {
             ],
             const Spacer(),
             Icon(
-              expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
               size: 18,
               color: context.mutedForeground,
             ),
@@ -205,7 +206,7 @@ class FilterTrigger extends StatelessWidget {
               ),
             ],
             Icon(
-              open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
               size: 14,
               color: active ? colors.primary : context.mutedForeground,
             ),
@@ -261,7 +262,7 @@ class _OptionSheetState extends State<_OptionSheet> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, size: 20),
+                    icon: const Icon(LucideIcons.x, size: 20),
                   ),
                 ],
               ),
@@ -514,7 +515,7 @@ class _TypeWRSheetState extends State<_TypeWRSheet> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, size: 20),
+                    icon: const Icon(LucideIcons.x, size: 20),
                   ),
                 ],
               ),
@@ -741,7 +742,7 @@ class _ExpansionSheetState extends State<_ExpansionSheet> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, size: 20),
+                      icon: const Icon(LucideIcons.x, size: 20),
                     ),
                   ],
                 ),
@@ -753,7 +754,7 @@ class _ExpansionSheetState extends State<_ExpansionSheet> {
                   decoration: const InputDecoration(
                     hintText: 'Cari ekspansi...',
                     isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 18),
+                    prefixIcon: Icon(LucideIcons.search, size: 18),
                   ),
                 ),
               ),
@@ -944,7 +945,7 @@ class SingleSelectButton<T> extends StatelessWidget {
             child: Row(
               children: [
                 if (option == value)
-                  Icon(Icons.check, size: 16, color: colors.primary)
+                  Icon(LucideIcons.check, size: 16, color: colors.primary)
                 else
                   const SizedBox(width: 16),
                 const SizedBox(width: 8),
@@ -979,7 +980,7 @@ class SingleSelectButton<T> extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 14,
               color: active ? colors.primary : context.mutedForeground,
             ),
@@ -1018,7 +1019,7 @@ class OptionsErrorRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, size: 14, color: context.mutedForeground),
+          Icon(LucideIcons.info, size: 14, color: context.mutedForeground),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/utils/postgrest_embed.dart';
 import 'models/dispute_model.dart';
 import 'models/order_model.dart';
+import 'models/order_ref.dart';
 import 'models/pending_checkout.dart';
 import 'models/seller_order_detail.dart';
 
@@ -215,19 +216,77 @@ class OrdersRepository {
     };
   }
 
-  Future<OrderModel?> fetchOrder(String slug) async {
+  /// One order, by whatever an `/orders/<ref>` link carries — see
+  /// [_orderRowByRef] for why that is more than one thing.
+  Future<OrderModel?> fetchOrder(String ref) async {
     if (_uid == null) return null;
 
-    final row = await _client
-        .from('orders')
-        .select(_orderColumns)
-        .eq('slug', slug)
-        .maybeSingle();
+    final row = await _orderRowByRef(ref, _orderColumns);
     if (row == null) return null;
 
     final sellerId = row['seller_id'] as String?;
     final names = await _sellerNames({if (sellerId != null) sellerId});
     return OrderModel.fromRow(row, storeName: names[sellerId] ?? 'Penjual');
+  }
+
+  /// The `orders` row a reference names, whichever kind of reference it is.
+  ///
+  /// The app addresses an order by `orders.slug`, but the website addresses
+  /// the same screen by *match* — `order_items.slug`, or an order number from
+  /// either table — and its notification triggers write all of those into
+  /// `action_url`. A tapped notification therefore arrives holding an id this
+  /// table has never heard of, which is what "Gagal memuat pesanan" was.
+  ///
+  /// Order matters: `orders` is tried first because that is what every link
+  /// the app makes itself carries, so the common path stays one query. Both
+  /// slug columns are `uuid`, so a reference is matched by shape rather than
+  /// by trying it against every column — comparing a uuid column to
+  /// `ord-260901-a7k3p` is an error, not a miss.
+  Future<Map<String, dynamic>?> _orderRowByRef(
+    String ref,
+    String columns, {
+    String? sellerId,
+  }) async {
+    final needle = ref.trim();
+    final kind = classifyOrderRef(needle);
+    if (kind == OrderRefKind.unknown) return null;
+    final isUuid = kind == OrderRefKind.slug;
+
+    PostgrestFilterBuilder<PostgrestList> scoped(
+      PostgrestFilterBuilder<PostgrestList> query,
+    ) => sellerId == null ? query : query.eq('seller_id', sellerId);
+
+    final direct = await scoped(
+      isUuid
+          ? _client.from('orders').select(columns).eq('slug', needle)
+          : _client
+                .from('orders')
+                .select(columns)
+                .eq('order_number', needle.toLowerCase()),
+    ).maybeSingle();
+    if (direct != null) return direct;
+
+    // Not the package — try the item. `order_items_select_own` scopes this to
+    // the caller the same way, so a reference to somebody else's order still
+    // resolves to nothing.
+    final item =
+        await (isUuid
+                ? _client
+                      .from('order_items')
+                      .select('order_id')
+                      .eq('slug', needle)
+                : _client
+                      .from('order_items')
+                      .select('order_id')
+                      .eq('order_number', needle.toLowerCase()))
+            .limit(1)
+            .maybeSingle();
+    final orderId = (item?['order_id'] as num?)?.toInt();
+    if (orderId == null) return null;
+
+    return scoped(
+      _client.from('orders').select(columns).eq('id', orderId),
+    ).maybeSingle();
   }
 
   /// The seller's own columns for one order: the settlement's money and the
@@ -241,9 +300,12 @@ class OrdersRepository {
       'status, created_at, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'paid_at, payment_deadline, cancel_status, cancel_reason,'
-      'commission_amount, seller_net_amount, insurance_premium_idr),'
+      'commission_amount, seller_net_amount, insurance_premium_idr,'
+      // Which dispatch methods this order's courier supports, and who it is
+      // — the shipment sheet offers pickup or a manual resi accordingly.
+      'available_collection_method, courier_company),'
       'disputes(slug, current_status)),'
-      'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
+      'shipments!shipments_order_id_fkey(slug, tracking_number, courier, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
@@ -255,16 +317,11 @@ class OrdersRepository {
   /// Returns null when the row isn't this user's to sell: `orders_select_own`
   /// covers both sides, so a buyer opening a seller URL would otherwise get
   /// their own order back wearing the wrong screen.
-  Future<SellerOrderDetail?> fetchSellerOrder(String slug) async {
+  Future<SellerOrderDetail?> fetchSellerOrder(String ref) async {
     final me = _uid;
     if (me == null) return null;
 
-    final row = await _client
-        .from('orders')
-        .select(_sellerOrderColumns)
-        .eq('slug', slug)
-        .eq('seller_id', me)
-        .maybeSingle();
+    final row = await _orderRowByRef(ref, _sellerOrderColumns, sellerId: me);
     if (row == null) return null;
 
     final buyerId = row['buyer_id'] as String?;
@@ -345,14 +402,12 @@ class OrdersRepository {
 
   /// The dispute on an order, if one was opened. Disputes hang off the
   /// settlement rather than the order, so this walks the order's items.
+  /// The open dispute on an order, by any reference the order screens take
+  /// — they watch this with whatever the link handed them.
   Future<DisputeModel?> fetchDispute(String orderSlug) async {
     if (_uid == null) return null;
 
-    final order = await _client
-        .from('orders')
-        .select('id, slug, order_items(id)')
-        .eq('slug', orderSlug)
-        .maybeSingle();
+    final order = await _orderRowByRef(orderSlug, 'id, slug, order_items(id)');
     if (order == null) return null;
 
     final itemIds = embeddedRows(

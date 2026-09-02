@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -58,8 +59,8 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
                     children: [
                       Icon(
                         _reason == reason
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
+                            ? LucideIcons.circleDot
+                            : LucideIcons.circle,
                         size: 18,
                         color: _reason == reason
                             ? colors.primary

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/card_ownership_controller.dart';
@@ -141,7 +142,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(_addedAny),
-                        icon: const Icon(Icons.close, size: 20),
+                        icon: const Icon(LucideIcons.x, size: 20),
                       ),
                     ],
                   ),
@@ -155,7 +156,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
                     decoration: const InputDecoration(
                       hintText: 'Cari nama kartu...',
                       isDense: true,
-                      prefixIcon: Icon(Icons.search, size: 20),
+                      prefixIcon: Icon(LucideIcons.search, size: 20),
                     ),
                   ),
                 ),
@@ -260,7 +261,7 @@ class _ResultTile extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              Icon(Icons.add_circle_outline, size: 20, color: colors.primary),
+              Icon(LucideIcons.circlePlus, size: 20, color: colors.primary),
           ],
         ),
       ),

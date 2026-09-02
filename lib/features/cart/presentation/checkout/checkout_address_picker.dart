@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -84,7 +85,7 @@ class CheckoutAddressPicker extends StatelessWidget {
                       Row(
                         children: [
                           Icon(
-                            Icons.place_outlined,
+                            LucideIcons.mapPin,
                             size: 16,
                             color: colors.primary,
                           ),
@@ -256,7 +257,7 @@ class _AddressListSheet extends StatelessWidget {
                       ),
                       if (address.id == selectedId)
                         Icon(
-                          Icons.check_circle,
+                          LucideIcons.circleCheckBig,
                           color: colors.primary,
                           size: 20,
                         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -51,7 +52,7 @@ class FollowingPage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(AppRadius.lg),
                   ),
                   child: EmptyState(
-                    icon: Icons.favorite_border,
+                    icon: LucideIcons.heart,
                     title: 'Belum ada toko yang diikuti',
                     description:
                         'Kunjungi halaman toko penjual favoritmu dan tekan '
@@ -72,7 +73,7 @@ class FollowingPage extends ConsumerWidget {
           ),
           loading: () => const PikachuLoader(),
           error: (_, __) => const EmptyState(
-            icon: Icons.error_outline,
+            icon: LucideIcons.circleAlert,
             title: 'Gagal memuat toko',
           ),
         ),
@@ -140,7 +141,10 @@ class _FollowedShopCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: context.mutedForeground),
+                  Icon(
+                    LucideIcons.chevronRight,
+                    color: context.mutedForeground,
+                  ),
                 ],
               ),
             ),
