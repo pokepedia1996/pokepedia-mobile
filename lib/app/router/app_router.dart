@@ -267,7 +267,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: Routes.sellerOrders,
-      builder: (_, __) => const SellerOrdersPage(),
+      builder: (_, state) =>
+          SellerOrdersPage(initialFilter: state.uri.queryParameters['filter']),
       routes: [
         GoRoute(
           path: ':slug',

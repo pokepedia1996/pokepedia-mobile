@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -96,7 +97,7 @@ class _ScanCardSearchSheetState extends ConsumerState<ScanCardSearchSheet> {
               textInputAction: TextInputAction.search,
               decoration: const InputDecoration(
                 hintText: 'Cari kartu…',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: Icon(LucideIcons.search),
               ),
             ),
           ),

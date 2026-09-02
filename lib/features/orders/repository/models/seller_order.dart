@@ -171,6 +171,28 @@ enum SellerOrderTab {
   final String emptyHeadline;
   final String? emptySub;
 
+  /// Web's `SellerOrderTabKey` — the `?filter=` value that names this tab in
+  /// a link, so a dashboard counter can open the list it counted.
+  String get filterKey => switch (this) {
+    SellerOrderTab.all => 'all',
+    SellerOrderTab.awaitingPayment => 'awaiting_payment',
+    SellerOrderTab.urgent => 'urgent',
+    SellerOrderTab.inTransit => 'in_transit',
+    SellerOrderTab.arrived => 'arrived',
+    SellerOrderTab.success => 'success',
+    SellerOrderTab.cancelRequested => 'cancel_requested',
+    SellerOrderTab.failed => 'failed',
+    SellerOrderTab.disputed => 'disputed',
+  };
+
+  static SellerOrderTab? fromFilterKey(String? key) {
+    if (key == null) return null;
+    for (final tab in SellerOrderTab.values) {
+      if (tab.filterKey == key) return tab;
+    }
+    return null;
+  }
+
   /// Web badges these in the seller sidebar: each one is waiting on the
   /// seller to do something.
   bool get isUrgent =>

@@ -41,12 +41,18 @@ class ScanMatched extends ScanState {
 }
 
 class ScanFailed extends ScanState {
-  const ScanFailed(this.message);
+  const ScanFailed(this.message, {this.retryAfter});
 
   /// Already user-facing Indonesian — either the server's own mapped string
   /// (`ERROR_MESSAGES` in `app/api/scan/route.ts`) or one of the client-side
   /// messages below.
   final String message;
+
+  /// How long the server asked us to wait, when it said so. Set only for a
+  /// 429 — either the per-user scan budget (30/60s) or the embedder shedding
+  /// load. The capture path holds the shutter for at least this long rather
+  /// than letting the user retry straight into the same refusal.
+  final Duration? retryAfter;
 }
 
 class ScannerNotifier extends Notifier<ScanState> {
@@ -89,14 +95,14 @@ class ScannerNotifier extends Notifier<ScanState> {
       // one.
       final tooBlurry = capture.sharpness < captureMinSharpness;
 
-      if (response.matches.isNotEmpty &&
-          (isConfidentMatch(response.matches) || !tooBlurry)) {
+      if (response.matches.isNotEmpty && (response.confident || !tooBlurry)) {
         next = ScanMatched(
           matches: response.matches,
           variants: response.variants,
-          // Recomputed from the returned distances rather than trusting the
-          // server's flag, matching the web.
-          confident: isConfidentMatch(response.matches),
+          // The server's verdict, not a local recomputation: the thresholds
+          // behind it live in two places already (the route and the embedder)
+          // and a third copy here would drift out of step unnoticed.
+          confident: response.confident,
           logId: response.logId,
         );
       } else {
@@ -106,6 +112,11 @@ class ScannerNotifier extends Notifier<ScanState> {
               : 'Kartu tidak dikenali, pindai ulang',
         );
       }
+    } on ApiRateLimitedException catch (e) {
+      // Caught ahead of `ApiException` so the wait survives — retrying
+      // immediately would spend another token against a budget that is
+      // already exhausted.
+      next = ScanFailed(e.message, retryAfter: e.retryAfter);
     } on ApiException catch (e) {
       // The route already localizes every failure it knows about, so its
       // message beats anything invented here.

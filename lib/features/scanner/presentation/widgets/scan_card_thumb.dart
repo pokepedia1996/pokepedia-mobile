@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../repository/models/scan_models.dart';
@@ -34,7 +35,7 @@ class ScanCardThumb extends StatelessWidget {
   Widget _placeholder(BuildContext context) => ColoredBox(
     color: context.borderColor,
     child: Icon(
-      Icons.image_not_supported_outlined,
+      LucideIcons.imageOff,
       size: width * 0.4,
       color: context.mutedForeground,
     ),

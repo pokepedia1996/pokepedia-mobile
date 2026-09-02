@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -131,7 +132,7 @@ class _BidEditSheetState extends State<_BidEditSheet> {
                   onPressed: _quantity > _minQuantity
                       ? () => setState(() => _quantity--)
                       : null,
-                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                  icon: const Icon(LucideIcons.circleMinus, size: 20),
                 ),
                 SizedBox(
                   width: 32,
@@ -145,7 +146,7 @@ class _BidEditSheetState extends State<_BidEditSheet> {
                   onPressed: _quantity < 99
                       ? () => setState(() => _quantity++)
                       : null,
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                  icon: const Icon(LucideIcons.circlePlus, size: 20),
                 ),
               ],
             ),

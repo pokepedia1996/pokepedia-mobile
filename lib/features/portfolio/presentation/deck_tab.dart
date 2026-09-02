@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -192,7 +193,7 @@ class _DeckTabState extends ConsumerState<DeckTab> {
                   ),
                   ElevatedButton.icon(
                     onPressed: _openCreateSheet,
-                    icon: const Icon(Icons.add, size: 16),
+                    icon: const Icon(LucideIcons.plus, size: 16),
                     label: const Text('Buat Deck Baru'),
                   ),
                 ],
@@ -205,14 +206,14 @@ class _DeckTabState extends ConsumerState<DeckTab> {
                   onChanged: (v) => setState(() => _query = v),
                   decoration: const InputDecoration(
                     hintText: 'Cari deck...',
-                    prefixIcon: Icon(Icons.search, size: 20),
+                    prefixIcon: Icon(LucideIcons.search, size: 20),
                   ),
                 ),
               ),
             Expanded(
               child: decks.isEmpty
                   ? const EmptyState(
-                      icon: Icons.style_outlined,
+                      icon: LucideIcons.layers,
                       title: 'Belum ada deck',
                       description:
                           'Buat deck pertamamu untuk mulai membangun strategi!',
@@ -298,7 +299,7 @@ class _DeckTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                   child: Icon(
-                    Icons.layers_outlined,
+                    LucideIcons.layers,
                     color: colors.primary,
                     size: 20,
                   ),
@@ -337,7 +338,7 @@ class _DeckTile extends StatelessWidget {
                 ),
                 PopupMenuButton<String>(
                   icon: Icon(
-                    Icons.more_vert,
+                    LucideIcons.ellipsisVertical,
                     color: context.mutedForeground,
                     size: 20,
                   ),
@@ -358,7 +359,7 @@ class _DeckTile extends StatelessWidget {
                       value: 'copy',
                       child: Row(
                         children: [
-                          Icon(Icons.link, size: 16),
+                          Icon(LucideIcons.link, size: 16),
                           SizedBox(width: 8),
                           Text('Salin Link'),
                         ],
@@ -368,7 +369,7 @@ class _DeckTile extends StatelessWidget {
                       value: 'duplicate',
                       child: Row(
                         children: [
-                          Icon(Icons.copy_all, size: 16),
+                          Icon(LucideIcons.copy, size: 16),
                           SizedBox(width: 8),
                           Text('Buat Duplikat'),
                         ],
@@ -378,7 +379,7 @@ class _DeckTile extends StatelessWidget {
                       value: 'edit',
                       child: Row(
                         children: [
-                          Icon(Icons.edit_outlined, size: 16),
+                          Icon(LucideIcons.pencil, size: 16),
                           SizedBox(width: 8),
                           Text('Edit'),
                         ],
@@ -388,7 +389,7 @@ class _DeckTile extends StatelessWidget {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outline, size: 16),
+                          Icon(LucideIcons.trash2, size: 16),
                           SizedBox(width: 8),
                           Text('Hapus'),
                         ],

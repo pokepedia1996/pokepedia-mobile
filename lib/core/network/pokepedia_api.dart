@@ -131,9 +131,7 @@ class PokepediaApi {
 
     for (final entry in fields.entries) {
       writeLine('--$boundary');
-      writeLine(
-        'Content-Disposition: form-data; name="${entry.key}"',
-      );
+      writeLine('Content-Disposition: form-data; name="${entry.key}"');
       writeLine('');
       writeLine(entry.value);
     }
@@ -382,10 +380,33 @@ class PokepediaApi {
       }
 
       if (response.statusCode == 401 || response.statusCode == 403) {
+        // A 403 that names its own reason is the route refusing this action
+        // (an unverified phone, say), not the session failing — retrying it
+        // with a fresh token would only fail the same way, and the caller
+        // needs the server's sentence, not "sesi berakhir".
+        final stated = decoded['error'] as String?;
+        if (response.statusCode == 403 && stated != null) {
+          throw ApiException(
+            stated,
+            statusCode: response.statusCode,
+            payload: decoded,
+          );
+        }
         // The server's own message is usually the bare word "Unauthorized",
         // which says nothing about *why*; a mismatched issuer is by far the
         // most common cause during local development.
         throw ApiAuthException(_authFailureMessage(token));
+      }
+      if (response.statusCode == 429) {
+        // Two different 429 shapes reach this line. The rate limiter answers
+        // with `{error, retryAfter}` in the body; an overloaded upstream
+        // answers with only a `Retry-After` header and no such field. Reading
+        // both means one wait value regardless of which produced it.
+        throw ApiRateLimitedException(
+          decoded['error'] as String? ?? 'Terlalu banyak permintaan.',
+          retryAfter: _retryAfter(response, decoded),
+          payload: decoded,
+        );
       }
       if (response.statusCode >= 400) {
         throw ApiException(
@@ -479,6 +500,21 @@ const _edgeUnreachable = ApiUnreachableException(
   'aplikasi. Lanjutkan lewat halaman web.',
 );
 
+/// How long to wait before retrying a 429, from whichever of the two shapes
+/// the server used.
+///
+/// The header is read first because it is the one both shapes carry; the body
+/// field only exists on the rate limiter's own response.
+Duration? _retryAfter(HttpClientResponse response, Map<String, dynamic> body) {
+  final header = int.tryParse(response.headers.value('retry-after') ?? '');
+  final field = (body['retryAfter'] as num?)?.round();
+  final seconds = header ?? field;
+  // A zero or negative value is not a wait instruction; treating it as one
+  // would busy-loop the caller against a server that is already shedding.
+  if (seconds == null || seconds <= 0) return null;
+  return Duration(seconds: seconds);
+}
+
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode, this.payload});
 
@@ -502,6 +538,20 @@ class ApiUnreachableException extends ApiException {
 class ApiChallengedException extends ApiException {
   const ApiChallengedException()
     : super('Permintaan ditahan oleh proteksi situs.');
+}
+
+/// The caller is over a rate limit, or the upstream it depends on is shedding
+/// load. [retryAfter] is how long the server asked for, when it said.
+///
+/// Its own type because the right response is to wait and retry, not to
+/// surface a failure — a caller that treats every 4xx alike either hammers a
+/// server that is already struggling or gives up on a request that would
+/// succeed a second later.
+class ApiRateLimitedException extends ApiException {
+  const ApiRateLimitedException(super.message, {this.retryAfter, super.payload})
+    : super(statusCode: 429);
+
+  final Duration? retryAfter;
 }
 
 /// The session is missing, expired, or was refused.

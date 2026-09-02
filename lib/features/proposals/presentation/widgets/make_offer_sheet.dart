@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -143,7 +144,7 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
               ),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, size: 20),
+                icon: const Icon(LucideIcons.x, size: 20),
               ),
             ],
           ),

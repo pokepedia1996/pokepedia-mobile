@@ -95,6 +95,27 @@ class ScannerRepository {
     }
   }
 
+  /// Reports how long the client-side price lookup took for this scan.
+  ///
+  /// Exists because price never goes through `/api/scan` — the app reads it
+  /// straight from Supabase (see [fetchPrices]), exactly as the web does, so
+  /// without this the server's own timings understate what the user actually
+  /// waited for. Fire-and-forget: the server swallows write failures on this
+  /// route itself, and a telemetry miss is not worth a visible error.
+  Future<void> traceScan({
+    required int logId,
+    required int priceFetchMs,
+  }) async {
+    try {
+      await _api.post('/api/scan/trace', {
+        'logId': logId,
+        'priceFetchMs': priceFetchMs,
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[scan] trace failed (ignored): $e');
+    }
+  }
+
   /// Market price for a batch of scanned cards, via the same
   /// `get_card_prices_by_ids` RPC the card detail page uses.
   ///

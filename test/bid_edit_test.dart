@@ -5,6 +5,7 @@ import 'package:pokepedia_mobile/features/proposals/presentation/widgets/bid_edi
 import 'package:pokepedia_mobile/features/proposals/repository/models/my_bid.dart';
 import 'package:pokepedia_mobile/shared/models/card_condition.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 MyBidModel _bid({int price = 100000, int quantity = 3, int qtyLocked = 0}) =>
     MyBidModel(
@@ -56,9 +57,7 @@ Future<BidEdit?> _openAndSubmit(
   }
   for (var i = 0; i < quantityTaps; i++) {
     await tester.tap(
-      find.byIcon(
-        decrement ? Icons.remove_circle_outline : Icons.add_circle_outline,
-      ),
+      find.byIcon(decrement ? LucideIcons.circleMinus : LucideIcons.circlePlus),
     );
     await tester.pump();
   }

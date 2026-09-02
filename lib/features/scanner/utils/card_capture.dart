@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../repository/models/scan_models.dart';
+import 'warp_quad.dart';
 
 /// Turns a raw camera still into the tight, card-shaped crop `/api/scan`
 /// expects.
@@ -196,10 +197,14 @@ CardCapture? _cropCardSync(_CropRequest request) {
   // Clamped rather than trusted: a guide box can extend past the frame on a
   // preview whose aspect differs from the still's, and copyCrop on an
   // out-of-bounds rect yields garbage edges rather than an error.
-  final safeLeft = left.clamp(0, math.max(0, upright.width - 1));
-  final safeTop = top.clamp(0, math.max(0, upright.height - 1));
-  final safeWidth = width.clamp(1, upright.width - safeLeft);
-  final safeHeight = height.clamp(1, upright.height - safeTop);
+  // `.toInt()` rather than bare `clamp`: `num.clamp` is declared to return
+  // `num`, and only the analyzer narrows it back to `int` for int arguments.
+  // The kernel compiler does not, so without this the release build fails on
+  // `copyCrop`'s int parameters while `flutter analyze` stays clean.
+  final safeLeft = left.clamp(0, math.max(0, upright.width - 1)).toInt();
+  final safeTop = top.clamp(0, math.max(0, upright.height - 1)).toInt();
+  final safeWidth = width.clamp(1, upright.width - safeLeft).toInt();
+  final safeHeight = height.clamp(1, upright.height - safeTop).toInt();
 
   var card = img.copyCrop(
     upright,
@@ -209,11 +214,17 @@ CardCapture? _cropCardSync(_CropRequest request) {
     height: safeHeight,
   );
 
-  // Force the known card proportions rather than whatever the clamp above left
+  return _finishCapture(card);
+}
+
+/// The shared tail of both capture paths: snap to the card's proportions, cap
+/// the size, lift a dim frame, score the focus, encode.
+CardCapture _finishCapture(img.Image cropped) {
+  // Force the known card proportions rather than whatever the crop left
   // behind. Ports `snapToCardAspect`: the catalog renders this is compared
   // against are all exactly [cardAspect], so a crop even slightly off-ratio
   // embeds as a subtly stretched card.
-  card = _snapToCardAspect(card);
+  var card = _snapToCardAspect(cropped);
 
   final longSide = math.max(card.width, card.height);
   if (longSide > captureMaxSide) {
@@ -242,6 +253,15 @@ CardCapture? _cropCardSync(_CropRequest request) {
     height: card.height,
   );
 }
+
+/// Builds a capture from a detected quad rather than the guide box.
+///
+/// The auto-capture path: the corner model found the card, so the crop is a
+/// perspective warp of the detected quad instead of an axis-aligned rect.
+/// Everything after the warp is shared with the manual path, because none of
+/// it depends on how the card was located.
+CardCapture captureFromQuad(img.Image frame, Quad quad) =>
+    _finishCapture(warpQuad(frame, quad));
 
 /// Resamples to exactly [cardAspect], keeping the long side. Ports the web's
 /// `snapToCardAspect`.
@@ -279,8 +299,7 @@ img.Image _snapToCardAspect(img.Image source) {
     for (var x = 0; x < width; x++) {
       final pixel = sample.getPixel(x, y);
       // Rec. 601 luma, the same weights the web's canvas pass uses.
-      final double value =
-          0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
+      final double value = 0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
       gray[y * width + x] = value;
       lumaSum += value;
     }

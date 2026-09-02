@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -85,7 +86,7 @@ class _OrderDetailPageState extends ConsumerState<OrderDetailPage> {
           data: (order) {
             if (order == null) {
               return const EmptyState(
-                icon: Icons.receipt_long_outlined,
+                icon: LucideIcons.receipt,
                 title: 'Pesanan tidak ditemukan',
               );
             }
@@ -131,7 +132,7 @@ class _OrderDetailPageState extends ConsumerState<OrderDetailPage> {
                   // of tracking that doesn't exist yet.
                   if (order.status == OrderStatus.awaitingShipment && !unpaid)
                     _Section(
-                      icon: Icons.inventory_2_outlined,
+                      icon: LucideIcons.package,
                       title: 'Penjual sedang menyiapkan pesanan',
                       children: [
                         Text(
@@ -329,7 +330,7 @@ class _TrackingCard extends StatelessWidget {
     final tracking = order.trackingNumber!;
 
     return _Section(
-      icon: Icons.local_shipping_outlined,
+      icon: LucideIcons.truck,
       title: 'Lacak paket',
       children: [
         Row(
@@ -360,7 +361,7 @@ class _TrackingCard extends StatelessWidget {
                   );
               },
               icon: Icon(
-                Icons.copy_outlined,
+                LucideIcons.copy,
                 size: 16,
                 color: context.mutedForeground,
               ),
@@ -524,7 +525,7 @@ class _PaymentCard extends StatelessWidget {
     final colors = context.appColors;
 
     return _Section(
-      icon: Icons.payments_outlined,
+      icon: LucideIcons.banknote,
       title: 'Pembayaran',
       children: [
         Row(
@@ -574,7 +575,7 @@ class _PaymentCard extends StatelessWidget {
                   );
               },
               icon: Icon(
-                Icons.copy_outlined,
+                LucideIcons.copy,
                 size: 16,
                 color: context.mutedForeground,
               ),
@@ -608,7 +609,7 @@ class _HistoryCard extends StatelessWidget {
     ];
 
     return _Section(
-      icon: Icons.history,
+      icon: LucideIcons.history,
       title: 'Riwayat',
       children: [
         for (var i = 0; i < steps.length; i++)

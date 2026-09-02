@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -142,7 +143,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
       body: AppBarOverlayBody(
         child: !signedIn
             ? EmptyState(
-                icon: Icons.receipt_long_outlined,
+                icon: LucideIcons.receipt,
                 title: 'Masuk untuk melihat pesanan',
                 action: ElevatedButton(
                   onPressed: () => context.push(Routes.login),
@@ -153,7 +154,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
                 data: _buildBody,
                 loading: () => const PikachuLoader(),
                 error: (error, _) => EmptyState(
-                  icon: Icons.error_outline,
+                  icon: LucideIcons.circleAlert,
                   title: 'Gagal memuat pesanan',
                   // The message itself, not just that something went wrong:
                   // "gagal memuat" alone is unactionable for the person
@@ -180,7 +181,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
 
     if (orders.isEmpty && pending.isEmpty) {
       return EmptyState(
-        icon: Icons.receipt_long_outlined,
+        icon: LucideIcons.receipt,
         title: 'Belum ada pesanan',
         description: 'Pesananmu muncul di sini setelah checkout berhasil.',
       );
@@ -219,11 +220,11 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
             decoration: InputDecoration(
               hintText: 'Cari kartu, penjual, atau nomor resi',
               isDense: true,
-              prefixIcon: const Icon(Icons.search, size: 20),
+              prefixIcon: const Icon(LucideIcons.search, size: 20),
               suffixIcon: _query.isEmpty
                   ? null
                   : IconButton(
-                      icon: const Icon(Icons.close, size: 18),
+                      icon: const Icon(LucideIcons.x, size: 18),
                       onPressed: () {
                         _searchController.clear();
                         setState(() => _query = '');
@@ -249,7 +250,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
                     children: [
                       const SizedBox(height: 48),
                       EmptyState(
-                        icon: Icons.filter_list_off,
+                        icon: LucideIcons.filterX,
                         title: _query.isEmpty
                             ? 'Tidak ada pesanan di tab ini'
                             : 'Tidak ada pesanan yang cocok',
@@ -627,7 +628,7 @@ class _OrderCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.local_shipping_outlined,
+                      LucideIcons.truck,
                       size: 14,
                       color: context.mutedForeground,
                     ),
@@ -764,7 +765,7 @@ class _PendingCheckoutCard extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.schedule, size: 14, color: context.mutedForeground),
+              Icon(LucideIcons.clock, size: 14, color: context.mutedForeground),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -127,7 +128,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
                 children: [
-                  Icon(Icons.lock_outline, size: 13, color: colors.primary),
+                  Icon(LucideIcons.lock, size: 13, color: colors.primary),
                   const SizedBox(width: 6),
                   Text(
                     Uri.tryParse(widget.invoiceUrl)?.host ?? '',

@@ -115,13 +115,18 @@ class QrisUnavailableException extends ApiException {
   final String? diagnostic;
 }
 
-/// The three checkout steps that cannot run in the app.
+/// The checkout steps that cannot run in the app.
 ///
 /// Everything else — cart review, address, insurance rules, coupons, the fee
 /// and total arithmetic, payment-channel eligibility — is local and lives in
 /// `CheckoutNotifier`. What's left here needs either a secret
 /// (`BITESHIP_API_KEY`, `XENDIT_SECRET_KEY`) or `service_role`, so it stays
 /// behind the server and the app authenticates with its Supabase session.
+///
+/// Those calls go to pokepedia.id's own `/api` routes, which read the
+/// session off `Authorization: Bearer` and answer the app exactly as they
+/// answer the web. The one exception left is the QRIS payload, which has no
+/// route on the web app and is still served by an Edge Function.
 class CheckoutGateway {
   CheckoutGateway(this._api, this._client);
 
@@ -132,9 +137,8 @@ class CheckoutGateway {
   ///
   /// Reads `profiles_private` directly: its "Self can read own private
   /// profile" policy is `auth.uid() = id`, so this needs no server route.
-  /// The pickup origins this used to fetch alongside it are gone — the
-  /// `shipping-rates` function resolves them itself now, which is the only
-  /// place they were ever used.
+  /// `GET /api/cart` reports the same flag alongside the pickup origins, but
+  /// it costs a round trip to the edge; this one answers from Postgres.
   Future<CheckoutContext> fetchContext() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const CheckoutContext(phoneVerified: false);
@@ -150,76 +154,68 @@ class CheckoutGateway {
     }
   }
 
-  /// Courier quotes for one seller's parcel.
+  /// Where each seller in the cart ships from, keyed by seller id.
   ///
-  /// Calls the `shipping-rates` Edge Function rather than
-  /// `/api/shipping/rates`. Two reasons: the Biteship key has to stay
-  /// server-side, and pokepedia.id sits behind Vercel's Attack Challenge
-  /// Mode, which answers any non-browser client with a JS challenge. Supabase
-  /// Functions are not behind it.
+  /// From `GET /api/cart` rather than Postgres: every `seller_profiles`
+  /// policy is `auth.uid() = user_id`, so a buyer reading a seller's pickup
+  /// point gets an empty list. That route resolves it with a service client,
+  /// exactly as web's checkout does before it quotes anything.
+  Future<Map<String, SellerOrigin>> fetchSellerOrigins() async {
+    final json = await _api.get('/api/cart');
+    final origins = json['sellerOrigins'];
+    if (origins is! Map) return const {};
+    return {
+      for (final entry in origins.entries)
+        if (entry.value is Map)
+          entry.key.toString(): SellerOrigin.fromJson(
+            (entry.value as Map).cast<String, dynamic>(),
+          ),
+    };
+  }
+
+  /// Courier quotes for one seller's parcel — `POST /api/shipping/rates`,
+  /// the same route and the same body web's checkout sends.
   ///
-  /// It takes the seller and the buyer's own address rather than an origin:
-  /// `seller_profiles` is self-only under RLS, so the app cannot read a
-  /// pickup point to send. The function resolves both ends itself.
+  /// This used to go through a `shipping-rates` Edge Function, because
+  /// pokepedia.id answered non-browser clients with Vercel's JS challenge.
+  /// [PokepediaApi] carries the firewall's bypass header and the session's
+  /// bearer token now, and every `/api` route authenticates from that token,
+  /// so the detour — and the second copy of the pricing logic that came with
+  /// it — is no longer needed.
   Future<List<CourierOption>> fetchRates({
-    required String sellerId,
-    required String addressSlug,
+    required String originCityId,
+    required String destinationCityId,
     required int quantity,
     required int itemValue,
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
+    List<String> acceptedCouriers = const [],
+    List<String> acceptedCourierServices = const [],
   }) async {
-    try {
-      final response = await _client.functions.invoke(
-        'shipping-rates',
-        body: {
-          'sellerId': sellerId,
-          'addressSlug': addressSlug,
-          'quantity': quantity,
-          'itemValue': itemValue,
-        },
-      );
+    final json = await _api.post('/api/shipping/rates', {
+      'originCityId': originCityId,
+      'destinationCityId': destinationCityId,
+      'weight': kShippingWeightPerUnitGrams * (quantity < 1 ? 1 : quantity),
+      if (itemValue > 0) 'itemValue': itemValue,
+      // Only quote the premium when there is a value to insure, which is
+      // also what keeps the route from serving this quote out of its cache.
+      'includeInsurance': itemValue > 0,
+      if (originLat != null) 'originLat': originLat,
+      if (originLng != null) 'originLng': originLng,
+      if (destinationLat != null) 'destinationLat': destinationLat,
+      if (destinationLng != null) 'destinationLng': destinationLng,
+      'acceptedCouriers': acceptedCouriers,
+      'acceptedCourierServices': acceptedCourierServices,
+    });
 
-      final data = response.data;
-      if (data is! Map) {
-        throw const ApiException('Respons tarif tidak dikenali.');
-      }
-      if (response.status >= 400) {
-        throw ApiException(
-          data['error'] as String? ?? 'Gagal mengambil tarif kurir',
-          statusCode: response.status,
-        );
-      }
-
-      final services = data['services'];
-      if (services is! List) return const [];
-      return services
-          .whereType<Map<String, dynamic>>()
-          .map(_courierFromJson)
-          .toList();
-    } on FunctionException catch (e) {
-      // The function's own JSON error, when it answered with one.
-      final details = e.details;
-      if (details is! Map) {
-        // Not our JSON — the function never answered, or something between
-        // the client and it did. Carry the raw body: every error this
-        // function itself returns is JSON, so a non-JSON body identifies
-        // the responder, and without it the status alone is unactionable.
-        final raw = details?.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-        final snippet = raw == null || raw.isEmpty
-            ? 'tanpa isi'
-            : (raw.length > 160 ? '${raw.substring(0, 160)}…' : raw);
-        throw ApiException(
-          'Tarif kurir gagal (${e.status}): $snippet',
-          statusCode: e.status,
-        );
-      }
-      final message =
-          details['error'] as String? ?? 'Gagal mengambil tarif kurir';
-      final detail = details['detail'] as String?;
-      throw ApiException(
-        detail == null ? message : '$message — $detail',
-        statusCode: e.status,
-      );
-    }
+    final services = json['services'];
+    if (services is! List) return const [];
+    return services
+        .whereType<Map<String, dynamic>>()
+        .map(_courierFromJson)
+        .toList();
   }
 
   /// Ports `submitCartCheckout`. The server validates and locks the cart,

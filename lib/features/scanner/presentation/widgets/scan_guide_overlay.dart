@@ -45,9 +45,9 @@ class ScanGuideOverlay extends StatelessWidget {
                 child: Text(
                   hint,
                   textAlign: TextAlign.center,
-                  style: AppTypography.caption(Colors.white.withValues(
-                    alpha: 0.92,
-                  )),
+                  style: AppTypography.caption(
+                    Colors.white.withValues(alpha: 0.92),
+                  ),
                 ),
               ),
             ),

@@ -177,7 +177,10 @@ class ScanSessionNotifier extends Notifier<List<ScanSessionItem>> {
         merged.add(item);
       } else {
         merged[existing] = merged[existing].copyWith(
-          quantity: min(_maxQuantity, merged[existing].quantity + item.quantity),
+          quantity: min(
+            _maxQuantity,
+            merged[existing].quantity + item.quantity,
+          ),
         );
       }
     }
@@ -186,7 +189,8 @@ class ScanSessionNotifier extends Notifier<List<ScanSessionItem>> {
 
   /// Unique enough for a key that never leaves the device — a counter plus the
   /// clock, so two rows added in the same millisecond still differ.
-  String _nextTempId() => '${DateTime.now().microsecondsSinceEpoch}-${_counter++}';
+  String _nextTempId() =>
+      '${DateTime.now().microsecondsSinceEpoch}-${_counter++}';
 
   /// Records a scan. Returns the row's `tempId` so the caller can focus it.
   ///
@@ -225,7 +229,9 @@ class ScanSessionNotifier extends Notifier<List<ScanSessionItem>> {
     ];
     // Oldest rows drop first once the cap is hit, matching the web's
     // `.slice(-MAX_ITEMS)`.
-    _set(next.length > _maxItems ? next.sublist(next.length - _maxItems) : next);
+    _set(
+      next.length > _maxItems ? next.sublist(next.length - _maxItems) : next,
+    );
     return tempId;
   }
 
@@ -305,7 +311,21 @@ final scanSessionCountProvider = Provider<int>(
 final scanSessionPricesProvider = FutureProvider<Map<int, CardMarketPrice>>((
   ref,
 ) async {
-  final ids = ref.watch(scanSessionProvider).map((it) => it.card.id).toSet();
+  final session = ref.watch(scanSessionProvider);
+  final ids = session.map((it) => it.card.id).toSet();
   if (ids.isEmpty) return const {};
-  return ref.read(scannerRepositoryProvider).fetchPrices(ids.toList()..sort());
+
+  final repository = ref.read(scannerRepositoryProvider);
+  final started = DateTime.now();
+  final prices = await repository.fetchPrices(ids.toList()..sort());
+  final elapsed = DateTime.now().difference(started).inMilliseconds;
+
+  // Attributed to the newest scan, which is what triggered this refetch — the
+  // provider re-runs when a card is added, so the last item is the one whose
+  // perceived latency this measures. Fire-and-forget inside the repository.
+  final logId = session.lastOrNull?.logId;
+  if (logId != null) {
+    unawaited(repository.traceScan(logId: logId, priceFetchMs: elapsed));
+  }
+  return prices;
 });

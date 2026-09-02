@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -38,11 +39,7 @@ class UsersSearchPage extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 22,
-                        color: colors.primary,
-                      ),
+                      Icon(LucideIcons.users, size: 22, color: colors.primary),
                       const SizedBox(width: 8),
                       Text(
                         'Cari Pengguna',
@@ -62,7 +59,7 @@ class UsersSearchPage extends ConsumerWidget {
                             value,
                     decoration: const InputDecoration(
                       hintText: 'Cari berdasarkan username...',
-                      prefixIcon: Icon(Icons.search, size: 20),
+                      prefixIcon: Icon(LucideIcons.search, size: 20),
                     ),
                   ),
                 ],
@@ -71,14 +68,14 @@ class UsersSearchPage extends ConsumerWidget {
             Expanded(
               child: !searched
                   ? _Hint(
-                      icon: Icons.people_outline,
+                      icon: LucideIcons.users,
                       message: 'Ketik minimal 2 karakter untuk mencari',
                     )
                   : async.when(
                       data: (users) {
                         if (users.isEmpty) {
                           return _Hint(
-                            icon: Icons.search_off,
+                            icon: LucideIcons.searchX,
                             message:
                                 'Tidak ada pengguna ditemukan untuk "${query.trim()}"',
                           );
@@ -94,7 +91,7 @@ class UsersSearchPage extends ConsumerWidget {
                       },
                       loading: () => const _ResultsPlaceholder(),
                       error: (_, __) => _Hint(
-                        icon: Icons.error_outline,
+                        icon: LucideIcons.circleAlert,
                         message: 'Gagal memuat pengguna',
                       ),
                     ),
@@ -149,7 +146,7 @@ class _UserCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: context.mutedForeground),
+            Icon(LucideIcons.chevronRight, color: context.mutedForeground),
           ],
         ),
       ),
@@ -171,11 +168,7 @@ class ContributorBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.workspace_premium_outlined,
-          size: large ? 16 : 13,
-          color: color,
-        ),
+        Icon(LucideIcons.award, size: large ? 16 : 13, color: color),
         const SizedBox(width: 4),
         Text(
           'Kontributor · $count kartu',

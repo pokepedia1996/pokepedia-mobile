@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -273,7 +274,7 @@ class _PokemonDetailsCardState extends ConsumerState<PokemonDetailsCard> {
             child: TextButton.icon(
               onPressed: () => setState(() => _expanded = !_expanded),
               icon: Icon(
-                _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                _expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                 size: 16,
               ),
               label: Text(
@@ -338,7 +339,7 @@ class EvolutionSection extends ConsumerWidget {
                   for (var i = 0; i < stages.length; i++) ...[
                     if (i > 0)
                       Icon(
-                        Icons.arrow_drop_down_rounded,
+                        LucideIcons.chevronDown,
                         size: 20,
                         color: context.mutedForeground.withValues(alpha: 0.5),
                       ),
@@ -415,7 +416,7 @@ class EvolutionStageChip extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Icon(
-                Icons.chevron_left,
+                LucideIcons.chevronLeft,
                 size: 16,
                 color: context.mutedForeground,
               ),
@@ -465,7 +466,7 @@ class EvolutionStageChip extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Icon(
-                Icons.chevron_right,
+                LucideIcons.chevronRight,
                 size: 16,
                 color: context.mutedForeground,
               ),

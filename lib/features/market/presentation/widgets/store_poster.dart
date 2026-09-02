@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -221,7 +222,7 @@ class _Header extends StatelessWidget {
               if (store.cityName.isNotEmpty)
                 Row(
                   children: [
-                    const Icon(Icons.location_on, size: 20, color: muted),
+                    const Icon(LucideIcons.mapPin, size: 20, color: muted),
                     const SizedBox(width: 4),
                     Text(
                       store.cityName,
@@ -243,7 +244,7 @@ class _Header extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(
-                          Icons.star,
+                          LucideIcons.star,
                           size: 20,
                           color: Color(0xFFE0A83A),
                         ),

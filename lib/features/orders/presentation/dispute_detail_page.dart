@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -32,7 +33,7 @@ class DisputeDetailPage extends ConsumerWidget {
           data: (dispute) {
             if (dispute == null) {
               return const EmptyState(
-                icon: Icons.gavel_outlined,
+                icon: LucideIcons.gavel,
                 title: 'Belum ada sengketa untuk pesanan ini',
               );
             }
@@ -89,7 +90,7 @@ class DisputeDetailPage extends ConsumerWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.timer_outlined,
+                              LucideIcons.timer,
                               size: 14,
                               color: colors.error,
                             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -151,7 +152,11 @@ class CircularBackButton extends StatelessWidget {
           child: SizedBox(
             width: 40,
             height: 40,
-            child: Icon(Icons.arrow_back, size: 20, color: colors.onSurface),
+            child: Icon(
+              LucideIcons.arrowLeft,
+              size: 20,
+              color: colors.onSurface,
+            ),
           ),
         ),
       ),

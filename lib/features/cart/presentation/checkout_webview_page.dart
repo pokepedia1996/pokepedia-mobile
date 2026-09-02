@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/network/session_cookie.dart';
@@ -137,12 +138,12 @@ class _CheckoutWebViewPageState extends State<CheckoutWebViewPage> {
         appBar: TransparentAppBar(
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(LucideIcons.refreshCw),
               tooltip: 'Muat ulang',
               onPressed: () => _controller.reload(),
             ),
             IconButton(
-              icon: const Icon(Icons.open_in_browser),
+              icon: const Icon(LucideIcons.externalLink),
               tooltip: 'Buka di browser',
               onPressed: _openInBrowser,
             ),

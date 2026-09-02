@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/router/routes.dart';
 import '../../core/theme/app_radius.dart';
@@ -158,10 +159,7 @@ class _ScanButton extends StatelessWidget {
       child: IconButton(
         onPressed: () => context.push(Routes.scan),
         tooltip: 'Pindai kartu',
-        icon: Icon(
-          Icons.center_focus_strong_outlined,
-          color: context.appColors.onSurface,
-        ),
+        icon: Icon(LucideIcons.focus, color: context.appColors.onSurface),
       ),
     );
   }
@@ -187,7 +185,7 @@ class _SearchField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.search, size: 18, color: context.mutedForeground),
+            Icon(LucideIcons.search, size: 18, color: context.mutedForeground),
             const SizedBox(width: 8),
             Text(
               'Cari kartu...',
@@ -213,7 +211,7 @@ class _CartButton extends ConsumerWidget {
       alignment: Alignment.center,
       children: [
         IconButton(
-          icon: const Icon(Icons.shopping_cart_outlined, size: 22),
+          icon: const Icon(LucideIcons.shoppingCart, size: 22),
           onPressed: () => context.push(Routes.cart),
         ),
         if (count > 0)

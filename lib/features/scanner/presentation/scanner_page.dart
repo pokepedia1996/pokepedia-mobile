@@ -1,9 +1,15 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math' as math;
+
+import 'package:image/image.dart' as img;
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_model.dart';
@@ -11,8 +17,13 @@ import '../repository/models/scan_models.dart';
 import '../repository/scanner_repository.dart';
 import '../usecase/scan_session_notifier.dart';
 import '../usecase/scanner_notifier.dart';
+import '../usecase/scan_sound.dart';
+import '../utils/auto_capture.dart';
+import '../utils/camera_frame.dart';
 import '../utils/card_capture.dart';
-import 'widgets/scan_guide_overlay.dart';
+import '../utils/corner_model.dart';
+import '../utils/warp_quad.dart';
+import 'widgets/scan_lock_overlay.dart';
 import 'widgets/scan_result_sheet.dart';
 import 'widgets/scan_session_sheet.dart';
 import 'widgets/scan_status_pill.dart';
@@ -48,18 +59,39 @@ class ScannerPage extends ConsumerStatefulWidget {
 
 class _ScannerPageState extends ConsumerState<ScannerPage>
     with WidgetsBindingObserver {
-  /// Fraction of the screen width the guide box spans. Wide enough that a card
-  /// held at a comfortable distance fills it — "near-filling" is the framing
-  /// the embedder's catalog renders are closest to.
-  static const _guideWidthFraction = 0.84;
-
-  /// Ceiling on the guide box's height as a fraction of screen height, so the
-  /// box still fits (with room for the controls) on a short screen.
-  static const _guideMaxHeightFraction = 0.62;
-
   /// How long a result stays up before the shutter re-arms. Ports
   /// `SCAN_RESULT_SETTLE_MS`.
   static const _resultSettle = Duration(milliseconds: 900);
+
+  /// How often the detector samples the stream. Ports the web's poll rate.
+  static const _tickInterval = Duration(milliseconds: 120);
+
+  /// Up to 40% of [_resultSettle] added at random on each re-arm.
+  ///
+  /// Not cosmetic: the scan tier is 30 requests per 60s per user, and the
+  /// embedder sheds load above ~32 concurrent requests. Without jitter a room
+  /// of phones scanning at a natural pace re-arms in lockstep and arrives in
+  /// waves, tripping that shedding far earlier than the same total volume
+  /// spread out would. Ports the web's own capture jitter.
+  static const _rearmJitterFraction = 0.4;
+
+  final _jitter = math.Random();
+
+  /// The corner model, warmed while the camera starts.
+  CornerModel? _model;
+
+  /// Newest frame off the stream. Held, not queued: detection is slower than
+  /// frames arrive, and a queue would work through stale poses instead of
+  /// looking at what the camera sees now.
+  CameraImage? _latestFrame;
+
+  bool _detecting = false;
+  Timer? _tickTimer;
+  final _autoCapture = AutoCaptureMachine();
+
+  /// What the hint text reflects.
+  bool _cardDetected = false;
+  bool _locking = false;
 
   CameraController? _controller;
   Future<void>? _initialization;
@@ -82,13 +114,34 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initialization = _startCamera();
+    // ~6 MB to parse; the camera's own startup is dead time anyway.
+    CornerModel.load()
+        .then((model) {
+          if (mounted) {
+            _model = model;
+          } else {
+            model.dispose();
+          }
+        })
+        .catchError((Object e) {
+          if (kDebugMode) debugPrint('[scan] model load failed: $e');
+        });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _rearmTimer?.cancel();
-    _controller?.dispose();
+    _tickTimer?.cancel();
+    final controller = _controller;
+    if (controller != null) {
+      unawaited(
+        controller
+            .stopImageStream()
+            .catchError((_) {})
+            .whenComplete(controller.dispose),
+      );
+    }
     super.dispose();
   }
 
@@ -100,8 +153,25 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     // a dead controller across resume shows a frozen last frame forever.
     if (lifecycleState == AppLifecycleState.inactive) {
       _controller = null;
-      unawaited(controller.dispose());
-      if (mounted) setState(() {});
+      // Stop the tick first, or it runs against a camera that no longer
+      // exists; and stop the stream before disposing, or Android keeps
+      // delivering frames to a dead listener.
+      _tickTimer?.cancel();
+      _tickTimer = null;
+      _latestFrame = null;
+      _autoCapture.reset();
+      unawaited(
+        controller
+            .stopImageStream()
+            .catchError((_) {})
+            .whenComplete(controller.dispose),
+      );
+      if (mounted) {
+        setState(() {
+          _cardDetected = false;
+          _locking = false;
+        });
+      }
     } else if (lifecycleState == AppLifecycleState.resumed) {
       setState(() => _initialization = _startCamera());
     }
@@ -126,12 +196,25 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         // immediately discards.
         ResolutionPreset.veryHigh,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
+        // Streaming formats, not `jpeg` — `startImageStream` delivers YUV420
+        // on Android and BGRA on iOS.
+        imageFormatGroup: Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888,
       );
       await controller.initialize();
       // Locked so the guide box and the still stay in the same coordinate
       // space — a rotation between framing and capture would offset every crop.
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      // Pinned to 1x. A device that restores a previous zoom frames the card
+      // differently from the guide box the crop is measured against, and
+      // digital zoom softens exactly the printed detail the embedder reads.
+      // Best-effort: a camera that refuses is still usable as it opened.
+      try {
+        await controller.setZoomLevel(1);
+      } on CameraException {
+        // Left at the device default.
+      }
       if (!mounted) {
         await controller.dispose();
         return;
@@ -140,6 +223,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         _controller = controller;
         _cameraError = null;
       });
+      await _startDetection(controller);
     } on CameraException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -151,85 +235,89 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   }
 
   /// The guide box in screen coordinates, at exactly [cardAspect].
-  Rect _guideRect(Size screenSize) {
-    var width = screenSize.width * _guideWidthFraction;
-    var height = width / cardAspect;
-    final maxHeight = screenSize.height * _guideMaxHeightFraction;
-    if (height > maxHeight) {
-      height = maxHeight;
-      width = height * cardAspect;
+  /// Frames stream in; a timer samples the newest one every
+  /// [_tickInterval].
+  ///
+  /// Separate stream and tick on purpose: frames arrive at 30fps and
+  /// detection cannot keep up, so sampling on a timer keeps the cadence
+  /// predictable and always works on the most recent pose.
+  Future<void> _startDetection(CameraController controller) async {
+    try {
+      await controller.startImageStream((frame) => _latestFrame = frame);
+    } on CameraException catch (e) {
+      if (kDebugMode) debugPrint('[scan] image stream failed: $e');
+      return;
     }
-    return Rect.fromCenter(
-      // Sat slightly above centre so the result sheet doesn't cover the card
-      // the user is still holding in frame.
-      center: Offset(screenSize.width / 2, screenSize.height * 0.44),
-      width: width,
-      height: height,
-    );
+    _tickTimer?.cancel();
+    _tickTimer = Timer.periodic(_tickInterval, (_) => _tick());
   }
 
-  Future<void> _capture(Size screenSize) async {
+  Future<void> _tick() async {
+    if (!mounted || _detecting || _capturing) return;
+    final model = _model;
+    final frame = _latestFrame;
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (_capturing) return;
+    if (model == null || frame == null || controller == null) return;
     if (ref.read(scannerProvider) is ScanLoading) return;
 
+    _detecting = true;
+    try {
+      final rgb = frameToImage(frame);
+      if (rgb == null || !mounted) return;
+
+      final upright = orientFrame(
+        rgb,
+        controller.description.sensorOrientation,
+      );
+      final detection = await detectCardTwoStage(model, upright);
+      if (!mounted) return;
+
+      final result = _autoCapture.tick(detection?.quad, DateTime.now());
+      final detected = result.quad != null;
+      final locking = result.progress > 0 && result.progress < 1;
+      if (detected != _cardDetected || locking != _locking) {
+        setState(() {
+          _cardDetected = detected;
+          _locking = locking;
+        });
+      }
+
+      if (result.action == AutoCaptureAction.capture && result.quad != null) {
+        await _captureQuad(
+          upright,
+          result.quad!,
+          presence: detection?.present ?? 0,
+        );
+      }
+    } finally {
+      _detecting = false;
+    }
+  }
+
+  /// Warps the locked quad out of the frame it was detected in and scans it.
+  ///
+  /// The same frame detection ran on, not a fresh still: the quad's
+  /// coordinates only mean anything there, and a `takePicture` between lock
+  /// and capture would move the card out from under them.
+  Future<void> _captureQuad(
+    img.Image frame,
+    Quad quad, {
+    required double presence,
+  }) async {
+    if (_capturing) return;
     setState(() => _capturing = true);
     _rearmTimer?.cancel();
 
     try {
-      final shot = await controller.takePicture();
-      final frameBytes = await shot.readAsBytes();
-
-      // The preview is painted `cover`, so the guide box must be mapped out of
-      // screen space before it means anything against the still.
-      final previewSize = controller.value.previewSize;
-      // `previewSize` is reported in sensor (landscape) orientation while the
-      // preview is painted portrait — swapping here is what keeps the mapping
-      // honest on a portrait-locked screen.
-      final displayedPreview = previewSize == null
-          ? screenSize
-          : Size(previewSize.height, previewSize.width);
-      final cropRect = guideRectInImageSpace(
-        previewSize: displayedPreview,
-        screenSize: screenSize,
-        guideRect: _guideRect(screenSize),
-      );
-
-      final capture = await cropCardFromFrame(
-        frameBytes: frameBytes,
-        cropRectInImageSpace: cropRect,
-        imageSize: displayedPreview,
-      );
+      final capture = await compute(_warpInIsolate, (frame: frame, quad: quad));
       if (!mounted) return;
 
-      if (capture == null) {
-        ref.read(scannerProvider.notifier).setError('Gagal memproses gambar');
-        _scheduleRearm();
-        return;
-      }
-
-      final language = ref.read(scanLanguageProvider);
       final result = await ref
           .read(scannerProvider.notifier)
           .scan(
             capture: capture,
-            language: language,
-            captureMeta: {
-              'label': controller.description.name,
-              'deviceId': controller.description.name,
-              'trackWidth': displayedPreview.width.round(),
-              'trackHeight': displayedPreview.height.round(),
-              'pinnedToSingleLens': true,
-              'videoWidth': displayedPreview.width.round(),
-              'videoHeight': displayedPreview.height.round(),
-              'cropWidth': cropRect.width.round().clamp(0, 20000),
-              'cropHeight': cropRect.height.round().clamp(0, 20000),
-              'outWidth': capture.width,
-              'outHeight': capture.height,
-              'sharpness': capture.sharpness.round().clamp(0, 1000000),
-              'luma': capture.luma.round().clamp(0, 255),
-            },
+            language: ref.read(scanLanguageProvider),
+            captureMeta: _quadCaptureMeta(frame, capture, quad, presence),
           );
       if (!mounted) return;
 
@@ -243,24 +331,69 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
               logId: result.logId,
             );
         setState(() => _activeTempId = tempId);
+        // Fired once per card that actually lands, matching web. With no
+        // shutter this is the only confirmation the user gets — they are
+        // looking at the card in their hand, not the screen.
+        unawaited(ref.read(scanSoundProvider).play());
       } else if (result is ScanFailed) {
         _showError(result.message);
+        // Let the same card be retried without moving it.
+        _autoCapture.reset();
       }
-      _scheduleRearm();
-    } on CameraException catch (e) {
+      _scheduleRearm(after: result is ScanFailed ? result.retryAfter : null);
+    } catch (e) {
       if (!mounted) return;
-      _showError('Gagal mengambil gambar (${e.code})');
+      if (kDebugMode) debugPrint('[scan] capture failed: $e');
+      _showError('Gagal memproses gambar');
+      _autoCapture.reset();
       _scheduleRearm();
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
   }
 
+  Map<String, dynamic> _quadCaptureMeta(
+    img.Image frame,
+    CardCapture capture,
+    Quad quad,
+    double presence,
+  ) {
+    final controller = _controller;
+    final bounds = quad.bounds;
+    return {
+      'label': controller?.description.name ?? '',
+      'deviceId': controller?.description.name ?? '',
+      'trackWidth': frame.width,
+      'trackHeight': frame.height,
+      'pinnedToSingleLens': true,
+      'videoWidth': frame.width,
+      'videoHeight': frame.height,
+      'cropWidth': (bounds.right - bounds.left).round().clamp(0, 20000),
+      'cropHeight': (bounds.bottom - bounds.top).round().clamp(0, 20000),
+      'outWidth': capture.width,
+      'outHeight': capture.height,
+      'sharpness': capture.sharpness.round().clamp(0, 1000000),
+      'luma': capture.luma.round().clamp(0, 255),
+      'cropTier': 'model',
+      'modelPresence': presence.clamp(0.0, 1.0),
+    };
+  }
+
   /// Returns the scanner to idle once the result has had a moment to register,
   /// so the status pill and shutter reflect "ready" again.
-  void _scheduleRearm() {
+  void _scheduleRearm({Duration? after}) {
     _rearmTimer?.cancel();
-    _rearmTimer = Timer(_resultSettle, () {
+    final base = after ?? _resultSettle;
+    final delay =
+        base +
+        Duration(
+          milliseconds:
+              (base.inMilliseconds *
+                      _rearmJitterFraction *
+                      _jitter.nextDouble())
+                  .round(),
+        );
+    _rearmTimer = Timer(delay, () {
       if (mounted) ref.read(scannerProvider.notifier).reset();
     });
   }
@@ -336,7 +469,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
             fit: StackFit.expand,
             children: [
               _buildPreview(screenSize),
-              ScanGuideOverlay(guideRect: _guideRect(screenSize)),
+              ScanLockOverlay(detected: _cardDetected, locking: _locking),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 64,
                 left: 0,
@@ -367,7 +500,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                   (sum, item) => sum + item.quantity,
                 ),
                 busy: _capturing || scanState is ScanLoading,
-                onCapture: () => _capture(screenSize),
                 onSelectVariant: (card) {
                   if (activeItem != null) _selectVariant(activeItem, card);
                 },
@@ -433,8 +565,7 @@ class _CameraUnavailable extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.no_photography_outlined,
-                color: Colors.white54, size: 48),
+            const Icon(LucideIcons.imageOff, color: Colors.white54, size: 48),
             const SizedBox(height: 16),
             Text(
               message,
@@ -453,3 +584,9 @@ class _CameraUnavailable extends StatelessWidget {
 extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
+
+/// Warps and encodes off the UI thread — a 1400px warp plus a JPEG encode is
+/// tens of milliseconds, and the preview should stay smooth at exactly the
+/// moment of capture.
+CardCapture _warpInIsolate(({img.Image frame, Quad quad}) args) =>
+    captureFromQuad(args.frame, args.quad);

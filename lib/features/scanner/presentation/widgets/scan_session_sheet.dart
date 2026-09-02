@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/card_ownership_controller.dart';
@@ -58,7 +59,8 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
   Map<int, int> _quantityByCardId(List<ScanSessionItem> selected) {
     final quantities = <int, int>{};
     for (final item in selected) {
-      quantities[item.card.id] = (quantities[item.card.id] ?? 0) + item.quantity;
+      quantities[item.card.id] =
+          (quantities[item.card.id] ?? 0) + item.quantity;
     }
     return quantities;
   }
@@ -181,10 +183,9 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
     final prices = ref.watch(scanSessionPricesProvider).valueOrNull;
 
     // Unresolved rows first — the point of the whole sheet.
-    final sorted = [...items]
-      ..sort(
-        (a, b) => (b.needsReview ? 1 : 0).compareTo(a.needsReview ? 1 : 0),
-      );
+    final sorted = [
+      ...items,
+    ]..sort((a, b) => (b.needsReview ? 1 : 0).compareTo(a.needsReview ? 1 : 0));
 
     final selected = items.where((it) => _isSelected(it.tempId)).toList();
     final selectedCount = selected.fold(0, (sum, it) => sum + it.quantity);
@@ -230,10 +231,8 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
                       )
                     : ListView.separated(
                         itemCount: sorted.length,
-                        separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          color: context.borderColor,
-                        ),
+                        separatorBuilder: (_, __) =>
+                            Divider(height: 1, color: context.borderColor),
                         itemBuilder: (context, index) {
                           final item = sorted[index];
                           return _SessionRow(
@@ -244,8 +243,7 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
                             enabled: !busy,
                             onToggleSelect: () => _toggleSelect(item.tempId),
                             onToggleStrip: () => setState(() {
-                              _expandedTempId =
-                                  _expandedTempId == item.tempId
+                              _expandedTempId = _expandedTempId == item.tempId
                                   ? null
                                   : item.tempId;
                             }),
@@ -301,7 +299,7 @@ class _Header extends StatelessWidget {
           IconButton(
             onPressed: onClose,
             tooltip: 'Tutup',
-            icon: const Icon(Icons.close),
+            icon: const Icon(LucideIcons.x),
           ),
         ],
       ),
@@ -383,8 +381,8 @@ class _SessionRow extends StatelessWidget {
                                 ),
                                 Icon(
                                   expanded
-                                      ? Icons.expand_more
-                                      : Icons.chevron_right,
+                                      ? LucideIcons.chevronDown
+                                      : LucideIcons.chevronRight,
                                   size: 15,
                                   color: context.mutedForeground,
                                 ),
@@ -424,7 +422,7 @@ class _SessionRow extends StatelessWidget {
                 onPressed: enabled ? onRemove : null,
                 tooltip: 'Hapus',
                 icon: Icon(
-                  Icons.delete_outline,
+                  LucideIcons.trash2,
                   size: 20,
                   color: context.mutedForeground,
                 ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -282,7 +283,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                           ),
                         ),
                         Icon(
-                          Icons.chevron_right,
+                          LucideIcons.chevronRight,
                           color: context.mutedForeground,
                         ),
                       ],
@@ -328,7 +329,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
               ),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, size: 20),
+                icon: const Icon(LucideIcons.x, size: 20),
               ),
             ],
           ),
@@ -486,7 +487,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
                     child: Icon(
-                      Icons.add_a_photo_outlined,
+                      LucideIcons.imagePlus,
                       size: 20,
                       color: context.mutedForeground,
                     ),
@@ -590,7 +591,7 @@ class _PhotoThumb extends StatelessWidget {
                 color: Colors.black54,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.close, size: 12, color: Colors.white),
+              child: const Icon(LucideIcons.x, size: 12, color: Colors.white),
             ),
           ),
         ),

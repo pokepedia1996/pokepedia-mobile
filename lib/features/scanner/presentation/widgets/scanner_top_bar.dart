@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/card_model.dart';
@@ -45,7 +46,7 @@ class ScannerTopBar extends StatelessWidget {
       right: 12,
       child: Row(
         children: [
-          _CircleButton(icon: Icons.close, onTap: onClose, label: 'Tutup'),
+          _CircleButton(icon: LucideIcons.x, onTap: onClose, label: 'Tutup'),
           const Spacer(),
           _LanguageToggle(
             language: language,
@@ -55,7 +56,9 @@ class ScannerTopBar extends StatelessWidget {
           const Spacer(),
           if (torchSupported)
             _CircleButton(
-              icon: torchOn ? Icons.flashlight_on : Icons.flashlight_off,
+              icon: torchOn
+                  ? LucideIcons.flashlight
+                  : LucideIcons.flashlightOff,
               onTap: onToggleTorch,
               label: 'Senter',
               active: torchOn,
@@ -148,9 +151,7 @@ class _CircleButton extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: active
-                ? Colors.white
-                : Colors.black.withValues(alpha: 0.5),
+            color: active ? Colors.white : Colors.black.withValues(alpha: 0.5),
             shape: BoxShape.circle,
           ),
           child: Icon(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -190,7 +191,11 @@ class _SortButton extends StatelessWidget {
             child: Row(
               children: [
                 if (option == sortBy)
-                  Icon(Icons.check, size: 16, color: context.appColors.primary)
+                  Icon(
+                    LucideIcons.check,
+                    size: 16,
+                    color: context.appColors.primary,
+                  )
                 else
                   const SizedBox(width: 16),
                 const SizedBox(width: 8),
@@ -218,7 +223,7 @@ class _SortButton extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 16,
               color: context.mutedForeground,
             ),

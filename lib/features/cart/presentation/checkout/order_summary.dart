@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -243,7 +244,7 @@ class _OrderSummaryState extends State<OrderSummary> {
                     children: const [
                       Text('Bayar Sekarang'),
                       SizedBox(width: 6),
-                      Icon(Icons.arrow_forward, size: 16),
+                      Icon(LucideIcons.arrowRight, size: 16),
                     ],
                   ),
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -62,9 +63,7 @@ class CourierPicker extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Icon(
-                s != null
-                    ? _bucketIcon(s.bucket)
-                    : Icons.local_shipping_outlined,
+                s != null ? _bucketIcon(s.bucket) : LucideIcons.truck,
                 size: 16,
                 color: s != null ? colors.primary : context.mutedForeground,
               ),
@@ -101,7 +100,7 @@ class CourierPicker extends StatelessWidget {
               const SizedBox(width: 4),
             ],
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 18,
               color: context.mutedForeground,
             ),
@@ -271,7 +270,11 @@ class _BucketSection extends StatelessWidget {
                       ),
                     ),
                     child: selected?.optionKey == opt.optionKey
-                        ? Icon(Icons.check, size: 13, color: colors.onPrimary)
+                        ? Icon(
+                            LucideIcons.check,
+                            size: 13,
+                            color: colors.onPrimary,
+                          )
                         : null,
                   ),
                 ],

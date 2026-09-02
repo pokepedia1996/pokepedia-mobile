@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -282,7 +283,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
         data: (store) {
           if (store == null) {
             return const EmptyState(
-              icon: Icons.store_mall_directory_outlined,
+              icon: LucideIcons.store,
               title: 'Toko tidak ditemukan',
             );
           }
@@ -326,7 +327,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                           child: Padding(
                             padding: const EdgeInsets.only(top: 32),
                             child: EmptyState(
-                              icon: Icons.storefront_outlined,
+                              icon: LucideIcons.store,
                               title: _query.isNotEmpty
                                   ? 'Tidak ada kartu yang cocok'
                                   : _tab == _StoreTab.buylist
@@ -357,7 +358,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                         const SliverToBoxAdapter(child: PikachuLoader()),
                     error: (_, __) => const SliverToBoxAdapter(
                       child: EmptyState(
-                        icon: Icons.error_outline,
+                        icon: LucideIcons.circleAlert,
                         title: 'Gagal memuat listing',
                       ),
                     ),
@@ -369,7 +370,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
         },
         loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
           title: 'Gagal memuat toko',
         ),
       ),
@@ -443,7 +444,11 @@ class _Header extends StatelessWidget {
                         ),
                         if (store.isVerified) ...[
                           const SizedBox(width: 4),
-                          Icon(Icons.verified, size: 18, color: colors.primary),
+                          Icon(
+                            LucideIcons.badgeCheck,
+                            size: 18,
+                            color: colors.primary,
+                          ),
                         ],
                       ],
                     ),
@@ -488,7 +493,7 @@ class _VacationPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.beach_access_outlined, size: 14, color: colors.error),
+          Icon(LucideIcons.palmtree, size: 14, color: colors.error),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -519,25 +524,22 @@ class _Stats extends StatelessWidget {
       runSpacing: 6,
       children: [
         _Stat(
-          icon: Icons.shopping_bag_outlined,
+          icon: LucideIcons.shoppingBag,
           label: '${store.activeListingCount} listing',
         ),
+        _Stat(icon: LucideIcons.tag, label: '${store.itemsSoldCount} terjual'),
         _Stat(
-          icon: Icons.sell_outlined,
-          label: '${store.itemsSoldCount} terjual',
-        ),
-        _Stat(
-          icon: Icons.people_outline,
+          icon: LucideIcons.users,
           label: '${store.followersCount} pengikut',
         ),
         if (store.cityName.isNotEmpty)
-          _Stat(icon: Icons.place_outlined, label: store.cityName),
+          _Stat(icon: LucideIcons.mapPin, label: store.cityName),
         if (store.memberSince != null)
           _Stat(
-            icon: Icons.calendar_today_outlined,
+            icon: LucideIcons.calendar,
             label: formatJoinedId(store.memberSince!),
           ),
-        if (store.topRated) _Stat(icon: Icons.star, label: 'Top Rated'),
+        if (store.topRated) _Stat(icon: LucideIcons.star, label: 'Top Rated'),
       ],
     );
   }
@@ -576,7 +578,7 @@ class _Actions extends StatelessWidget {
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.check, size: 15),
+                        : const Icon(LucideIcons.check, size: 15),
                     label: const Text('Diikuti'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(38),
@@ -590,7 +592,7 @@ class _Actions extends StatelessWidget {
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.add, size: 15),
+                        : const Icon(LucideIcons.plus, size: 15),
                     label: const Text('Ikuti'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(38),
@@ -600,7 +602,7 @@ class _Actions extends StatelessWidget {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: onContact,
-              icon: const Icon(Icons.chat_bubble_outline, size: 15),
+              icon: const Icon(LucideIcons.messageCircle, size: 15),
               label: const Text('Chat'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(38),
@@ -613,7 +615,7 @@ class _Actions extends StatelessWidget {
               minimumSize: const Size(44, 38),
               padding: EdgeInsets.zero,
             ),
-            child: const Icon(Icons.ios_share, size: 16),
+            child: const Icon(LucideIcons.share, size: 16),
           ),
         ],
       ),
@@ -707,35 +709,35 @@ class _About extends StatelessWidget {
           Text('Info', style: AppTypography.bodySemibold(colors.onSurface)),
           const SizedBox(height: 8),
           _AboutRow(
-            icon: Icons.badge_outlined,
+            icon: LucideIcons.idCard,
             label: 'Status',
             value: store.isVerified ? 'Terverifikasi' : 'Belum terverifikasi',
           ),
           if (store.cityName.isNotEmpty)
             _AboutRow(
-              icon: Icons.place_outlined,
+              icon: LucideIcons.mapPin,
               label: 'Lokasi',
               value: store.cityName,
             ),
           if (store.memberSince != null)
             _AboutRow(
-              icon: Icons.calendar_today_outlined,
+              icon: LucideIcons.calendar,
               label: 'Bergabung',
               value: formatJoinedId(store.memberSince!),
             ),
           _AboutRow(
-            icon: Icons.sell_outlined,
+            icon: LucideIcons.tag,
             label: 'Terjual',
             value: '${store.itemsSoldCount} kartu',
           ),
           _AboutRow(
-            icon: Icons.people_outline,
+            icon: LucideIcons.users,
             label: 'Pengikut',
             value: '${store.followersCount}',
           ),
           if (store.onVacation)
             _AboutRow(
-              icon: Icons.beach_access_outlined,
+              icon: LucideIcons.palmtree,
               label: 'Libur',
               value: store.vacationUntil == null
                   ? 'Sedang libur'
@@ -847,7 +849,7 @@ class _StoreSearchField extends StatelessWidget {
           fillColor: Theme.of(context).cardColor.withValues(alpha: 0.92),
           hintText: 'Cari di toko ini',
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          prefixIcon: const Icon(Icons.search, size: 18),
+          prefixIcon: const Icon(LucideIcons.search, size: 18),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 34,
             minHeight: 34,
@@ -855,7 +857,7 @@ class _StoreSearchField extends StatelessWidget {
           suffixIcon: controller.text.isEmpty
               ? null
               : IconButton(
-                  icon: const Icon(Icons.close, size: 16),
+                  icon: const Icon(LucideIcons.x, size: 16),
                   visualDensity: VisualDensity.compact,
                   onPressed: onClear,
                 ),
@@ -899,7 +901,7 @@ class _FilterToggle extends StatelessWidget {
               alignment: Alignment.center,
               children: [
                 Icon(
-                  Icons.tune,
+                  LucideIcons.slidersHorizontal,
                   size: 19,
                   color: onPressed == null
                       ? context.mutedForeground
@@ -949,7 +951,7 @@ class _Feedback extends ConsumerWidget {
       return const Padding(
         padding: EdgeInsets.all(32),
         child: EmptyState(
-          icon: Icons.star_outline,
+          icon: LucideIcons.star,
           title: 'Penilaian belum tersedia',
         ),
       );
@@ -1113,10 +1115,10 @@ class _FeedbackTile extends StatelessWidget {
             children: [
               Icon(
                 item.kind == FeedbackKind.positive
-                    ? Icons.thumb_up_outlined
+                    ? LucideIcons.thumbsUp
                     : item.kind == FeedbackKind.negative
-                    ? Icons.thumb_down_outlined
-                    : Icons.remove,
+                    ? LucideIcons.thumbsDown
+                    : LucideIcons.minus,
                 size: 14,
                 color: tone,
               ),

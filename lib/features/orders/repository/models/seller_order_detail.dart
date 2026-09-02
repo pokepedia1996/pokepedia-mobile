@@ -48,6 +48,26 @@ class ShipmentDestination {
       areaLine.isEmpty;
 }
 
+/// `INSTANT_COURIER_COMPANY_CODES` in `lib/shipping/core/instant-couriers.ts`
+/// — the on-demand couriers, which only ever pick up.
+const _instantCourierCompanies = {'grab', 'gojek'};
+
+/// Reads `available_collection_method`, which Postgres hands back either as
+/// an array or as one comma-joined string depending on the column type.
+List<String>? _collectionMethods(Object? raw) {
+  if (raw is List) {
+    return raw.whereType<String>().map((s) => s.trim().toLowerCase()).toList();
+  }
+  if (raw is String && raw.trim().isNotEmpty) {
+    return raw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  return null;
+}
+
 /// One order as its *seller* sees it: web's `/seller/orders/[matchId]`.
 ///
 /// Distinct from the buyer's view of the same row. A buyer wants what they
@@ -64,6 +84,8 @@ class SellerOrderDetail {
     required this.sellerNetAmount,
     this.buyerUsername,
     this.destination,
+    this.availableCollectionMethods,
+    this.courierCompany,
   });
 
   /// Builds the seller view from one `orders` row.
@@ -82,6 +104,8 @@ class SellerOrderDetail {
     var insurance = 0;
     var commission = 0;
     var net = 0;
+    List<String>? collectionMethods;
+    String? courierCompany;
 
     for (final entry in (row['order_items'] as List?) ?? const []) {
       if (entry is! Map<String, dynamic>) continue;
@@ -94,6 +118,12 @@ class SellerOrderDetail {
       insurance += (settlement['insurance_premium_idr'] as num?)?.toInt() ?? 0;
       commission += (settlement['commission_amount'] as num?)?.toInt() ?? 0;
       net += (settlement['seller_net_amount'] as num?)?.toInt() ?? 0;
+      // One courier carries the whole order, so the first settlement that
+      // names one speaks for all of them.
+      collectionMethods ??= _collectionMethods(
+        settlement['available_collection_method'],
+      );
+      courierCompany ??= settlement['courier_company'] as String?;
     }
 
     final shipment = embeddedRow(row['shipments']);
@@ -104,6 +134,8 @@ class SellerOrderDetail {
     return SellerOrderDetail(
       order: order,
       buyerUsername: buyerUsername,
+      availableCollectionMethods: collectionMethods,
+      courierCompany: courierCompany,
       destination: destination != null && !destination.isEmpty
           ? destination
           : null,
@@ -118,6 +150,27 @@ class SellerOrderDetail {
   final OrderModel order;
   final String? buyerUsername;
   final ShipmentDestination? destination;
+
+  /// `settlements.available_collection_method` — what the booked courier
+  /// will accept. Null means the courier never said, which web reads as
+  /// "probably both, let the server decide".
+  final List<String>? availableCollectionMethods;
+
+  /// `settlements.courier_company`, the code the courier is booked under.
+  final String? courierCompany;
+
+  /// Instant couriers ride along with a driver and cannot take a resi the
+  /// seller typed in — web's `isInstantCourierCompany`.
+  bool get isInstantCourier =>
+      _instantCourierCompanies.contains((courierCompany ?? '').toLowerCase());
+
+  /// Whether the seller may hand the parcel to a courier who comes to them.
+  bool get allowsPickup =>
+      availableCollectionMethods == null ||
+      availableCollectionMethods!.contains('pickup');
+
+  /// Whether the seller may drop the parcel off and type the resi in.
+  bool get allowsManualResi => !isInstantCourier;
 
   /// What the cards themselves came to, before shipping.
   final int subtotal;

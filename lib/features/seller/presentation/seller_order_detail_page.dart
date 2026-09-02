@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -14,7 +15,9 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/seller_order_detail.dart';
+import '../../orders/usecase/orders_notifier.dart';
 import '../usecase/seller_order_detail_notifier.dart';
+import 'widgets/dispatch_sheet.dart';
 
 /// Ports `/seller/orders/[matchId]` — one order from the side that has to
 /// pack it.
@@ -44,7 +47,7 @@ class SellerOrderDetailPage extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: PikachuLoader()),
         error: (_, _) => const EmptyState(
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
           title: 'Gagal memuat pesanan',
           description: 'Tarik ke bawah untuk mencoba lagi.',
         ),
@@ -54,7 +57,7 @@ class SellerOrderDetailPage extends ConsumerWidget {
             // `seller_id`. A miss here means the order isn't this user's to
             // sell — not that it doesn't exist.
             return const EmptyState(
-              icon: Icons.receipt_long_outlined,
+              icon: LucideIcons.receipt,
               title: 'Pesanan tidak ditemukan',
               description: 'Pesanan ini bukan milik tokomu.',
             );
@@ -268,18 +271,19 @@ class _ItemRow extends StatelessWidget {
   }
 }
 
-/// Status, courier and tracking.
+/// Status, courier, tracking — and, while the order is still waiting on the
+/// seller, the button that dispatches it.
 ///
-/// Read-only on purpose: booking a pickup goes through Biteship, which needs
-/// `BITESHIP_API_KEY` and `service_role`. Neither belongs in a shipped app,
-/// so the seller books on the web and the app reports where that got to.
-class _ShipmentBlock extends StatelessWidget {
+/// Booking goes through `/api/shipments/[shipmentSlug]/dispatch` rather than
+/// Biteship directly: the key and the `service_role` writes behind it stay on
+/// the server, exactly as they do for the web's own form.
+class _ShipmentBlock extends ConsumerWidget {
   const _ShipmentBlock({required this.detail});
 
   final SellerOrderDetail detail;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final order = detail.order;
     final colors = context.appColors;
     final tracking = order.trackingNumber;
@@ -332,7 +336,7 @@ class _ShipmentBlock extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    Icons.copy_outlined,
+                    LucideIcons.copy,
                     size: 15,
                     color: context.mutedForeground,
                   ),
@@ -353,11 +357,39 @@ class _ShipmentBlock extends StatelessWidget {
         if (detail.awaitingShipment &&
             (tracking == null || tracking.isEmpty)) ...[
           const SizedBox(height: 10),
-          Text(
-            'Pesanan ini menunggu dikirim. Buat pengiriman lewat pokepedia.id '
-            'untuk memesan kurir dan mencetak label.',
-            style: AppTypography.caption(context.mutedForeground),
-          ),
+          if (order.shipmentSlug == null)
+            // No shipment row yet: the courier is booked when the buyer pays,
+            // so this is a moment in the flow, not something to act on.
+            Text(
+              'Pengiriman belum siap diatur. Muat ulang sebentar lagi.',
+              style: AppTypography.caption(context.mutedForeground),
+            )
+          else ...[
+            Text(
+              'Pesanan ini menunggu dikirim. Atur penjemputan kurir atau isi '
+              'nomor resi kalau kamu antar sendiri.',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final done = await showDispatchSheet(
+                    context,
+                    shipmentSlug: order.shipmentSlug!,
+                    detail: detail,
+                  );
+                  if (done == true) {
+                    ref.invalidate(sellerOrderDetailProvider(order.slug));
+                    ref.invalidate(sellerOrdersProvider);
+                  }
+                },
+                icon: const Icon(LucideIcons.truck, size: 16),
+                label: const Text('Atur Pengiriman'),
+              ),
+            ),
+          ],
         ],
 
         if (order.shipmentDeadline != null) ...[

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -191,7 +192,7 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, size: 20),
+                  icon: const Icon(LucideIcons.x, size: 20),
                 ),
               ],
             ),
@@ -437,7 +438,7 @@ class _AreaPickerState extends State<_AreaPicker> {
               onChanged: (value) => setState(() => _query = value),
               decoration: const InputDecoration(
                 hintText: 'Cari...',
-                prefixIcon: Icon(Icons.search, size: 20),
+                prefixIcon: Icon(LucideIcons.search, size: 20),
               ),
             ),
             const SizedBox(height: 8),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -194,7 +195,7 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
       body: SafeArea(
         child: _error != null
             ? EmptyState(
-                icon: Icons.qr_code_2,
+                icon: LucideIcons.qrCode,
                 title: _error!,
                 description: _errorDetail(),
                 action: Column(
@@ -260,7 +261,7 @@ class _QrisPaymentPageState extends ConsumerState<QrisPaymentPage> {
                             ),
                           );
                       },
-                      icon: const Icon(Icons.copy, size: 15),
+                      icon: const Icon(LucideIcons.copy, size: 15),
                       label: const Text('Salin kode QRIS'),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size.fromHeight(44),

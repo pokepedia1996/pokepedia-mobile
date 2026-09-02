@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
@@ -42,7 +43,7 @@ class ReputationStar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          tier.isNew ? Icons.star_border : Icons.star,
+          tier.isNew ? LucideIcons.star : LucideIcons.star,
           size: size,
           color: tier.color,
         ),

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -55,7 +56,7 @@ class PortfolioValueSection extends ConsumerWidget {
             children: [
               if (delta != null) ...[
                 Icon(
-                  delta.isUp ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                  delta.isUp ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                   size: 18,
                   color: delta.isUp
                       ? context.appSemantic.success
@@ -119,7 +120,7 @@ class _PortfolioPicker extends ConsumerWidget {
               ),
             ),
             Icon(
-              Icons.keyboard_arrow_down,
+              LucideIcons.chevronDown,
               size: 18,
               color: context.mutedForeground,
             ),
@@ -304,7 +305,7 @@ class _SignInCallout extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.show_chart, size: 22, color: colors.primary),
+          Icon(LucideIcons.chartLine, size: 22, color: colors.primary),
           const SizedBox(height: 6),
           Text(
             'Lacak nilai koleksimu',

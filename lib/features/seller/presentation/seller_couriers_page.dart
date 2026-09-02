@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/theme/app_radius.dart';
@@ -146,7 +147,7 @@ class _SellerCouriersPageState extends ConsumerState<SellerCouriersPage> {
         child: profileAsync.when(
           loading: () => const PikachuLoader(),
           error: (_, __) => EmptyState(
-            icon: Icons.local_shipping_outlined,
+            icon: LucideIcons.truck,
             title: 'Gagal memuat pengaturan kurir',
             action: OutlinedButton(
               onPressed: () => ref.invalidate(storeProfileProvider),
@@ -156,7 +157,7 @@ class _SellerCouriersPageState extends ConsumerState<SellerCouriersPage> {
           data: (profile) {
             if (profile == null) {
               return const EmptyState(
-                icon: Icons.storefront_outlined,
+                icon: LucideIcons.store,
                 title: 'Belum punya toko',
               );
             }
@@ -383,7 +384,7 @@ class _Unavailable extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.cloud_off_outlined, size: 18, color: colors.error),
+              Icon(LucideIcons.cloudOff, size: 18, color: colors.error),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

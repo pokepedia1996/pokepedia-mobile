@@ -4,13 +4,16 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  audioplayers_windows
   file_selector_windows
   share_plus
   url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_local_notifications_windows
   jni
+  onnxruntime
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

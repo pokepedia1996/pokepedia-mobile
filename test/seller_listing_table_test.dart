@@ -4,6 +4,7 @@ import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/seller/presentation/widgets/listing_table.dart';
 import 'package:pokepedia_mobile/features/seller/repository/models/listing_offer.dart';
 import 'package:pokepedia_mobile/features/seller/repository/models/seller_listing.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 Map<String, dynamic> _row({
   int id = 1,
@@ -216,7 +217,7 @@ void main() {
     final listings = [listing];
 
     Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.byIcon(Icons.more_horiz).first);
+      await tester.tap(find.byIcon(LucideIcons.ellipsis).first);
       await tester.pumpAndSettle();
     }
 

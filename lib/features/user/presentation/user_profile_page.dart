@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -100,7 +101,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
           data: (profile) {
             if (profile == null) {
               return EmptyState(
-                icon: Icons.person_off_outlined,
+                icon: LucideIcons.userX,
                 title: 'Pengguna tidak ditemukan',
                 description:
                     'Tidak ada pengguna dengan username "${widget.username}"',
@@ -140,8 +141,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                     children: [
                       _PrivacyToggle(
                         icon: profile.isCollectionPublic
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                            ? LucideIcons.eye
+                            : LucideIcons.eyeOff,
                         label: 'Koleksi Publik',
                         value: profile.isCollectionPublic,
                         disabled: _savingVisibility,
@@ -156,7 +157,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                       if (profile.isCollectionPublic) ...[
                         const SizedBox(width: 16),
                         _PrivacyToggle(
-                          icon: Icons.tag,
+                          icon: LucideIcons.tag,
                           label: 'Jumlah',
                           value: profile.showCollectionQuantity,
                           disabled: _savingQuantity,
@@ -176,7 +177,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                 Text('Koleksi', style: AppTypography.h3(colors.onSurface)),
                 if (!profile.isCollectionPublic && !isOwner)
                   const _NoticeBox(
-                    icon: Icons.lock_outline,
+                    icon: LucideIcons.lock,
                     message: 'Koleksi pengguna ini bersifat privat',
                   )
                 else if (collectionAsync.isLoading)
@@ -200,7 +201,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                     decoration: const InputDecoration(
                       hintText:
                           'Cari nama, nomor, ekspansi, atau kelangkaan...',
-                      prefixIcon: Icon(Icons.search, size: 20),
+                      prefixIcon: Icon(LucideIcons.search, size: 20),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -234,7 +235,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
           },
           loading: () => const PikachuLoader(),
           error: (_, __) => const EmptyState(
-            icon: Icons.error_outline,
+            icon: LucideIcons.circleAlert,
             title: 'Gagal memuat profil',
           ),
         ),
@@ -307,7 +308,7 @@ class _ProfileHeader extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             onPressed: () => context.push(Routes.storeDetail(profile.username)),
-            icon: const Icon(Icons.storefront_outlined, size: 16),
+            icon: const Icon(LucideIcons.store, size: 16),
             label: const Text('Lihat toko'),
           ),
         ),
@@ -331,7 +332,7 @@ class _AddHint extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.add,
+            LucideIcons.plus,
             size: 14,
             color: context.mutedForeground.withValues(alpha: 0.7),
           ),
@@ -374,7 +375,7 @@ class _SocialLinks extends StatelessWidget {
       children: [
         if (whatsapp != null && whatsapp.isNotEmpty)
           _SocialIcon(
-            icon: Icons.phone_outlined,
+            icon: LucideIcons.phone,
             tooltip: 'WhatsApp',
             onTap: () => _open('https://wa.me/$whatsapp'),
           ),
@@ -387,20 +388,20 @@ class _SocialLinks extends StatelessWidget {
           ),
         if (_isSafeHandle(profile.socialInstagram))
           _SocialIcon(
-            icon: Icons.camera_alt_outlined,
+            icon: LucideIcons.camera,
             tooltip: 'Instagram',
             onTap: () =>
                 _open('https://instagram.com/${profile.socialInstagram}'),
           ),
         if (_isSafeHandle(profile.socialTiktok))
           _SocialIcon(
-            icon: Icons.music_note_outlined,
+            icon: LucideIcons.music,
             tooltip: 'TikTok',
             onTap: () => _open('https://tiktok.com/@${profile.socialTiktok}'),
           ),
         if (_isSafeHandle(profile.socialX))
           _SocialIcon(
-            icon: Icons.close,
+            icon: LucideIcons.x,
             tooltip: 'X',
             onTap: () => _open('https://x.com/${profile.socialX}'),
           ),

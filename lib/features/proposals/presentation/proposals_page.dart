@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -55,7 +56,7 @@ class _ProposalsPageState extends ConsumerState<ProposalsPage> {
           // only way to reach them.
           IconButton(
             tooltip: 'Penawaran Saya',
-            icon: const Icon(Icons.local_offer_outlined, size: 20),
+            icon: const Icon(LucideIcons.tag, size: 20),
             onPressed: () => context.push(Routes.offers),
           ),
         ],
@@ -147,7 +148,7 @@ class _CardFeedTab extends ConsumerWidget {
       data: (groups) {
         if (groups.isEmpty) {
           return const EmptyState(
-            icon: Icons.inbox_outlined,
+            icon: LucideIcons.inbox,
             title: 'Belum ada aktivitas',
             description:
                 'Pasang bid (WTB) atau kirim proposal untuk mulai bernegosiasi.',
@@ -188,7 +189,7 @@ class _CardFeedTab extends ConsumerWidget {
             Expanded(
               child: visible.isEmpty
                   ? const EmptyState(
-                      icon: Icons.filter_list_off,
+                      icon: LucideIcons.filterX,
                       title: 'Tidak ada kartu untuk filter ini',
                     )
                   : RefreshIndicator(
@@ -296,7 +297,11 @@ class _CardGroupRow extends StatelessWidget {
                 ],
               ],
             ),
-            Icon(Icons.chevron_right, size: 18, color: context.mutedForeground),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: context.mutedForeground,
+            ),
           ],
         ),
       ),

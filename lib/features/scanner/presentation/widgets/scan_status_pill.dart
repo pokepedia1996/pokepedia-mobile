@@ -19,7 +19,11 @@ class ScanStatusPill extends StatelessWidget {
     final (label, color, showSpinner) = switch (status) {
       ScanPillStatus.ready => ('Siap memindai', Colors.white, false),
       ScanPillStatus.capturing => ('Mengambil gambar…', Colors.white, true),
-      ScanPillStatus.processing => ('Mengenali kartu…', Colors.amberAccent, true),
+      ScanPillStatus.processing => (
+        'Mengenali kartu…',
+        Colors.amberAccent,
+        true,
+      ),
     };
 
     return AnimatedSwitcher(

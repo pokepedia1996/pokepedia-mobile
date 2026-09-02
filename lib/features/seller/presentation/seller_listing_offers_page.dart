@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -82,13 +83,13 @@ class _SellerListingOffersPageState
 
                   if (async.hasError)
                     const EmptyState(
-                      icon: Icons.error_outline,
+                      icon: LucideIcons.circleAlert,
                       title: 'Gagal memuat penawaran',
                       description: 'Tarik ke bawah untuk mencoba lagi.',
                     )
                   else if (offers.isEmpty)
                     const EmptyState(
-                      icon: Icons.local_offer_outlined,
+                      icon: LucideIcons.tag,
                       title: 'Belum ada penawaran',
                       description:
                           'Penawaran untuk listing ini akan muncul di sini.',
@@ -334,7 +335,7 @@ class _BucketSection extends StatelessWidget {
                     turns: expanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 150),
                     child: Icon(
-                      Icons.keyboard_arrow_down,
+                      LucideIcons.chevronDown,
                       size: 20,
                       color: context.mutedForeground,
                     ),
@@ -568,7 +569,7 @@ class _OfferDetailSheetState extends State<_OfferDetailSheet> {
               // way web's service client does. This is web's own fallback
               // copy rather than an empty box pretending otherwise.
               _InfoRow(
-                icon: Icons.location_on_outlined,
+                icon: LucideIcons.mapPin,
                 title: 'Tujuan pengiriman',
                 body: 'Alamat dikonfirmasi saat checkout',
               ),
@@ -609,7 +610,7 @@ class _OfferDetailSheetState extends State<_OfferDetailSheet> {
                           turns: _historyOpen ? 0.5 : 0,
                           duration: const Duration(milliseconds: 150),
                           child: Icon(
-                            Icons.keyboard_arrow_down,
+                            LucideIcons.chevronDown,
                             size: 16,
                             color: context.mutedForeground,
                           ),

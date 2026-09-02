@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -73,7 +74,7 @@ class ProposalsBanner extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
                       child: Icon(
-                        Icons.inbox_outlined,
+                        LucideIcons.inbox,
                         size: 20,
                         color: colors.primary,
                       ),
@@ -138,7 +139,7 @@ class ProposalsBanner extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               Icon(
-                Icons.chevron_right,
+                LucideIcons.chevronRight,
                 size: 18,
                 color: context.mutedForeground,
               ),

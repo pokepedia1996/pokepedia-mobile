@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -23,7 +24,6 @@ class ScanResultSheet extends ConsumerStatefulWidget {
     required this.item,
     required this.sessionCount,
     required this.busy,
-    required this.onCapture,
     required this.onSelectVariant,
     required this.onOpenSession,
   });
@@ -33,7 +33,6 @@ class ScanResultSheet extends ConsumerStatefulWidget {
 
   final int sessionCount;
   final bool busy;
-  final VoidCallback onCapture;
   final ValueChanged<ScanCard> onSelectVariant;
   final VoidCallback onOpenSession;
 
@@ -120,7 +119,6 @@ class _ScanResultSheetState extends ConsumerState<ScanResultSheet> {
             _ShutterRow(
               busy: widget.busy,
               sessionCount: widget.sessionCount,
-              onCapture: widget.onCapture,
               onOpenSession: widget.onOpenSession,
             ),
           ],
@@ -185,7 +183,9 @@ class _ResultRow extends StatelessWidget {
                         const _ReviewBadge(),
                       ],
                       Icon(
-                        expanded ? Icons.expand_more : Icons.chevron_right,
+                        expanded
+                            ? LucideIcons.chevronDown
+                            : LucideIcons.chevronRight,
                         size: 16,
                         color: context.mutedForeground,
                       ),
@@ -238,13 +238,11 @@ class _ShutterRow extends StatelessWidget {
   const _ShutterRow({
     required this.busy,
     required this.sessionCount,
-    required this.onCapture,
     required this.onOpenSession,
   });
 
   final bool busy;
   final int sessionCount;
-  final VoidCallback onCapture;
   final VoidCallback onOpenSession;
 
   @override
@@ -253,39 +251,42 @@ class _ShutterRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          // Balances the batch button so the shutter stays centred.
-          const SizedBox(width: 76),
+          // Where the shutter was. Auto-capture fires on its own, so this
+          // reports what the scanner is doing rather than asking for a tap —
+          // an inert button would read as broken.
           Expanded(
             child: Center(
-              child: Semantics(
-                button: true,
-                label: 'Pindai kartu',
-                child: GestureDetector(
-                  onTap: busy ? null : onCapture,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: busy
-                          ? context.borderColor
-                          : context.appColors.primary,
-                      border: Border.all(
-                        color: context.appColors.surface,
-                        width: 4,
+              child: AnimatedOpacity(
+                opacity: busy ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.appColors.primary,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.appColors.onPrimary,
+                        ),
                       ),
-                    ),
-                    child: busy
-                        ? const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            Icons.center_focus_strong,
-                            color: context.appColors.onPrimary,
-                            size: 30,
-                          ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Memindai...',
+                        style: AppTypography.captionSemibold(
+                          context.appColors.onPrimary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -301,7 +302,7 @@ class _ShutterRow extends StatelessWidget {
                 child: IconButton(
                   onPressed: onOpenSession,
                   tooltip: 'Kelola kartu',
-                  icon: const Icon(Icons.inventory_2_outlined),
+                  icon: const Icon(LucideIcons.package),
                 ),
               ),
             ),

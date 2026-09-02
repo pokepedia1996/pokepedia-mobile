@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -193,7 +194,7 @@ class _CardListingsSectionState extends ConsumerState<CardListingsSection> {
                                     ),
                                   ),
                                   Icon(
-                                    Icons.expand_more,
+                                    LucideIcons.chevronDown,
                                     size: 14,
                                     color: context.mutedForeground,
                                   ),
@@ -350,7 +351,11 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                         ),
                         if (listing.isVerified) ...[
                           const SizedBox(width: 3),
-                          Icon(Icons.verified, size: 13, color: colors.primary),
+                          Icon(
+                            LucideIcons.badgeCheck,
+                            size: 13,
+                            color: colors.primary,
+                          ),
                         ],
                         const SizedBox(width: 6),
                         ConditionBadge(condition: listing.condition),
@@ -363,7 +368,7 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                         if (listing.cityName.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Icon(
-                            Icons.location_on_outlined,
+                            LucideIcons.mapPin,
                             size: 12,
                             color: context.mutedForeground,
                           ),
@@ -443,7 +448,7 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                     ? () => context.push(Routes.proposals)
                     : () => _offer(listing),
                 icon: Icon(
-                  _myOffer != null ? Icons.schedule : Icons.handshake_outlined,
+                  _myOffer != null ? LucideIcons.clock : LucideIcons.handshake,
                   size: 16,
                 ),
                 label: Text(
@@ -481,7 +486,7 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.shopping_cart_outlined, size: 16),
+                      : const Icon(LucideIcons.shoppingCart, size: 16),
                   label: Text(
                     soldOut ? 'Habis' : 'Tambah ke Keranjang',
                     maxLines: 1,

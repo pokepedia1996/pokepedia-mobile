@@ -41,6 +41,9 @@
          every other surface works without one, and the scanner reports the
          missing hardware itself rather than being filtered out of the Store. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Android 13+ asks the user before an app may post notifications. The
+         app requests it the first time it has one to show, not at launch. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 </manifest>

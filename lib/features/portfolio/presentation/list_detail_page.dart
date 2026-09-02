@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -26,7 +27,7 @@ class ListDetailPage extends ConsumerWidget {
           data: (cards) {
             if (cards.isEmpty) {
               return const EmptyState(
-                icon: Icons.checklist,
+                icon: LucideIcons.listChecks,
                 title: 'List ini masih kosong',
               );
             }

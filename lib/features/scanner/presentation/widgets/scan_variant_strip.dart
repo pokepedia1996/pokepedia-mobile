@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -124,7 +125,7 @@ class _SearchTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search, size: 22, color: context.mutedForeground),
+            Icon(LucideIcons.search, size: 22, color: context.mutedForeground),
             const SizedBox(height: 4),
             Text(
               'Ganti\nkartu',

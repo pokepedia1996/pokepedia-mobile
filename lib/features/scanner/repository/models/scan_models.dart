@@ -7,9 +7,15 @@ import '../../../../shared/models/card_model.dart';
 /// CLIP tower plus a vector index, behind `/api/scan` (`features/scanner/
 /// server/scan.server.ts` → the Python embedder in `services/scanner`). The
 /// app's job is to hand that endpoint a tight, correctly-shaped card crop and
-/// render what comes back, so what's ported here is the *contract*: the row
-/// shape, the calibrated confidence thresholds, and the two derived predicates
-/// the web recomputes client-side rather than trusting the server's own flag.
+/// render what comes back, so what's ported here is the *contract* — the row
+/// shape and nothing more.
+///
+/// Deliberately **not** ported: the confidence calculation. The distance
+/// thresholds behind it (0.35 / 0.02 / 0.05) are mirrored between the Next.js
+/// route and the Python embedder and have to change together; a third copy
+/// here would drift out of step silently, and the only symptom would be the
+/// app disagreeing with the server about whether a scan was trustworthy.
+/// [ScanResponse.confident] is the answer — see the scan handoff §7.
 
 /// Pokemon card aspect (63mm x 88mm, width/height).
 ///
@@ -19,27 +25,6 @@ import '../../../../shared/models/card_model.dart';
 /// Mirrors `CARD_ASPECT` on the web, which in turn mirrors the Python
 /// `build_corner_dataset.py` / `strip_crop.py` scripts.
 const cardAspect = 0.7159;
-
-/// Distance is `1 - cosine_similarity` from the fine-tuned CLIP tower, so 0 is
-/// an exact match. Per the web's own calibration note this is a loose floor
-/// that rejects "doesn't look like any known card" rather than the main
-/// decision — [scanConfidentMargin] is what actually discriminates.
-///
-/// Mirrored in `services/scanner/embedder/embedder.py` — change all three.
-const scanMaxDistance = 0.35;
-
-/// Gap between the leader and the runner-up needed to call a match confident.
-///
-/// Calibrated on the web against real percentiles: correct top-1 margin
-/// p50=0.007/p75=0.028, wrong top-1 margin p50=0.003/p90=0.016. 0.02 sits in
-/// the gap, deliberately biased toward *not* claiming confidence when unsure,
-/// since a confidently wrong answer is the worse failure.
-const scanConfidentMargin = 0.02;
-
-/// A candidate within this much of the leader is a real alternate rather than
-/// noise that cleared [scanMaxDistance] by chance — what the variant strip
-/// offers the user to cycle through.
-const scanAlternateMaxGap = 0.05;
 
 /// Laplacian-variance floor below which a capture is treated as too blurry to
 /// trust an *unconfident* match from. Never overrides a confident one: that
@@ -83,12 +68,11 @@ class ScanCard {
   /// Precomputed same-artwork cluster id (`build_artwork_groups.py`). Cards
   /// sharing this show the same illustration across sets/finishes, which is
   /// what makes an ambiguous top-2 an acceptable reprint tie rather than a
-  /// real miss — see [isConfidentMatch].
+  /// real miss. The server folds this into [ScanResponse.confident].
   final int? artworkGroupId;
 
   /// Display name, falling back to an em dash the way the web's sheets do.
-  String get displayName =>
-      (nameId == null || nameId!.isEmpty) ? '—' : nameId!;
+  String get displayName => (nameId == null || nameId!.isEmpty) ? '—' : nameId!;
 
   /// `SVK 4/102`-style printing label — web's `printingLabel`.
   String get printingLabel {
@@ -127,9 +111,7 @@ class ScanCard {
       collectorNumber: json['collector_number'] as String?,
       // Null rather than defaulted to `id`: an unknown language here would
       // silently mislabel the print, and the badge is better off absent.
-      language: rawLanguage == null
-          ? null
-          : CardLanguageX.fromRaw(rawLanguage),
+      language: rawLanguage == null ? null : CardLanguageX.fromRaw(rawLanguage),
       variant: json['variant'] as String? ?? 'normal',
       baseNameId: json['base_name_id'] as String?,
       artworkGroupId: (json['artwork_group_id'] as num?)?.toInt(),
@@ -176,17 +158,22 @@ class ScanResponse {
   });
 
   /// Ranked best-first, already deduped per printing and gap-filtered server
-  /// side. Empty means nothing cleared [scanMaxDistance] — a genuine "not
-  /// recognized", not an error.
+  /// side. Empty means nothing cleared the server's distance floor — a genuine
+  /// "not recognized", not an error.
   final List<ScanMatch> matches;
 
   /// Every printing sharing `matches.first`'s artwork, holo-ranked — the pool
   /// the variant strip cycles through.
   final List<ScanCard> variants;
 
-  /// The server's own verdict. Kept for logging, but the UI reads
-  /// [isConfidentMatch] over `matches` instead, matching how the web never
-  /// trusts a server-computed confidence value directly.
+  /// Whether the top match can be shown without asking the user to confirm.
+  ///
+  /// Authoritative. The server recomputes this itself and ignores whatever the
+  /// embedder returned, so it is the only copy of the verdict that is
+  /// guaranteed to agree with the calibration it was derived from.
+  ///
+  /// `false` is not a failure — it means "show the candidates and let the user
+  /// pick". Both states are real UI, not an error path.
   final bool confident;
 
   /// This scan's `recognition_logs` row, so a later correction can be
@@ -209,34 +196,4 @@ class ScanResponse {
       logId: (json['logId'] as num?)?.toInt(),
     );
   }
-}
-
-/// Whether the top match can be shown without asking the user to confirm.
-///
-/// Ports `isConfidentMatch`. Recomputed here from the returned distances
-/// rather than reading [ScanResponse.confident], mirroring the web.
-///
-/// The `artworkGroupId` clause is the subtle half: the fine-tune reliably
-/// tells different *illustrations* apart, but a same-artwork reprint can
-/// legitimately tie on distance, since the only difference between those rows
-/// is printed text a coarse image embedding was never going to resolve.
-/// Showing any one of that group is still correct at the artwork level, and
-/// the variant strip lets the user pick the exact printing from there. This
-/// relaxes nothing when close candidates span *different* artwork groups —
-/// that's a real miss (wrong card entirely), not an ambiguous reprint.
-bool isConfidentMatch(List<ScanMatch> matches) {
-  if (matches.isEmpty) return false;
-  final top = matches.first;
-  if (top.distance > scanMaxDistance) return false;
-  if (matches.length < 2) return true;
-  if (matches[1].distance - top.distance >= scanConfidentMargin) return true;
-
-  final topGroup = top.card.artworkGroupId;
-  if (topGroup == null) return false;
-  final closeRivals = matches
-      .skip(1)
-      .where((m) => m.distance - top.distance <= scanAlternateMaxGap)
-      .toList();
-  return closeRivals.isNotEmpty &&
-      closeRivals.every((m) => m.card.artworkGroupId == topGroup);
 }

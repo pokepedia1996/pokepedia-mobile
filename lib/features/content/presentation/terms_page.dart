@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -50,7 +51,7 @@ class _TermsPageState extends State<TermsPage> {
       body: AppBarOverlayBody(
         child: !known
             ? const EmptyState(
-                icon: Icons.description_outlined,
+                icon: LucideIcons.fileText,
                 title: 'Dokumen tidak ditemukan',
               )
             : FutureBuilder<String>(
@@ -58,7 +59,7 @@ class _TermsPageState extends State<TermsPage> {
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return const EmptyState(
-                      icon: Icons.description_outlined,
+                      icon: LucideIcons.fileText,
                       title: 'Gagal memuat dokumen',
                     );
                   }

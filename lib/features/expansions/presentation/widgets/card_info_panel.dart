@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -376,7 +377,7 @@ class _AttackTile extends StatelessWidget {
               children: [
                 if (attack.cost.isEmpty)
                   Icon(
-                    Icons.blur_circular,
+                    LucideIcons.circleDashed,
                     size: 18,
                     color: context.mutedForeground,
                   )

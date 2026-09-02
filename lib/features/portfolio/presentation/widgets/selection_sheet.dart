@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -84,7 +85,7 @@ class SelectionSheet extends StatelessWidget {
                         child: const Text('Batal'),
                       ),
                       PopupMenuButton<BatchAction>(
-                        icon: const Icon(Icons.more_vert),
+                        icon: const Icon(LucideIcons.ellipsisVertical),
                         tooltip: 'Aksi',
                         onSelected: (action) => switch (action) {
                           BatchAction.copy => onCopy(),
@@ -97,7 +98,7 @@ class SelectionSheet extends StatelessWidget {
                             child: ListTile(
                               dense: true,
                               contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.copy_outlined, size: 18),
+                              leading: Icon(LucideIcons.copy, size: 18),
                               title: Text('Salin ke list lain'),
                             ),
                           ),
@@ -108,7 +109,7 @@ class SelectionSheet extends StatelessWidget {
                               dense: true,
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(
-                                Icons.drive_file_move_outlined,
+                                LucideIcons.folderInput,
                                 size: 18,
                               ),
                               title: const Text('Pindahkan ke list lain'),
@@ -123,7 +124,7 @@ class SelectionSheet extends StatelessWidget {
                               dense: true,
                               contentPadding: EdgeInsets.zero,
                               leading: Icon(
-                                Icons.delete_outline,
+                                LucideIcons.trash2,
                                 size: 18,
                                 color: colors.error,
                               ),

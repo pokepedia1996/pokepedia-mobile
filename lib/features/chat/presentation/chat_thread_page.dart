@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -82,13 +83,13 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       body: async.when(
         loading: () => const PikachuLoader(),
         error: (_, __) => const EmptyState(
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
           title: 'Gagal memuat percakapan',
         ),
         data: (state) {
           if (state.missing || (widget.slug == null && widget.target == null)) {
             return const EmptyState(
-              icon: Icons.chat_bubble_outline,
+              icon: LucideIcons.messageCircle,
               title: 'Percakapan tidak ditemukan',
               description: 'Percakapan ini mungkin sudah dihapus.',
             );
@@ -98,7 +99,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
               Expanded(
                 child: state.messages.isEmpty
                     ? EmptyState(
-                        icon: Icons.chat_bubble_outline,
+                        icon: LucideIcons.messageCircle,
                         title: 'Mulai percakapan',
                         description: 'Kirim pesan pertamamu ke ${state.title}.',
                       )
@@ -248,7 +249,7 @@ class _Composer extends StatelessWidget {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(Icons.send, color: colors.primary),
+                  : Icon(LucideIcons.send, color: colors.primary),
               onPressed: sending ? null : onSend,
             ),
           ],
