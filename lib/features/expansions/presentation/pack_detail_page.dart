@@ -11,9 +11,11 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_market_price.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -159,7 +161,21 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      // The nav floats over the grid, the same way it does on the tab roots.
+      extendBody: true,
+      appBar: const TransparentAppBar(actions: [CartAppBarButton()]),
+      // Kept rather than hidden: browsing a set is still browsing, so the
+      // tabs stay reachable without walking back to the expansions list.
+      //
+      // The page is pushed on the root navigator, above [AppShell], so there
+      // is no `StatefulNavigationShell` here to call `goBranch` on — `go` to
+      // the tab's own path switches the branch and drops this page, which is
+      // what tapping a tab means anyway. The pill also doesn't shrink on
+      // scroll here; that animation is driven by the shell's listener.
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.expansions),
+        onTap: (index) => context.go(AppBottomNav.tabPaths[index]),
+      ),
       body: AppBarOverlayBody(
         child: cardsAsync.when(
           data: (cards) {
@@ -276,7 +292,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   )
                 else if (_viewMode == CardViewMode.grid)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      // Clears the floating pill, which now covers the foot
+                      // of the grid.
+                      AppBottomNav.reservedSpace(context) + 12,
+                    ),
                     sliver: SliverGrid(
                       gridDelegate: cardGridDelegate(context),
                       delegate: SliverChildBuilderDelegate((context, i) {
@@ -292,7 +315,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   )
                 else
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      // Clears the floating pill, which now covers the foot
+                      // of the grid.
+                      AppBottomNav.reservedSpace(context) + 12,
+                    ),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate((context, i) {
                         final card = visible[i];

@@ -80,6 +80,11 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   }
 
   void _bump(int next, PortfolioTarget target) {
+    // A write already on its way owns the count until it lands. The stepper
+    // is disabled while it is, so this only catches a tap that beat the
+    // rebuild — accepting it would measure the next delta from a `_saved`
+    // the server has not confirmed yet.
+    if (_saving) return;
     // Asked for up front rather than after the debounce: counting up and
     // then being bounced to the login page reads as the taps being thrown
     // away, which is exactly what would have happened.
@@ -208,11 +213,24 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                else
+                else ...[
+                  // Shown beside the stepper rather than in place of it: the
+                  // count is what the user just set and is the one thing they
+                  // are watching, so it stays on screen while the write runs.
+                  if (_saving) ...[
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   QuantitySelector(
                     value: qty,
+                    enabled: !_saving,
                     onChanged: (value) => _bump(value, target),
                   ),
+                ],
                 const SizedBox(width: 8),
                 _PriceColumn(price: price),
               ],

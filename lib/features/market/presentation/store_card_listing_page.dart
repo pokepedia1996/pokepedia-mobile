@@ -488,9 +488,18 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
           );
         },
         loading: () => const PikachuLoader(),
-        error: (_, __) => const EmptyState(
+        error: (_, __) => EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat listing',
+          action: OutlinedButton(
+            onPressed: () => ref.invalidate(
+              storeCardListingsProvider((
+                storeSlug: widget.storeSlug,
+                cardId: widget.cardId,
+              )),
+            ),
+            child: const Text('Coba lagi'),
+          ),
         ),
       ),
     );

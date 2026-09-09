@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +40,10 @@ class _FakeAuth extends AuthNotifier {
 class _FakeOwnership implements CardOwnershipController {
   final adjustments = <int>[];
 
+  /// Held open by the test that needs to look at the panel mid-write, so the
+  /// write can be finished on cue rather than resolving in the same tick.
+  Completer<String?>? gate;
+
   @override
   Future<String?> adjustQuantity({
     required String userId,
@@ -46,7 +52,7 @@ class _FakeOwnership implements CardOwnershipController {
     String? listId,
   }) async {
     adjustments.add(delta);
-    return null;
+    return gate?.future ?? Future.value(null);
   }
 
   @override
@@ -125,6 +131,37 @@ void main() {
 
     await tester.pump(const Duration(seconds: 1));
     expect(ownership.adjustments, [3]);
+  });
+
+  testWidgets('the stepper is locked while the write is in flight', (
+    tester,
+  ) async {
+    final ownership = await _pump(tester, owned: 0);
+    ownership.gate = Completer<String?>();
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump(const Duration(seconds: 1));
+
+    // The write is away and hasn't come back: the count stays on screen, a
+    // spinner says why the signs are dead, and further taps are dropped.
+    expect(ownership.adjustments, [1]);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump(const Duration(seconds: 1));
+    expect(ownership.adjustments, [1]);
+    expect(find.text('1'), findsOneWidget);
+
+    // Once it lands the stepper is live again, counting from what the server
+    // confirmed rather than from the tap that was refused.
+    ownership.gate!.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump(const Duration(seconds: 1));
+    expect(ownership.adjustments, [1, 1]);
   });
 
   testWidgets('the week\'s move is shown against the price', (tester) async {

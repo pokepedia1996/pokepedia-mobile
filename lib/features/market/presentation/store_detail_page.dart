@@ -353,10 +353,16 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                     },
                     loading: () =>
                         const SliverToBoxAdapter(child: PikachuLoader()),
-                    error: (_, __) => const SliverToBoxAdapter(
+                    error: (_, __) => SliverToBoxAdapter(
                       child: EmptyState(
                         icon: LucideIcons.circleAlert,
                         title: 'Gagal memuat listing',
+                        action: OutlinedButton(
+                          onPressed: () => ref.invalidate(
+                            storeListingsProvider(widget.handle),
+                          ),
+                          child: const Text('Coba lagi'),
+                        ),
                       ),
                     ),
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../app/router/routes.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
@@ -53,6 +54,23 @@ class AppBottomNav extends StatelessWidget {
     final intrinsic = _pillHeight + _pillGap + media.viewPadding.bottom;
     return fromScaffold > intrinsic ? fromScaffold : intrinsic;
   }
+
+  /// Where each entry of [items] goes, in the order [AppShell] declares its
+  /// branches — so the index the pill reports and the index the shell
+  /// switches to are the same number by construction.
+  ///
+  /// Public because the nav is also rendered outside the shell, on pages
+  /// pushed onto the root navigator (the pack detail page): there is no
+  /// `StatefulNavigationShell` in scope to call `goBranch` on, so the tap
+  /// has to name the route itself.
+  static const tabPaths = [
+    Routes.home,
+    Routes.expansions,
+    Routes.search,
+    Routes.portfolio,
+    Routes.market,
+    Routes.account,
+  ];
 
   static const items = [
     BottomNavItem(label: 'Beranda', icon: LucideIcons.house),

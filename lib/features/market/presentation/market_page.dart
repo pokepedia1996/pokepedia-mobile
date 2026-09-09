@@ -1253,7 +1253,14 @@ class _ListingGrid extends ConsumerWidget {
         );
       },
       loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat listing')),
+      error: (_, __) => EmptyState(
+        icon: LucideIcons.circleAlert,
+        title: 'Gagal memuat listing',
+        action: OutlinedButton(
+          onPressed: () => ref.invalidate(marketListingsProvider),
+          child: const Text('Coba lagi'),
+        ),
+      ),
     );
   }
 }
