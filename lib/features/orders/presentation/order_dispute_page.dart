@@ -45,7 +45,7 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Alasan sengketa',
+              'Alasan komplain',
               style: AppTypography.bodySmSemibold(colors.onSurface),
             ),
             const SizedBox(height: 8),
@@ -92,7 +92,7 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
             ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Pengajuan sengketa terkirim')),
+                  const SnackBar(content: Text('Pengajuan komplain terkirim')),
                 );
                 context.pop();
               },
@@ -100,7 +100,7 @@ class _OrderDisputePageState extends State<OrderDisputePage> {
                 minimumSize: const Size.fromHeight(48),
                 backgroundColor: colors.error,
               ),
-              child: const Text('Ajukan Sengketa'),
+              child: const Text('Ajukan Komplain'),
             ),
           ],
         ),

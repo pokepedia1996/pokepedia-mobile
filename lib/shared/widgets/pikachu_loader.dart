@@ -13,15 +13,15 @@ import '../../core/theme/app_typography.dart';
 /// and inline rows — a Lottie at that size is an unreadable smudge, and
 /// those keep using [CircularProgressIndicator].
 class PikachuLoader extends StatelessWidget {
-  const PikachuLoader({super.key, this.size = 140, this.label});
+  const PikachuLoader({super.key, this.size = 140, this.label = 'Memuat...'});
 
   /// Width of the animation. The default suits a full page or tab body;
   /// pass something smaller for a short section (a carousel strip, say).
   final double size;
 
-  /// Optional caption under the animation. Left off by default — most
-  /// call sites sit inside a screen whose heading already says what's
-  /// loading.
+  /// Caption under the animation, "Memuat..." as on web's own Pikachu gate
+  /// (`home-loading-gate.tsx`). Pass a different string to say what is
+  /// loading, or null to drop it where there is no room for a second line.
   final String? label;
 
   @override
@@ -43,7 +43,16 @@ class PikachuLoader extends StatelessWidget {
               child: Text(
                 label!,
                 textAlign: TextAlign.center,
-                style: AppTypography.h3(context.mutedForeground),
+                // Web is `font-heading text-lg text-muted-foreground
+                // dark:text-primary` — the heading face at 18, and a colour
+                // that switches to the brand red on dark rather than staying
+                // muted. h3 is the heading face but 20, so the size is set
+                // back down to web's.
+                style: AppTypography.h3(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? context.appColors.primary
+                      : context.mutedForeground,
+                ).copyWith(fontSize: 18),
               ),
             ),
         ],

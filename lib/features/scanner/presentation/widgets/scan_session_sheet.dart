@@ -9,6 +9,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/card_language_badge.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
+import '../../../portfolio/presentation/widgets/add_destination_sheet.dart';
 import '../../repository/models/scan_models.dart';
 import '../../repository/scanner_repository.dart';
 import '../../usecase/scan_session_notifier.dart';
@@ -69,23 +70,27 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null || selected.isEmpty) return;
 
-    setState(() => _submitting = _Submitting.collection);
     final quantities = _quantityByCardId(selected);
+    final total = quantities.values.fold(0, (a, b) => a + b);
+    final destination = await showAddDestinationSheet(
+      context,
+      ref,
+      subtitle: '$total kartu dari sesi scan ini',
+    );
+    if (destination == null || !mounted) return;
 
-    // One call per distinct card, through the same controller every other
-    // ownership mutation uses — so the collection and portfolio screens
-    // revalidate without this sheet knowing they exist.
-    final failed = <int>{};
-    for (final entry in quantities.entries) {
-      final error = await ref
-          .read(cardOwnershipControllerProvider)
-          .adjustQuantity(
-            userId: user.id,
-            cardId: entry.key,
-            delta: entry.value,
-          );
-      if (error != null) failed.add(entry.key);
-    }
+    setState(() => _submitting = _Submitting.collection);
+
+    // Through the same controller every other ownership mutation uses — so
+    // the collection and portfolio screens revalidate without this sheet
+    // knowing they exist, and the destination decides where the copies go.
+    final failed = await ref
+        .read(cardOwnershipControllerProvider)
+        .addCopies(
+          userId: user.id,
+          quantityByCardId: quantities,
+          listId: destination.listId,
+        );
     if (!mounted) return;
     setState(() => _submitting = null);
 
@@ -103,8 +108,9 @@ class _ScanSessionSheetState extends ConsumerState<ScanSessionSheet> {
       _toast('${failed.length} kartu gagal ditambahkan, coba lagi');
       return;
     }
-    final count = quantities.values.fold(0, (a, b) => a + b);
-    _toast('$count kartu ditambahkan ke koleksi');
+    _toast(
+      '$total kartu ditambahkan ke ${portfolioDestinationLabel(destination)}',
+    );
     widget.onClose();
   }
 

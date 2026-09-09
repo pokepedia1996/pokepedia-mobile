@@ -808,14 +808,15 @@ Color _toneColor(BuildContext context, ListingOffer offer) {
   final state = offer.paymentState;
   if (state != null) {
     return switch (state) {
-      OfferPaymentState.awaiting => colors.tertiary,
+      // Amber, not the undefined `tertiary` slot — see _shipmentColor.
+      OfferPaymentState.awaiting => context.appSemantic.condMp,
       OfferPaymentState.paid => context.appColors.primary,
       OfferPaymentState.cancelled => colors.error,
       OfferPaymentState.expired => context.mutedForeground,
     };
   }
   return switch (offer.status) {
-    OfferStatus.pending => colors.tertiary,
+    OfferStatus.pending => context.appSemantic.condMp,
     OfferStatus.accepted => colors.primary,
     OfferStatus.rejected => colors.error,
     OfferStatus.withdrawn || OfferStatus.expired => context.mutedForeground,

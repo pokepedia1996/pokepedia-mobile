@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../repository/models/scan_models.dart';
+import '../../../../shared/widgets/shimmer_box.dart';
 
 /// Ports `ScanCardThumb` — a scanned card's art at [width], held at
 /// [cardAspect] so a missing or slow image reserves the right box instead of
@@ -26,6 +27,8 @@ class ScanCardThumb extends StatelessWidget {
             : Image.network(
                 url,
                 fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : const ShimmerBox(),
                 errorBuilder: (_, __, ___) => _placeholder(context),
               ),
       ),

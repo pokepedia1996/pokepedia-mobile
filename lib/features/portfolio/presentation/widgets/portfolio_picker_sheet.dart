@@ -463,7 +463,7 @@ Future<WantlistModel?> showListPicker(
 
   if (picked is WantlistModel) return picked;
   if (picked is _MakeList && context.mounted) {
-    return _createListForPicker(context, ref);
+    return createPortfolioList(context, ref);
   }
   return null;
 }
@@ -471,7 +471,10 @@ Future<WantlistModel?> showListPicker(
 /// The "Buat list" row's sentinel — a new list to send the cards to.
 class _MakeList {}
 
-Future<WantlistModel?> _createListForPicker(
+/// Runs the "Buat List Baru" form and creates the list, returning it so the
+/// caller can use it as a destination. Shared with the add-destination sheet
+/// so a list made while filing cards is the same thing made anywhere else.
+Future<WantlistModel?> createPortfolioList(
   BuildContext context,
   WidgetRef ref,
 ) async {

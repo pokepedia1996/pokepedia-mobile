@@ -7,11 +7,17 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
+import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/condition_grade_picker.dart';
 import '../../repository/models/market_models.dart';
 import '../../usecase/expansions_notifier.dart';
 import '../../utils/untradeable_expansions.dart';
+import '../../../proposals/presentation/widgets/bid_edit_sheet.dart';
+import '../../../proposals/presentation/widgets/make_offer_sheet.dart';
+import '../../../proposals/usecase/proposals_notifier.dart';
+import 'ask_seller_picker.dart';
+import 'bid_proposal_sheet.dart';
 import 'place_order_sheet.dart';
 
 /// The deepest 10 levels per side, as web's `MAX_ROWS`.
@@ -91,7 +97,7 @@ class _OrderBookWidgetState extends ConsumerState<OrderBookWidget> {
               ),
             )
           else
-            _Ladder(book: book),
+            _Ladder(book: book, card: widget.card),
         ],
       ),
     );
@@ -172,9 +178,10 @@ class PlaceOrderButtons extends ConsumerWidget {
 }
 
 class _Ladder extends StatelessWidget {
-  const _Ladder({required this.book});
+  const _Ladder({required this.book, required this.card});
 
   final OrderBookData book;
+  final CardModel card;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +233,7 @@ class _Ladder extends StatelessWidget {
         ),
         for (var i = 0; i < rowCount; i++)
           _LadderRow(
+            card: card,
             bid: i < bids.length ? bids[i] : null,
             ask: i >= askOffset ? asks[i - askOffset] : null,
             maxBidQty: maxBidQty,
@@ -332,21 +340,28 @@ class _HeadCell extends StatelessWidget {
   }
 }
 
-class _LadderRow extends StatelessWidget {
+/// One price level per side.
+///
+/// Each half is independently tappable, the way web makes its bid cells
+/// clickable: a bid opens the proposal that offers your card to everyone
+/// standing at that price, an ask opens an offer to the sellers there.
+class _LadderRow extends ConsumerWidget {
   const _LadderRow({
+    required this.card,
     required this.bid,
     required this.ask,
     required this.maxBidQty,
     required this.maxAskQty,
   });
 
+  final CardModel card;
   final OrderBookLevel? bid;
   final OrderBookLevel? ask;
   final int maxBidQty;
   final int maxAskQty;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final semantic = context.appSemantic;
     final bid = this.bid;
@@ -356,7 +371,10 @@ class _LadderRow extends StatelessWidget {
       color: bid?.viewerOwns == true
           ? semantic.bid.withValues(alpha: 0.08)
           : null,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      // 3px of padding around an 18px cell made a 24px row — under half a
+      // finger, and two rows apart is a mis-tap. 8 around 24 lands at 40,
+      // which is tappable without the ladder losing its density.
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: [
           Expanded(
@@ -372,35 +390,43 @@ class _LadderRow extends StatelessWidget {
             flex: 38,
             child: bid == null
                 ? const SizedBox.shrink()
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (bid.viewerOwns) ...[
-                        _OwnBadge(color: semantic.bid),
+                : InkWell(
+                    onTap: () => _onBidTap(context, ref, bid),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (bid.viewerOwns) ...[
+                          _OwnBadge(color: semantic.bid),
+                          const SizedBox(width: 4),
+                        ],
+                        ConditionBadge(condition: bid.condition, dense: true),
                         const SizedBox(width: 4),
+                        Text(
+                          formatRupiah(bid.price),
+                          style: AppTypography.captionSemibold(
+                            semantic.success,
+                          ),
+                        ),
                       ],
-                      ConditionBadge(condition: bid.condition, dense: true),
-                      const SizedBox(width: 4),
-                      Text(
-                        formatRupiah(bid.price),
-                        style: AppTypography.captionSemibold(semantic.success),
-                      ),
-                    ],
+                    ),
                   ),
           ),
           Expanded(
             flex: 38,
             child: ask == null
                 ? const SizedBox.shrink()
-                : Row(
-                    children: [
-                      Text(
-                        formatRupiah(ask.price),
-                        style: AppTypography.captionSemibold(colors.error),
-                      ),
-                      const SizedBox(width: 4),
-                      ConditionBadge(condition: ask.condition, dense: true),
-                    ],
+                : InkWell(
+                    onTap: () => _onAskTap(context, ref, ask),
+                    child: Row(
+                      children: [
+                        Text(
+                          formatRupiah(ask.price),
+                          style: AppTypography.captionSemibold(colors.error),
+                        ),
+                        const SizedBox(width: 4),
+                        ConditionBadge(condition: ask.condition, dense: true),
+                      ],
+                    ),
                   ),
           ),
           Expanded(
@@ -416,7 +442,141 @@ class _LadderRow extends StatelessWidget {
       ),
     );
   }
+
+  /// Your own bid opens its editor; anyone else's opens the proposal.
+  ///
+  /// A level carries no listing slug, so an own bid is found back by price
+  /// and condition — unambiguous because the wash guard allows only one open
+  /// bid per card, variant and condition.
+  Future<void> _onBidTap(
+    BuildContext context,
+    WidgetRef ref,
+    OrderBookLevel level,
+  ) async {
+    if (level.viewerOwns) {
+      await _editOwnBid(context, ref, level);
+      return;
+    }
+
+    // Null, not `card.variant`: the ladder isn't variant-scoped, and every
+    // order the app places leaves `variant_key` null too — filtering on
+    // 'normal' would match none of them.
+    final sent = await showBidProposalSheet(
+      context,
+      card: card,
+      price: level.price,
+      condition: level.condition,
+    );
+    if (sent == null || !context.mounted) return;
+
+    ref.invalidate(orderBookProvider);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            sent == 1
+                ? 'Proposal terkirim ke 1 pembeli!'
+                : 'Proposal terkirim ke $sent pembeli!',
+          ),
+          persist: false,
+        ),
+      );
+  }
+
+  Future<void> _editOwnBid(
+    BuildContext context,
+    WidgetRef ref,
+    OrderBookLevel level,
+  ) async {
+    final bids = await ref.read(myBidsProvider.future);
+    final mine = bids
+        .where(
+          (b) =>
+              b.card.id == card.id &&
+              b.price == level.price &&
+              b.condition == level.condition,
+        )
+        .firstOrNull;
+    if (!context.mounted) return;
+
+    if (mine == null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Bid ini sudah berubah. Kelola di halaman Proposal.'),
+            persist: false,
+          ),
+        );
+      return;
+    }
+
+    final edit = await showBidEditSheet(context, bid: mine);
+    if (edit == null || edit.isEmpty || !context.mounted) return;
+
+    final error = await ref
+        .read(proposalsRepositoryProvider)
+        .updateBid(slug: mine.slug, price: edit.price, quantity: edit.quantity);
+    if (!context.mounted) return;
+
+    if (error == null) {
+      ref.invalidate(orderBookProvider);
+      ref.invalidate(myBidsProvider);
+    }
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(error ?? 'Bid diperbarui'), persist: false),
+      );
+  }
+
+  /// An ask level can cover several sellers, so the offer needs one picked
+  /// before it has a listing to negotiate against.
+  Future<void> _onAskTap(
+    BuildContext context,
+    WidgetRef ref,
+    OrderBookLevel level,
+  ) async {
+    final listings = await ref.read(cardListingsProvider(card.id).future);
+    final matches = listings
+        .where(
+          (l) =>
+              l.side == ListingSide.ask &&
+              l.price == level.price &&
+              l.condition == level.condition &&
+              l.acceptsOffers,
+        )
+        .toList();
+    if (!context.mounted) return;
+
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Penjual di harga ini tidak menerima penawaran.'),
+            persist: false,
+          ),
+        );
+      return;
+    }
+
+    final listing = matches.length == 1
+        ? matches.first
+        : await showAskSellerPicker(context, listings: matches);
+    if (listing == null || !context.mounted) return;
+
+    final made = await showMakeOfferSheet(context, listing: listing);
+    if (made == true && context.mounted) {
+      ref.invalidate(cardListingsProvider(card.id));
+    }
+  }
 }
+
+/// The height of a ladder row's quantity cell, which sets the row's own
+/// height along with its padding.
+const _depthCellHeight = 24.0;
 
 /// A quantity cell whose background bar is scaled to the level's share of
 /// the deepest level on that side (web's inline-width depth bars).
@@ -435,10 +595,10 @@ class _DepthCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (quantity == null) return const SizedBox(height: 18);
+    if (quantity == null) return const SizedBox(height: _depthCellHeight);
     final alignment = alignRight ? Alignment.centerRight : Alignment.centerLeft;
     return SizedBox(
-      height: 18,
+      height: _depthCellHeight,
       child: Stack(
         children: [
           Positioned.fill(

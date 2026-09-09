@@ -25,11 +25,23 @@ class CardOwnershipController {
 
   final Ref _ref;
 
+  /// [listId] names the portfolio the caller picked. Each list is a shelf of
+  /// its own, so copies filed into one stay there and the main collection —
+  /// `user_cards` — is only written when the main collection is what was
+  /// chosen.
+  ///
+  /// The destination only applies on the way in. A negative [delta] is always
+  /// the main collection's, since that's the count the card-detail stepper
+  /// works against; a list gives cards back through `removeCardsFromList`.
   Future<String?> adjustQuantity({
     required String userId,
     required int cardId,
     required int delta,
+    String? listId,
   }) async {
+    if (listId != null && delta > 0) {
+      return _storeInList(listId, {cardId: delta});
+    }
     final error = await _ref
         .read(expansionsRepositoryProvider)
         .upsertUserCard(userId: userId, cardId: cardId, delta: delta);
@@ -37,18 +49,94 @@ class CardOwnershipController {
     return error;
   }
 
+  /// Stores copies of several cards in one portfolio — the scanner's "add
+  /// everything I just scanned" case.
+  ///
+  /// Returns the cards that didn't land, so a caller can keep them and let
+  /// the user retry rather than losing them. A list takes the whole batch in
+  /// one write, so it all lands or none of it does; the main collection is a
+  /// call per card, which is the only shape `upsert_user_card` offers.
+  Future<Set<int>> addCopies({
+    required String userId,
+    required Map<int, int> quantityByCardId,
+    String? listId,
+  }) async {
+    if (listId != null) {
+      final error = await _storeInList(listId, quantityByCardId);
+      return error == null ? const {} : quantityByCardId.keys.toSet();
+    }
+    final failed = <int>{};
+    for (final entry in quantityByCardId.entries) {
+      final error = await adjustQuantity(
+        userId: userId,
+        cardId: entry.key,
+        delta: entry.value,
+      );
+      if (error != null) failed.add(entry.key);
+    }
+    return failed;
+  }
+
+  /// Sets how many copies of a card a list holds — the list's answer to
+  /// editing a quantity in the collection grid.
+  Future<String?> setListCardQuantity({
+    required String listId,
+    required int cardId,
+    required int quantity,
+  }) async {
+    final error = await _ref
+        .read(portfolioRepositoryProvider)
+        .setListCardQuantity(
+          listId: listId,
+          cardId: cardId,
+          quantity: quantity,
+        );
+    if (error == null) _revalidateList(listId);
+    return error;
+  }
+
   /// Ports `handleBulkAdd` on the pack detail page — adds one copy of every
-  /// card the user doesn't already own.
+  /// card the user doesn't already own. With a [listId] the copies go to that
+  /// list instead, on the same terms as [adjustQuantity].
   Future<({int count, String? error})> bulkAddToCollection({
     required String userId,
     required List<int> cardIds,
+    String? listId,
   }) async {
+    if (listId != null) {
+      // `addCardsToList` rather than `addCopiesToList`: "add every card in
+      // this pack" means make sure each one is on the shelf, not stack
+      // another copy onto the ones already there.
+      final result = await _ref
+          .read(portfolioRepositoryProvider)
+          .addCardsToList(listId: listId, cardIds: cardIds);
+      if (result.error == null) _revalidateList(listId);
+      return result;
+    }
     final result = await _ref
         .read(expansionsRepositoryProvider)
         .bulkUpsertUserCards(userId: userId, cardIds: cardIds, delta: 1);
     // Revalidated even on a partial failure: `count` copies did land.
     _revalidateBulkOwnership(cardIds);
     return result;
+  }
+
+  Future<String?> _storeInList(
+    String listId,
+    Map<int, int> quantityByCardId,
+  ) async {
+    final error = await _ref
+        .read(portfolioRepositoryProvider)
+        .addCopiesToList(listId: listId, quantityByCardId: quantityByCardId);
+    if (error == null) _revalidateList(listId);
+    return error;
+  }
+
+  /// Refreshes what reads a list — its own card grid, and the card-count
+  /// badge every list row shows.
+  void _revalidateList(String listId) {
+    _ref.invalidate(listCardsProvider(listId));
+    _ref.invalidate(listsProvider);
   }
 
   /// Ports `handleBulkRemove`. `bulk_remove_user_cards` also clears the

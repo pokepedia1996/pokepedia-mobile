@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/deck_model.dart';
+import '../../../shared/utils/card_pricing.dart';
 import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
 import 'models/wantlist_model.dart';
@@ -53,10 +54,13 @@ class PortfolioRepository {
         .select('quantity, cards!inner($_cardColumns)')
         .eq('user_id', userId)
         .gt('quantity', 0);
-    return rows.map((r) {
+    final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       return card.copyWith(owned: r['quantity'] as int);
     }).toList();
+    // `cards` carries no price, so an unpriced collection made every tile
+    // blank and every total zero. One batch call covers the whole thing.
+    return priceCards(_client, cards);
   }
 
   /// Ports `fetchUserDecks` (`lib/products/decks.ts`) — card count is the
@@ -250,7 +254,9 @@ class PortfolioRepository {
         .from('cards')
         .select(_cardColumns)
         .inFilter('id', cardIds.toList());
-    return rows.map((r) => CardModel.fromRow(r)).toList();
+    // The wishlist draws the same tiles as the collection, so it prices the
+    // same way — otherwise half the app's cards show a value and half don't.
+    return priceCards(_client, rows.map(CardModel.fromRow).toList());
   }
 
   /// Ports `add_card_wishlist`/`remove_card_wishlist` — same RPCs
@@ -485,33 +491,111 @@ class PortfolioRepository {
         .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
         .eq('list_id', listId)
         .order('created_at', ascending: true);
-    return rows.map((r) {
+    final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       // The list's own quantity, not an ownership count — the detail grid
       // reads it the same way the collection shows copies held.
       return card.copyWith(owned: (r['quantity'] as num?)?.toInt() ?? 1);
     }).toList();
+    return priceCards(_client, cards);
   }
 
-  /// Adds cards to a list, skipping any already in it — `list_cards` is
-  /// unique on `(list_id, card_id)`, so a re-add is a no-op rather than an
-  /// error.
-  Future<String?> addCardsToList({
+  /// Puts cards on a list's shelf at one copy each, leaving any already
+  /// there at the quantity they have. Returns how many were actually new, so
+  /// a caller can say what it did rather than what it asked for.
+  ///
+  /// Membership is read first rather than leaning on `ignoreDuplicates`:
+  /// the skipped rows are exactly the difference between the two counts, and
+  /// an upsert doesn't report them.
+  Future<({int count, String? error})> addCardsToList({
     required String listId,
     required List<int> cardIds,
   }) async {
-    if (cardIds.isEmpty) return null;
+    if (cardIds.isEmpty) return (count: 0, error: null);
     try {
-      await _client
+      final existing = await _client
           .from('list_cards')
-          .upsert(
-            [
-              for (final cardId in cardIds)
-                {'list_id': listId, 'card_id': cardId, 'quantity': 1},
-            ],
-            onConflict: 'list_id,card_id',
-            ignoreDuplicates: true,
-          );
+          .select('card_id')
+          .eq('list_id', listId)
+          .inFilter('card_id', cardIds);
+      final held = {
+        for (final row in existing) (row['card_id'] as num).toInt(),
+      };
+      final fresh = cardIds.where((id) => !held.contains(id)).toList();
+      if (fresh.isEmpty) return (count: 0, error: null);
+
+      await _client.from('list_cards').insert([
+        for (final cardId in fresh)
+          {'list_id': listId, 'card_id': cardId, 'quantity': 1},
+      ]);
+      return (count: fresh.length, error: null);
+    } on PostgrestException catch (e) {
+      return (count: 0, error: e.message);
+    }
+  }
+
+  /// Stores copies of cards in a list, adding to whatever quantity is
+  /// already there.
+  ///
+  /// A list holds its own cards rather than pointing at the main collection,
+  /// so this is how many copies live on that shelf. `list_cards` is unique on
+  /// `(list_id, card_id)`, and Postgrest's upsert overwrites a value instead
+  /// of incrementing it, so the current quantities are read first and the
+  /// sums written back.
+  Future<String?> addCopiesToList({
+    required String listId,
+    required Map<int, int> quantityByCardId,
+  }) async {
+    if (quantityByCardId.isEmpty) return null;
+    final cardIds = quantityByCardId.keys.toList();
+    try {
+      final existing = await _client
+          .from('list_cards')
+          .select('card_id, quantity')
+          .eq('list_id', listId)
+          .inFilter('card_id', cardIds);
+      final held = {
+        for (final row in existing)
+          (row['card_id'] as num).toInt():
+              (row['quantity'] as num?)?.toInt() ?? 0,
+      };
+
+      await _client.from('list_cards').upsert([
+        for (final entry in quantityByCardId.entries)
+          {
+            'list_id': listId,
+            'card_id': entry.key,
+            'quantity': (held[entry.key] ?? 0) + entry.value,
+          },
+      ], onConflict: 'list_id,card_id');
+      return null;
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Sets how many copies of a card the list holds, dropping the row when
+  /// that reaches zero — the list equivalent of editing a quantity in the
+  /// collection grid.
+  Future<String?> setListCardQuantity({
+    required String listId,
+    required int cardId,
+    required int quantity,
+  }) async {
+    try {
+      if (quantity < 1) {
+        await _client
+            .from('list_cards')
+            .delete()
+            .eq('list_id', listId)
+            .eq('card_id', cardId);
+        return null;
+      }
+      await _client.from('list_cards').upsert({
+        'list_id': listId,
+        'card_id': cardId,
+        'quantity': quantity,
+      }, onConflict: 'list_id,card_id');
       return null;
     } on PostgrestException catch (e) {
       return e.message;

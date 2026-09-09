@@ -165,7 +165,7 @@ class ProposalsRepository {
                 .from('bid_proposals')
                 .select(
                   'slug, status, proposed_quantity, proposed_price, condition,'
-                  'message, created_at, expires_at,'
+                  'message, photos, seen_at, created_at, expires_at,'
                   'bid:listings!inner(id, price, user_id,'
                   'cards!inner($_cardColumns))',
                 )

@@ -33,9 +33,20 @@ class ExpansionsPage extends ConsumerStatefulWidget {
   ConsumerState<ExpansionsPage> createState() => _ExpansionsPageState();
 }
 
+/// How many expansions a series shows before asking to be opened.
+///
+/// A long series runs to twenty-odd packs, and stacking every one of them
+/// turns the page into a scroll with no shape — the series after it are
+/// effectively unreachable.
+const _packsPerSeries = 6;
+
 class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
   PackSortOption _sortBy = PackSortOption.newest;
   CardViewMode _viewMode = CardViewMode.grid;
+
+  /// Series the reader has opened up. Held here rather than per-section so
+  /// it survives the list rebuilding as sort and view mode change.
+  final _expandedSeries = <String>{};
 
   @override
   Widget build(BuildContext context) {
@@ -111,12 +122,69 @@ class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
           const SizedBox(height: 20),
           _SeriesHeader(group: group),
           const SizedBox(height: 12),
-          _PackCollection(
-            packs: sortPacks(group.packs, _sortBy),
-            viewMode: _viewMode,
-          ),
+          ..._seriesSection(group),
         ],
       ],
+    );
+  }
+
+  /// One series' packs, capped at [_packsPerSeries] until it is opened.
+  List<Widget> _seriesSection(SeriesGroup group) {
+    final packs = sortPacks(group.packs, _sortBy);
+    final expanded = _expandedSeries.contains(group.series);
+    final hidden = packs.length - _packsPerSeries;
+
+    return [
+      _PackCollection(
+        packs: expanded ? packs : packs.take(_packsPerSeries).toList(),
+        viewMode: _viewMode,
+      ),
+      if (hidden > 0) ...[
+        const SizedBox(height: 4),
+        _SeriesShowAll(
+          expanded: expanded,
+          hidden: hidden,
+          onToggle: () => setState(() {
+            if (!_expandedSeries.remove(group.series)) {
+              _expandedSeries.add(group.series);
+            }
+          }),
+        ),
+      ],
+    ];
+  }
+}
+
+/// The "Lihat semua" control under a truncated series.
+class _SeriesShowAll extends StatelessWidget {
+  const _SeriesShowAll({
+    required this.expanded,
+    required this.hidden,
+    required this.onToggle,
+  });
+
+  final bool expanded;
+  final int hidden;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Align(
+      alignment: Alignment.center,
+      child: TextButton.icon(
+        onPressed: onToggle,
+        icon: Icon(
+          expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+          size: 16,
+        ),
+        // The count is the reason to tap: "Lihat semua" alone doesn't say
+        // whether it hides two expansions or twenty.
+        label: Text(
+          expanded ? 'Tampilkan lebih sedikit' : 'Lihat semua ($hidden lagi)',
+        ),
+        style: TextButton.styleFrom(foregroundColor: colors.primary),
+      ),
     );
   }
 }
@@ -234,6 +302,13 @@ class _SortButton extends StatelessWidget {
   }
 }
 
+/// The box every series wordmark is drawn into.
+///
+/// Wide enough for a long logo to stay legible, narrow enough that it can't
+/// crowd out the series name beside it.
+const _seriesLogoWidth = 104.0;
+const _seriesLogoHeight = 48.0;
+
 /// The series wordmark (when the series has one) beside its name and counts.
 class _SeriesHeader extends StatelessWidget {
   const _SeriesHeader({required this.group});
@@ -249,11 +324,21 @@ class _SeriesHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (image != null) ...[
-          Image.network(
-            image,
-            height: 56,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          // A fixed box, not a fixed height: these wordmarks range from
+          // roughly square to very wide, and with only the height pinned a
+          // long one (Matahari & Bulan) ran away with the row and squeezed
+          // the series name into a couple of characters. `contain` inside a
+          // set box means every series header is the same size whatever the
+          // logo's proportions.
+          SizedBox(
+            width: _seriesLogoWidth,
+            height: _seriesLogoHeight,
+            child: Image.network(
+              image,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           ),
           const SizedBox(width: 12),
         ],

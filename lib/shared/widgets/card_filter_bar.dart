@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'app_search_field.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
@@ -26,6 +27,8 @@ class CardFilterBar extends StatefulWidget {
     this.ownershipFilter,
     this.onOwnershipChanged,
     this.showSearch = true,
+    this.optionsOverride,
+    this.sortOptions = cardSortOptionsWithinPack,
   });
 
   final List<CardModel> cards;
@@ -45,6 +48,17 @@ class CardFilterBar extends StatefulWidget {
   /// isn't asked for twice on one screen.
   final bool showSearch;
 
+  /// Web's `optionsOverride`. Facets are normally derived from [cards], which
+  /// is right for a list that is all there — but a page that filters
+  /// server-side gets back only what already matches, so deriving from it
+  /// would leave the seller unable to switch to any other value. Pass the
+  /// catalog's own options there.
+  final CardFilterOptions? optionsOverride;
+
+  /// Which sorts to offer. Defaults to the within-one-pack set; a list that
+  /// spans expansions passes [CardSortOption.values].
+  final List<CardSortOption> sortOptions;
+
   @override
   State<CardFilterBar> createState() => _CardFilterBarState();
 }
@@ -54,7 +68,8 @@ class _CardFilterBarState extends State<CardFilterBar> {
 
   @override
   Widget build(BuildContext context) {
-    final options = deriveCardFilterOptions(widget.cards);
+    final options =
+        widget.optionsOverride ?? deriveCardFilterOptions(widget.cards);
     final ownershipActive =
         widget.ownershipFilter != null &&
         widget.ownershipFilter != OwnershipFilter.all;
@@ -79,7 +94,11 @@ class _CardFilterBarState extends State<CardFilterBar> {
               onTap: () => setState(() => _panelOpen = !_panelOpen),
             ),
             const Spacer(),
-            _SortButton(sortBy: widget.sortBy, onChanged: widget.onSortChanged),
+            _SortButton(
+              sortBy: widget.sortBy,
+              options: widget.sortOptions,
+              onChanged: widget.onSortChanged,
+            ),
             const SizedBox(width: 8),
             ViewModeToggle(
               value: widget.viewMode,
@@ -246,16 +265,11 @@ class CardSearchField extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.hintText = 'Cari koleksimu',
-    this.dense = false,
   });
 
   final String value;
   final ValueChanged<String> onChanged;
   final String hintText;
-
-  /// A shorter box for pages that keep it permanently on screen. Still 40dp
-  /// tall — under that it stops being a comfortable tap target.
-  final bool dense;
 
   @override
   State<CardSearchField> createState() => _CardSearchFieldState();
@@ -274,41 +288,18 @@ class _CardSearchFieldState extends State<CardSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    final field = TextField(
+    // AppSearchField already stands 40 tall and carries its own clear
+    // button, so the old dense/roomy split and hand-rolled suffix are gone:
+    // one search bar, the same everywhere.
+    final field = AppSearchField(
+      hintText: widget.hintText,
       controller: _controller,
       onChanged: widget.onChanged,
-      textInputAction: TextInputAction.search,
-      style: widget.dense
-          ? AppTypography.bodySm(context.appColors.onSurface)
-          : null,
-      decoration: InputDecoration(
-        hintText: widget.hintText,
-        isDense: widget.dense,
-        contentPadding: widget.dense
-            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-            : null,
-        prefixIcon: Icon(LucideIcons.search, size: widget.dense ? 18 : 20),
-        prefixIconConstraints: widget.dense
-            ? const BoxConstraints(minWidth: 36, minHeight: 36)
-            : null,
-        suffixIcon: widget.value.isNotEmpty
-            ? IconButton(
-                icon: Icon(LucideIcons.x, size: widget.dense ? 16 : 18),
-                visualDensity: widget.dense ? VisualDensity.compact : null,
-                onPressed: () {
-                  _controller.clear();
-                  widget.onChanged('');
-                },
-              )
-            : null,
-      ),
     );
 
     // A fixed floor rather than letting the padding decide: the box shrinks,
     // the thing you have to hit doesn't.
-    return widget.dense
-        ? SizedBox(height: 40, child: Center(child: field))
-        : field;
+    return field;
   }
 }
 
@@ -388,9 +379,14 @@ class _FilterToggleButton extends StatelessWidget {
 }
 
 class _SortButton extends StatelessWidget {
-  const _SortButton({required this.sortBy, required this.onChanged});
+  const _SortButton({
+    required this.sortBy,
+    required this.options,
+    required this.onChanged,
+  });
 
   final CardSortOption sortBy;
+  final List<CardSortOption> options;
   final ValueChanged<CardSortOption> onChanged;
 
   @override
@@ -402,7 +398,7 @@ class _SortButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       itemBuilder: (context) => [
-        for (final option in CardSortOption.values)
+        for (final option in options)
           PopupMenuItem(
             value: option,
             child: Row(

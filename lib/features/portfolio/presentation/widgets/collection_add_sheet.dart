@@ -1,3 +1,4 @@
+import '../../../../shared/widgets/app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/portfolio_notifier.dart';
+import 'add_destination_sheet.dart';
 
 /// Minimum query length before the picker searches, matching
 /// `searchCardsPicker`'s own guard on the web.
@@ -79,10 +81,22 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
     );
     if (quantity == null || quantity < 1 || !mounted) return;
 
+    final destination = await showAddDestinationSheet(
+      context,
+      ref,
+      subtitle: '${card.name} ×$quantity',
+    );
+    if (destination == null || !mounted) return;
+
     setState(() => _addingCardId = card.id);
     final error = await ref
         .read(cardOwnershipControllerProvider)
-        .adjustQuantity(userId: user.id, cardId: card.id, delta: quantity);
+        .adjustQuantity(
+          userId: user.id,
+          cardId: card.id,
+          delta: quantity,
+          listId: destination.listId,
+        );
     if (!mounted) return;
     setState(() => _addingCardId = null);
 
@@ -97,7 +111,10 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content: Text('${card.name} ×$quantity ditambahkan'),
+          content: Text(
+            '${card.name} ×$quantity ditambahkan ke '
+            '${portfolioDestinationLabel(destination)}',
+          ),
           duration: const Duration(seconds: 2),
           persist: false,
         ),
@@ -149,15 +166,11 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                  child: TextField(
+                  child: AppSearchField(
+                    hintText: 'Cari nama kartu...',
                     controller: _controller,
                     autofocus: true,
                     onChanged: _onSearchChanged,
-                    decoration: const InputDecoration(
-                      hintText: 'Cari nama kartu...',
-                      isDense: true,
-                      prefixIcon: Icon(LucideIcons.search, size: 20),
-                    ),
                   ),
                 ),
                 Flexible(

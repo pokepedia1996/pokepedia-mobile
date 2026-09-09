@@ -203,6 +203,11 @@ int rarityRank(String rarity) => _rarityOrder[rarity] ?? 0x7fffffff;
 /// Ports `CARD_SORT_OPTIONS`/`PACK_DETAIL_SORT_OPTIONS` + `sortCards` from
 /// `lib/utils/constants.ts` / `lib/utils/sorting.ts`.
 enum CardSortOption {
+  /// Newest expansion first. Meaningless inside one pack, which is why
+  /// `PACK_DETAIL_SORT_OPTIONS` drops this pair on web — see
+  /// [cardSortOptionsWithinPack].
+  setDesc,
+  setAsc,
   numberAsc,
   numberDesc,
   nameAsc,
@@ -213,8 +218,23 @@ enum CardSortOption {
   priceDesc,
 }
 
+/// `PACK_DETAIL_SORT_OPTIONS` — everything except the two that order by
+/// expansion, for lists that are already one expansion.
+const cardSortOptionsWithinPack = [
+  CardSortOption.numberAsc,
+  CardSortOption.numberDesc,
+  CardSortOption.nameAsc,
+  CardSortOption.nameDesc,
+  CardSortOption.rarityAsc,
+  CardSortOption.rarityDesc,
+  CardSortOption.priceAsc,
+  CardSortOption.priceDesc,
+];
+
 extension CardSortOptionX on CardSortOption {
   String get label => switch (this) {
+    CardSortOption.setDesc => 'Terbaru',
+    CardSortOption.setAsc => 'Terlama',
     CardSortOption.numberAsc => 'Nomor ↑',
     CardSortOption.numberDesc => 'Nomor ↓',
     CardSortOption.nameAsc => 'Nama A-Z',
@@ -224,12 +244,34 @@ extension CardSortOptionX on CardSortOption {
     CardSortOption.priceAsc => 'Termurah',
     CardSortOption.priceDesc => 'Termahal',
   };
+
+  /// The `p_sort` value the catalog RPCs take — web's `CARD_SORT_OPTIONS`
+  /// values, which its search route allowlists one for one.
+  String get raw => switch (this) {
+    CardSortOption.setDesc => 'set-desc',
+    CardSortOption.setAsc => 'set-asc',
+    CardSortOption.numberAsc => 'number-asc',
+    CardSortOption.numberDesc => 'number-desc',
+    CardSortOption.nameAsc => 'name-asc',
+    CardSortOption.nameDesc => 'name-desc',
+    CardSortOption.rarityAsc => 'rarity-asc',
+    CardSortOption.rarityDesc => 'rarity-desc',
+    CardSortOption.priceAsc => 'price-asc',
+    CardSortOption.priceDesc => 'price-desc',
+  };
 }
 
 List<CardModel> sortCards(List<CardModel> cards, CardSortOption sortBy) {
   final result = [...cards];
   result.sort((a, b) {
     switch (sortBy) {
+      // Only a fallback: the screens that offer these sort server-side, where
+      // the release date lives. Expansion code is the closest thing a loaded
+      // card carries.
+      case CardSortOption.setDesc:
+        return compareNatural(b.expansionCode, a.expansionCode);
+      case CardSortOption.setAsc:
+        return compareNatural(a.expansionCode, b.expansionCode);
       case CardSortOption.nameAsc:
         return a.name.compareTo(b.name);
       case CardSortOption.nameDesc:

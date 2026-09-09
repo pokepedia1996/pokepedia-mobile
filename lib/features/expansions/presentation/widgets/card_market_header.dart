@@ -28,7 +28,6 @@ class CardMarketHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
     final headlineAsync = ref.watch(marketHeadlineProvider(card.id));
     final fallbackAsync = ref.watch(cardMarketPriceProvider(card.id));
 
@@ -41,8 +40,10 @@ class CardMarketHeader extends ConsumerWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 8,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (headlineAsync.isLoading || fallbackAsync.isLoading)
@@ -52,11 +53,10 @@ class CardMarketHeader extends ConsumerWidget {
                   headline: headlineAsync.valueOrNull,
                   fallback: fallbackAsync.valueOrNull,
                 ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               WishlistButton(cardId: card.id),
             ],
           ),
-          const SizedBox(width: 12),
           // Inside the same box as the price: bidding or asking is a
           // response to that number, not a separate piece of furniture.
           PlaceOrderButtons(card: card),
@@ -115,7 +115,7 @@ class _Headline extends StatelessWidget {
         children: [
           Text(
             formatRupiah(fallback.price),
-            style: AppTypography.h2(context.mutedForeground),
+            style: AppTypography.h2(colors.onSurface),
           ),
           if (fallback.source == CardPriceSource.ask)
             _SourceTag(

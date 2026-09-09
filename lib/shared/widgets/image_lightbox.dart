@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../shared/widgets/shimmer_box.dart';
 
 /// Ports `components/ui/image-lightbox.tsx` — a fullscreen dark overlay
 /// showing [imageUrl] pinch-zoomable via [InteractiveViewer], dismissible
@@ -41,6 +42,14 @@ class _ImageLightbox extends StatelessWidget {
         : Image.network(
             imageUrl!,
             fit: BoxFit.contain,
+            // Full-size art over a slow connection is the longest wait in
+            // the app; a card-shaped shimmer says it is coming.
+            loadingBuilder: (context, child, progress) => progress == null
+                ? child
+                : const AspectRatio(
+                    aspectRatio: 245 / 342,
+                    child: ShimmerBox(),
+                  ),
             errorBuilder: (context, error, stackTrace) =>
                 Image.asset('assets/images/backcard.webp', fit: BoxFit.contain),
           );

@@ -9,14 +9,18 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/formatters.dart';
+import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/card_filter_bar.dart';
+import '../../../shared/widgets/card_grid_item.dart';
+import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
-import 'users_search_page.dart' show ContributorBadge;
 
 /// How many cards each expansion shows before "Lihat Semua", matching web's
 /// `CARDS_PER_EXPANSION`.
@@ -35,9 +39,13 @@ class UserProfilePage extends ConsumerStatefulWidget {
 }
 
 class _UserProfilePageState extends ConsumerState<UserProfilePage> {
-  String _search = '';
+  CardFilters _filters = const CardFilters();
+
+  /// Most valuable first, as the Koleksi page opens — a profile is read as a
+  /// portfolio, and what it is worth is the question it answers.
+  CardSortOption _sortBy = CardSortOption.priceDesc;
+  CardViewMode _viewMode = CardViewMode.grid;
   bool _savingVisibility = false;
-  bool _savingQuantity = false;
 
   Future<void> _toggleProfileFlag({
     required String column,
@@ -64,27 +72,6 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     }
     ref.invalidate(userProfileProvider(widget.username));
     messenger.showSnackBar(SnackBar(content: Text(value ? onLabel : offLabel)));
-  }
-
-  /// Web's collection search: matches card name, number, rarity, expansion
-  /// code or expansion name, dropping expansions with no remaining cards.
-  List<CollectionExpansionGroup> _filter(
-    List<CollectionExpansionGroup> collection,
-  ) {
-    final query = _search.trim().toLowerCase();
-    if (query.isEmpty) return collection;
-    final out = <CollectionExpansionGroup>[];
-    for (final expansion in collection) {
-      final cards = expansion.cards.where((card) {
-        return card.name.toLowerCase().contains(query) ||
-            card.number.toLowerCase().contains(query) ||
-            (card.rarity?.toLowerCase().contains(query) ?? false) ||
-            expansion.slug.contains(query) ||
-            expansion.expansionName.toLowerCase().contains(query);
-      }).toList();
-      if (cards.isNotEmpty) out.add(expansion.withCards(cards));
-    }
-    return out;
   }
 
   @override
@@ -120,14 +107,17 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
               userContributionsProvider(widget.username),
             );
             final collection = collectionAsync.valueOrNull ?? const [];
-            final filtered = _filter(collection);
+            final visible = sortCards(
+              applyCardFilters(collection, _filters),
+              _sortBy,
+            );
             final totalOwned = collection.fold<int>(
               0,
-              (sum, e) => sum + e.ownedCount,
+              (sum, card) => sum + card.owned,
             );
-            final filteredOwned = filtered.fold<int>(
+            final totalValue = collection.fold<int>(
               0,
-              (sum, e) => sum + e.ownedCount,
+              (sum, card) => sum + (card.marketPrice ?? 0) * card.owned,
             );
             final contributions = contributionsAsync.valueOrNull ?? const [];
 
@@ -137,44 +127,27 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                 _ProfileHeader(profile: profile, isOwner: isOwner),
                 if (isOwner) ...[
                   const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      _PrivacyToggle(
-                        icon: profile.isCollectionPublic
-                            ? LucideIcons.eye
-                            : LucideIcons.eyeOff,
-                        label: 'Koleksi Publik',
-                        value: profile.isCollectionPublic,
-                        disabled: _savingVisibility,
-                        onChanged: (next) => _toggleProfileFlag(
-                          column: 'is_collection_public',
-                          value: next,
-                          onLabel: 'Koleksi sekarang publik',
-                          offLabel: 'Koleksi sekarang privat',
-                          setSaving: (v) => _savingVisibility = v,
-                        ),
-                      ),
-                      if (profile.isCollectionPublic) ...[
-                        const SizedBox(width: 16),
-                        _PrivacyToggle(
-                          icon: LucideIcons.tag,
-                          label: 'Jumlah',
-                          value: profile.showCollectionQuantity,
-                          disabled: _savingQuantity,
-                          onChanged: (next) => _toggleProfileFlag(
-                            column: 'show_collection_quantity',
-                            value: next,
-                            onLabel: 'Jumlah kartu ditampilkan',
-                            offLabel: 'Jumlah kartu disembunyikan',
-                            setSaving: (v) => _savingQuantity = v,
-                          ),
-                        ),
-                      ],
-                    ],
+                  _PrivacyToggle(
+                    icon: profile.isCollectionPublic
+                        ? LucideIcons.eye
+                        : LucideIcons.eyeOff,
+                    label: 'Koleksi Publik',
+                    value: profile.isCollectionPublic,
+                    disabled: _savingVisibility,
+                    onChanged: (next) => _toggleProfileFlag(
+                      column: 'is_collection_public',
+                      value: next,
+                      onLabel: 'Koleksi sekarang publik',
+                      offLabel: 'Koleksi sekarang privat',
+                      setSaving: (v) => _savingVisibility = v,
+                    ),
                   ),
                 ],
-                const SizedBox(height: 24),
-                Text('Koleksi', style: AppTypography.h3(colors.onSurface)),
+                const SizedBox(height: 20),
+
+                // The portfolio block: what the collection is worth, then
+                // the same browser and grid the Koleksi page uses, so one
+                // person's shelf reads the same wherever it is opened.
                 if (!profile.isCollectionPublic && !isOwner)
                   const _NoticeBox(
                     icon: LucideIcons.lock,
@@ -188,34 +161,49 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                 else if (collection.isEmpty)
                   const _NoticeBox(message: 'Pengguna ini belum memiliki kartu')
                 else ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    filteredOwned == totalOwned
-                        ? '$totalOwned kartu dari ${collection.length} ekspansi'
-                        : '$filteredOwned dari $totalOwned kartu',
-                    style: AppTypography.bodySm(context.mutedForeground),
+                  _PortfolioHeader(
+                    totalValue: totalValue,
+                    uniqueCards: collection.length,
+                    totalOwned: totalOwned,
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    onChanged: (value) => setState(() => _search = value),
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Cari nama, nomor, ekspansi, atau kelangkaan...',
-                      prefixIcon: Icon(LucideIcons.search, size: 20),
-                    ),
+                  CardFilterBar(
+                    cards: collection,
+                    filters: _filters,
+                    onFiltersChanged: (f) => setState(() => _filters = f),
+                    sortBy: _sortBy,
+                    onSortChanged: (s) => setState(() => _sortBy = s),
+                    viewMode: _viewMode,
+                    onViewModeChanged: (v) => setState(() => _viewMode = v),
                   ),
                   const SizedBox(height: 16),
-                  if (filtered.isEmpty)
+                  if (visible.isEmpty)
                     const _NoticeBox(
                       message: 'Tidak ada kartu yang sesuai filter.',
                     )
+                  else if (_viewMode == CardViewMode.grid)
+                    GridView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: cardGridDelegate(context),
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) => CardGridItem(
+                        card: visible[i],
+                        onTap: () => context.push(
+                          Routes.cardDetail(visible[i].packSlug, visible[i].id),
+                        ),
+                      ),
+                    )
                   else
-                    for (final expansion in filtered)
+                    for (final card in visible)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _ExpansionGroup(
-                          expansion: expansion,
-                          showQuantity: profile.showCollectionQuantity,
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: CardListItem(
+                          card: card,
+                          onTap: () => context.push(
+                            Routes.cardDetail(card.packSlug, card.id),
+                          ),
                         ),
                       ),
                 ],
@@ -244,15 +232,73 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
   }
 }
 
-class _ProfileHeader extends StatelessWidget {
+/// "Portofolio · Rp1.270.000" — what the collection under it is worth, in
+/// the shape the Koleksi page states it.
+class _PortfolioHeader extends StatelessWidget {
+  const _PortfolioHeader({
+    required this.totalValue,
+    required this.uniqueCards,
+    required this.totalOwned,
+  });
+
+  final int totalValue;
+  final int uniqueCards;
+  final int totalOwned;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Portofolio', style: AppTypography.h3(colors.onSurface)),
+              const SizedBox(height: 2),
+              Text(
+                '$uniqueCards kartu unik · $totalOwned total',
+                style: AppTypography.caption(context.mutedForeground),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'Total nilai',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              // "Rp–" rather than Rp0 when nothing is priced, the same way
+              // the Koleksi page puts it.
+              totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
+              style: AppTypography.bodySemibold(colors.onSurface),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileHeader extends ConsumerWidget {
   const _ProfileHeader({required this.profile, required this.isOwner});
 
   final PublicProfile profile;
   final bool isOwner;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
+    final shop = ref.watch(profileShopProvider(profile.username)).valueOrNull;
+    final stats = ref
+        .watch(profileFollowStatsProvider(profile.username))
+        .valueOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -276,13 +322,13 @@ class _ProfileHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.h2(colors.onSurface),
                   ),
-                  if (profile.contributionCount > 0) ...[
-                    const SizedBox(height: 4),
-                    ContributorBadge(
-                      count: profile.contributionCount,
-                      large: true,
-                    ),
-                  ],
+                  const SizedBox(height: 6),
+                  _ProfileStats(
+                    profile: profile,
+                    isOwner: isOwner,
+                    stats: stats,
+                    shopFollowers: shop?.followersCount,
+                  ),
                 ],
               ),
             ),
@@ -304,13 +350,20 @@ class _ProfileHeader extends StatelessWidget {
           _AddHint(label: 'Tambah media sosial'),
         ],
         const SizedBox(height: 14),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: () => context.push(Routes.storeDetail(profile.username)),
-            icon: const Icon(LucideIcons.store, size: 16),
-            label: const Text('Lihat toko'),
-          ),
+        Row(
+          children: [
+            // Only a shop can be followed, and never your own.
+            if (shop?.userId != null && !isOwner) ...[
+              _FollowButton(shopUserId: shop!.userId!),
+              const SizedBox(width: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: () =>
+                  context.push(Routes.storeDetail(profile.username)),
+              icon: const Icon(LucideIcons.store, size: 16),
+              label: const Text('Lihat toko'),
+            ),
+          ],
         ),
       ],
     );
@@ -319,6 +372,135 @@ class _ProfileHeader extends StatelessWidget {
 
 /// The muted "+ Tambah ..." prompt the owner sees in place of an empty bio
 /// or socials, linking into settings.
+/// The counts under the name: followers, what the owner follows, and the
+/// card images they have contributed.
+class _ProfileStats extends ConsumerWidget {
+  const _ProfileStats({
+    required this.profile,
+    required this.isOwner,
+    this.stats,
+    this.shopFollowers,
+  });
+
+  final PublicProfile profile;
+  final bool isOwner;
+
+  /// Both counts, straight from `get_profile_follow_stats`.
+  final ({String userId, int followers, int following})? stats;
+
+  /// The fallback follower count, off the shop row. Only used where the RPC
+  /// hasn't answered: it is the one number a client can see without it, and
+  /// only for a profile that has a shop.
+  final int? shopFollowers;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final counts = stats;
+    // Without the RPC, "how many does this person follow" is unknowable for
+    // anyone but yourself — `shop_follows` is select-own.
+    final followers = counts?.followers ?? shopFollowers;
+    final following =
+        counts?.following ??
+        (isOwner ? ref.watch(followingCountProvider) : null);
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 4,
+      children: [
+        if (followers != null) _Stat(label: 'Pengikut', value: followers),
+        if (following != null) _Stat(label: 'Mengikuti', value: following),
+        if (profile.contributionCount > 0)
+          _Stat(label: 'Kontribusi', value: profile.contributionCount),
+      ],
+    );
+  }
+}
+
+/// "12 Pengikut" — the number first, since that is what is being compared.
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$value',
+          style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: AppTypography.bodySm(context.mutedForeground)),
+      ],
+    );
+  }
+}
+
+/// Follow / Mengikuti, against the same RPCs the storefront uses.
+class _FollowButton extends ConsumerStatefulWidget {
+  const _FollowButton({required this.shopUserId});
+
+  final String shopUserId;
+
+  @override
+  ConsumerState<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends ConsumerState<_FollowButton> {
+  bool _busy = false;
+
+  Future<void> _toggle(bool following) async {
+    if (ref.read(authProvider).valueOrNull == null) {
+      context.push(Routes.login);
+      return;
+    }
+    setState(() => _busy = true);
+    final error = await ref
+        .read(followControllerProvider)
+        .setFollowing(shopUserId: widget.shopUserId, following: !following);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(error), persist: false));
+      return;
+    }
+    // The count on screen comes off the shop row, which the follow just
+    // moved.
+    ref.invalidate(profileShopProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final following =
+        ref.watch(isFollowingShopProvider(widget.shopUserId)).valueOrNull ??
+        false;
+    final icon = _busy
+        ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(following ? LucideIcons.check : LucideIcons.userPlus, size: 16);
+
+    return following
+        ? ElevatedButton.icon(
+            onPressed: _busy ? null : () => _toggle(following),
+            icon: icon,
+            label: const Text('Mengikuti'),
+          )
+        : OutlinedButton.icon(
+            onPressed: _busy ? null : () => _toggle(following),
+            icon: icon,
+            label: const Text('Ikuti'),
+          );
+  }
+}
+
 class _AddHint extends StatelessWidget {
   const _AddHint({required this.label});
 
@@ -468,174 +650,6 @@ class _PrivacyToggle extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ExpansionGroup extends StatefulWidget {
-  const _ExpansionGroup({required this.expansion, required this.showQuantity});
-
-  final CollectionExpansionGroup expansion;
-  final bool showQuantity;
-
-  @override
-  State<_ExpansionGroup> createState() => _ExpansionGroupState();
-}
-
-class _ExpansionGroupState extends State<_ExpansionGroup> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final expansion = widget.expansion;
-    final hasMore = expansion.cards.length > _cardsPerExpansion;
-    final visible = _expanded || !hasMore
-        ? expansion.cards
-        : expansion.cards.take(_cardsPerExpansion).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border.all(color: context.borderColor),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (expansion.packImage != null) ...[
-                InkWell(
-                  onTap: () => context.push(Routes.packDetail(expansion.slug)),
-                  child: Image.network(
-                    expansion.packImage!,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () =>
-                                context.push(Routes.packDetail(expansion.slug)),
-                            child: Text(
-                              expansion.expansionName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.bodySmSemibold(
-                                colors.onSurface,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${expansion.progressPercent}%',
-                          style: AppTypography.bodySmSemibold(colors.primary),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      '${expansion.ownedCount}/${expansion.totalCards} kartu',
-                      style: AppTypography.caption(context.mutedForeground),
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                      child: LinearProgressIndicator(
-                        value: expansion.progressPercent / 100,
-                        minHeight: 6,
-                        backgroundColor: colors.secondary,
-                        valueColor: AlwaysStoppedAnimation(colors.primary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            itemCount: visible.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 245 / 342,
-            ),
-            itemBuilder: (context, i) => _CollectionThumb(
-              card: visible[i],
-              packSlug: expansion.slug,
-              showQuantity: widget.showQuantity,
-            ),
-          ),
-          if (hasMore && !_expanded) ...[
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () => setState(() => _expanded = true),
-              child: Text(
-                'Lihat Semua (+${expansion.cards.length - _cardsPerExpansion} kartu)',
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CollectionThumb extends StatelessWidget {
-  const _CollectionThumb({
-    required this.card,
-    required this.packSlug,
-    required this.showQuantity,
-  });
-
-  final CollectionCardEntry card;
-  final String packSlug;
-  final bool showQuantity;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => context.push(Routes.cardDetail(packSlug, card.cardId)),
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: Stack(
-        children: [
-          CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.sm),
-          if (showQuantity && card.quantity > 1)
-            Positioned(
-              right: 2,
-              bottom: 2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: context.appColors.primary,
-                  borderRadius: BorderRadius.circular(AppRadius.full),
-                ),
-                child: Text(
-                  '×${card.quantity}',
-                  style: AppTypography.badge(Colors.white),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

@@ -56,7 +56,11 @@ void main() {
           'card_id': 1,
           'matched_quantity': 2,
           'match_price': 25000,
-          'status': 'in_escrow',
+          // The item, not the package row, is what bucketing reads — web's
+          // `bucketMatch` switches on `match.status`. A package claiming
+          // 'shipped' over an item still 'in_escrow' is a contradiction the
+          // old code never noticed because it only looked at the package.
+          'status': 'shipped',
           'created_at': '2026-08-01T00:00:00Z',
           'cards': {
             'id': 1,

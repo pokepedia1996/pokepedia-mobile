@@ -44,6 +44,13 @@ class NotificationPushNotifier extends Notifier<void> {
     await LocalPush.instance.init();
     _taps ??= LocalPush.instance.taps.listen(_openRoute);
 
+    // A tap that launched the app happened before this listener existed, so
+    // it is claimed rather than received. Only now, with the session known:
+    // pushing a chat route before auth resolves lands on a room the RLS
+    // policies can't yet see, which draws an empty conversation.
+    final launched = LocalPush.instance.takeLaunchRoute();
+    if (launched != null) _openRoute(launched);
+
     _channel?.unsubscribe();
     _channel = ref
         .read(supabaseClientProvider)

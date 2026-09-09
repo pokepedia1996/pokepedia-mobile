@@ -5,6 +5,7 @@ import '../../../core/utils/image_url.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
+import '../../../shared/utils/card_pricing.dart';
 import '../../../shared/models/pokemon_type.dart';
 import 'models/advanced_search_query.dart';
 import 'dart:convert';
@@ -397,7 +398,11 @@ class SearchRepository {
         .toList();
 
     return SearchPage(
-      cards: cards,
+      // `advanced_search_cards` returns the catalog row alone — it joins the
+      // price cache only to sort by it — so the page is priced here, the way
+      // web's client calls `useCardPricesByIds` over the ids it got back.
+      // Without it every result reads "Rp-" however well the card is priced.
+      cards: await priceCards(_client, cards),
       total: (rows.first['total_count'] as num?)?.toInt() ?? cards.length,
       hasNext: rows.first['has_next'] as bool? ?? false,
     );

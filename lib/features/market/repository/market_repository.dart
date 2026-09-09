@@ -232,8 +232,9 @@ class MarketRepository {
     required CardModel card,
     required StoreModel store,
   }) async {
-    if (store.userId == null)
+    if (store.userId == null) {
       return (listings: <ListingModel>[], otherSellersCount: 0);
+    }
     final sellerRows =
         await _client.rpc(
               'get_card_listings',
@@ -246,8 +247,9 @@ class MarketRepository {
               },
             )
             as List;
-    if (sellerRows.isEmpty)
+    if (sellerRows.isEmpty) {
       return (listings: <ListingModel>[], otherSellersCount: 0);
+    }
 
     final sellerTotal =
         ((sellerRows.first as Map<String, dynamic>)['total_count'] as num?)
@@ -286,6 +288,95 @@ class MarketRepository {
     return (
       listings: listings,
       otherSellersCount: (globalTotal - sellerTotal).clamp(0, globalTotal),
+    );
+  }
+
+  /// One WTB bid, by its listing slug — what the bid detail page is built
+  /// from.
+  ///
+  /// A direct read rather than one of the marketplace RPCs: none of them can
+  /// be asked for a single listing. `get_card_listings` is ask-only, and
+  /// `get_recent_marketplace_listings` filters to a seller rather than to a
+  /// slug. The card and the buyer's storefront row are fetched alongside it,
+  /// the same two-step every other listing query here does —
+  /// `listings.user_id` and `seller_profiles.user_id` both point at
+  /// `auth.users`, so PostgREST can't embed one in the other.
+  ///
+  /// The [CardModel] on the result is display-only, like the one
+  /// [ListingModel.fromMarketplaceRow] builds: enough for the artwork and
+  /// the title, not for the card's own detail sections. The page refetches
+  /// the full card by id for those.
+  Future<ListingModel?> fetchBidListing(String slug) async {
+    final row = await _client
+        .from('listings')
+        .select(
+          'id, slug, side, price, condition, quantity, qty_locked, '
+          'created_at, status, accepts_offers, variant_key, user_id, card_id',
+        )
+        .eq('slug', slug)
+        .eq('side', 'bid')
+        .maybeSingle();
+    if (row == null) return null;
+
+    final cardId = (row['card_id'] as num?)?.toInt();
+    if (cardId == null) return null;
+    final buyerId = row['user_id'] as String?;
+
+    final cardFuture = _client
+        .from('cards')
+        .select(
+          'id, name_id, expansion_code, collector_number, rarity, language, '
+          'variant, image_url',
+        )
+        .eq('id', cardId)
+        .maybeSingle();
+    // A bid can come from someone who has never sold anything, and they have
+    // no storefront row at all — so the buyer's identity is read from
+    // `profiles` too, and the shop's version of it only wins when there is
+    // one. `get_recent_marketplace_listings` joins both for the same reason;
+    // this is that join, done by hand for a single row.
+    final storeFuture = buyerId == null
+        ? Future<Map<String, dynamic>?>.value(null)
+        : _client
+              .from('seller_profiles')
+              .select(
+                'store_slug, store_name, is_verified, city_name, '
+                'store_logo_url',
+              )
+              .eq('user_id', buyerId)
+              .maybeSingle();
+    final profileFuture = buyerId == null
+        ? Future<Map<String, dynamic>?>.value(null)
+        : _client
+              .from('profiles')
+              .select('username, avatar_url')
+              .eq('id', buyerId)
+              .maybeSingle();
+
+    final cardRow = await cardFuture;
+    if (cardRow == null) return null;
+    final store = await storeFuture;
+    final profile = await profileFuture;
+
+    final storeName = store?['store_name'] as String?;
+    final username = profile?['username'] as String?;
+
+    return ListingModel.fromRow(
+      row,
+      card: CardModel.fromRow(cardRow),
+      storeSlug: store?['store_slug'] as String? ?? '',
+      // "Pembeli" only when the buyer has neither a shop nor a username —
+      // a deleted or half-registered account, not the common case it used
+      // to stand in for.
+      storeName: (storeName?.isNotEmpty ?? false)
+          ? storeName!
+          : (username?.isNotEmpty ?? false)
+          ? username!
+          : 'Pembeli',
+      isVerified: store?['is_verified'] as bool? ?? false,
+      cityName: store?['city_name'] as String? ?? '',
+      sellerAvatarUrl: profile?['avatar_url'] as String?,
+      storeLogoUrl: store?['store_logo_url'] as String?,
     );
   }
 
@@ -370,4 +461,52 @@ class MarketRepository {
       feedbackScore: positiveTotal - negativeTotal,
     );
   }
+
+  /// Ports `POST /api/listing-reports`.
+  ///
+  /// That route is a thin wrapper around the `report_listing` RPC, which is
+  /// granted to `authenticated` — so the app calls the RPC straight rather
+  /// than routing through the website for a check the database already does.
+  ///
+  /// The RPC raises its refusals as P0001 with a bare code in the message;
+  /// they become the same sentences the web route returns.
+  Future<void> reportListing({
+    required int listingId,
+    required String reasonCategory,
+    String? details,
+  }) async {
+    final trimmed = details?.trim();
+    try {
+      await _client.rpc(
+        'report_listing',
+        params: {
+          'p_order_id': listingId,
+          'p_reason_category': reasonCategory,
+          'p_details': (trimmed == null || trimmed.isEmpty) ? null : trimmed,
+        },
+      );
+    } on PostgrestException catch (e) {
+      throw ListingReportException(_reportMessage(e.message));
+    }
+  }
+
+  static String _reportMessage(String raw) {
+    if (raw.contains('self_report')) {
+      return 'Tidak bisa melaporkan listing sendiri.';
+    }
+    if (raw.contains('no_session')) return 'Masuk dulu untuk melaporkan.';
+    if (raw.contains('not_found')) return 'Listing tidak ditemukan.';
+    if (raw.contains('invalid_reason')) return 'Alasan laporan tidak valid.';
+    return 'Gagal mengirim laporan.';
+  }
+}
+
+/// A refusal from `report_listing`, already worded for the user.
+class ListingReportException implements Exception {
+  const ListingReportException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

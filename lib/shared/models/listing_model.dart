@@ -157,6 +157,7 @@ class ListingModel {
       status: ListingStatusX.fromRaw(row['status'] as String?),
       acceptsOffers: row['accepts_offers'] as bool? ?? false,
       viewCount: (row['view_count'] as num?)?.toInt() ?? 0,
+      variantKey: row['variant_key'] as String?,
       sellerAvatarUrl: proxyImageUrl(sellerAvatarUrl),
       storeLogoUrl: proxyImageUrl(storeLogoUrl),
       sellerFeedbackScore: sellerFeedbackScore,
@@ -191,6 +192,10 @@ class ListingModel {
     );
     return ListingModel(
       id: (row['id'] as num).toInt(),
+      // The RPC returns this and it was being dropped, which left every row
+      // from this path with an empty seller — `excludeOwnListings` compares
+      // against it, so the marketplace was showing you your own listings.
+      sellerId: row['user_id'] as String? ?? '',
       slug: row['slug'] as String? ?? '',
       side: (row['side'] as String?) == 'bid'
           ? ListingSide.bid

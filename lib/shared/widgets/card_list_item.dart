@@ -6,6 +6,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/utils/formatters.dart';
 import '../models/card_model.dart';
 import 'card_art.dart';
+import 'card_price_note.dart';
 
 /// Ports the list-mode branch of `components/card/card-item.tsx` — a
 /// compact row (thumbnail, name/number, price and the quantity held) used
@@ -57,20 +58,31 @@ class CardListItem extends StatelessWidget {
                     style: AppTypography.caption(context.mutedForeground),
                   ),
                   const SizedBox(height: 2),
+                  // Quantity on the left, price on the right — the same
+                  // reading order as the grid tile.
                   Row(
                     children: [
-                      Text(
-                        card.marketPrice != null
-                            ? formatRupiah(card.marketPrice!)
-                            : 'Rp-',
-                        style: AppTypography.bodySmSemibold(colors.onSurface),
-                      ),
-                      const Spacer(),
                       if (owned)
                         Text(
                           'Qty: ${card.owned}',
                           style: AppTypography.caption(context.mutedForeground),
                         ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              card.marketPrice != null
+                                  ? formatRupiah(card.marketPrice!)
+                                  : 'Rp-',
+                              maxLines: 1,
+                              style: AppTypography.price(colors.onSurface),
+                            ),
+                            Flexible(child: CardPriceNote(card: card)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ],

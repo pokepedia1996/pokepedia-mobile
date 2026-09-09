@@ -59,7 +59,7 @@ class ListingTable extends StatelessWidget {
 
   static const _columns = <_Column>[
     _Column('Aksi', 72),
-    _Column('Gambar', 52),
+    _Column('Gambar', 108),
     _Column('Nama kartu', 150, sort: ListingSortCol.name, align: _Align.left),
     _Column('Ekspansi', 74, sort: ListingSortCol.expansion),
     _Column('Nomor', 72, sort: ListingSortCol.number),
@@ -196,6 +196,21 @@ class _Row extends StatelessWidget {
   }
 }
 
+/// The "Gambar" thumbnail: a landscape window onto the card rather than the
+/// whole 245:342 of it.
+///
+/// A row of full cards at this height is a column of stamps — too small to
+/// recognise, and mostly attack text. Cropping to the illustration is what
+/// makes a listing identifiable at a glance, which is the only thing this
+/// column is for.
+const _thumbWidth = 92.0;
+const _thumbAspect = 92 / 54;
+
+/// Up towards the artwork, which sits in the card's top half. Not flush with
+/// the top edge: a sliver of border and the name row is what tells one print
+/// from another.
+const _thumbAlignment = Alignment(0, -0.55);
+
 enum _Align { left, center, right }
 
 class _Column {
@@ -325,15 +340,20 @@ List<Widget> _listingCells(
       onRestock: onRestock,
     ),
     SizedBox(
-      width: 32,
+      width: _thumbWidth,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          CardArt(
-            imageUrl: listing.photoUrls.isNotEmpty
-                ? listing.photoUrls.first
-                : listing.card.imageUrl,
-            borderRadius: AppRadius.xs,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.xs),
+            child: CardArt(
+              imageUrl: listing.photoUrls.isNotEmpty
+                  ? listing.photoUrls.first
+                  : listing.card.imageUrl,
+              borderRadius: AppRadius.xs,
+              aspectRatio: _thumbAspect,
+              alignment: _thumbAlignment,
+            ),
           ),
           // Web gives photos their own column; here the count rides on the
           // thumbnail, since a listing over Rp100rb needs at least one and
@@ -645,7 +665,7 @@ class DraftTable extends StatelessWidget {
 
   static const _columns = <_Column>[
     _Column('Aksi', 56),
-    _Column('Gambar', 52),
+    _Column('Gambar', 108),
     _Column('Nama kartu', 150, align: _Align.left),
     _Column('Ekspansi', 74),
     _Column('Nomor', 72),
@@ -686,11 +706,19 @@ List<Widget> _draftCells(
       icon: Icon(LucideIcons.trash2, size: 18, color: context.mutedForeground),
     ),
     SizedBox(
-      width: 32,
+      width: _thumbWidth,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          CardArt(imageUrl: draft.card.imageUrl, borderRadius: AppRadius.xs),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.xs),
+            child: CardArt(
+              imageUrl: draft.card.imageUrl,
+              borderRadius: AppRadius.xs,
+              aspectRatio: _thumbAspect,
+              alignment: _thumbAlignment,
+            ),
+          ),
           if (draft.photoCount > 0)
             Positioned(
               right: -5,

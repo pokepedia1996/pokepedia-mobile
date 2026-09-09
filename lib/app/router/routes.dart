@@ -14,6 +14,16 @@ class Routes {
   // Search (opened from AppTopBar, not a bottom-nav tab).
   static const search = '/advanced-search';
 
+  /// Advanced search opened on a query, carrying what was typed instead of
+  /// dropping it.
+  static String searchQuery(String query) =>
+      '/advanced-search?q=${Uri.encodeQueryComponent(query)}';
+
+  /// Everything matching one query — web's `/search?q=`, and where the search
+  /// bar's "Cari semua" row goes.
+  static String searchResults(String query) =>
+      '/search?q=${Uri.encodeQueryComponent(query)}';
+
   /// Camera card scanner. Opened from [AppTopBar] alongside search, and
   /// full-screen above the shell — it takes over the whole viewport (camera
   /// preview plus its own controls), so the bottom nav would only be in the
@@ -101,6 +111,11 @@ class Routes {
   static String storeDetail(String handle) => '/market/$handle';
   static String storeCardDetail(String handle, int cardId) =>
       '/market/$handle/card/$cardId';
+
+  /// One WTB bid, by its listing slug. Top-level rather than under
+  /// `/market/:handle`: a bid belongs to a buyer, and a buyer who has never
+  /// sold anything has no storefront handle to hang it off.
+  static String bidListing(String slug) => '/bid/$slug';
   static String orderDetail(String slug) => '/orders/$slug';
 
   /// View an existing dispute's detail/timeline.

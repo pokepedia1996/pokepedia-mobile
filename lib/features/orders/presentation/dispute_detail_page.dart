@@ -34,7 +34,7 @@ class DisputeDetailPage extends ConsumerWidget {
             if (dispute == null) {
               return const EmptyState(
                 icon: LucideIcons.gavel,
-                title: 'Belum ada sengketa untuk pesanan ini',
+                title: 'Belum ada komplain untuk pesanan ini',
               );
             }
             return ListView(
@@ -117,7 +117,7 @@ class DisputeDetailPage extends ConsumerWidget {
             );
           },
           loading: () => const PikachuLoader(),
-          error: (_, __) => const Center(child: Text('Gagal memuat sengketa')),
+          error: (_, __) => const Center(child: Text('Gagal memuat komplain')),
         ),
       ),
     );

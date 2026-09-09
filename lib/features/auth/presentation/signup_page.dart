@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/auth_errors.dart';
 import '../../../shared/widgets/auth_card.dart';
+import 'widgets/google_sign_in_button.dart';
 
 /// Ports `app/signup/page.tsx`.
 class SignupPage extends ConsumerStatefulWidget {
@@ -24,8 +25,13 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _submitting = false;
+  bool _googleLoading = false;
+  bool _appleLoading = false;
   String? _error;
   bool _needsEmailConfirmation = false;
+
+  /// Any of the three ways in is running, so the other two are held.
+  bool get _busy => _submitting || _googleLoading || _appleLoading;
 
   @override
   void dispose() {
@@ -59,6 +65,53 @@ class _SignupPageState extends ConsumerState<SignupPage> {
           _error = translateAuthError(result.errorMessage ?? '');
         });
     }
+  }
+
+  /// Registering with Google is the same call as signing in with it: the
+  /// first time an account uses the provider, Supabase creates the user. So
+  /// there is no separate "sign up" path to write — only the label differs,
+  /// which is what [SocialButtonsMode] carries.
+  ///
+  /// No email confirmation step either: Google has already verified the
+  /// address, so the session exists by the time this returns.
+  Future<void> _google() async {
+    setState(() {
+      _googleLoading = true;
+      _error = null;
+    });
+    final result = await ref.read(authProvider.notifier).signInWithGoogle();
+    if (!mounted) return;
+
+    setState(() {
+      _googleLoading = false;
+      if (result.error != null) {
+        _error = translateAuthError(result.error!, provider: 'Google');
+      }
+    });
+
+    // Backing out of the account sheet returns with neither flag set, which
+    // deliberately does nothing.
+    if (result.signedIn && mounted) context.go(Routes.account);
+  }
+
+  /// Same shape as [_google]: Apple creates the account on first use, so
+  /// registering and signing in are one call.
+  Future<void> _apple() async {
+    setState(() {
+      _appleLoading = true;
+      _error = null;
+    });
+    final result = await ref.read(authProvider.notifier).signInWithApple();
+    if (!mounted) return;
+
+    setState(() {
+      _appleLoading = false;
+      if (result.error != null) {
+        _error = translateAuthError(result.error!, provider: 'Apple');
+      }
+    });
+
+    if (result.signedIn && mounted) context.go(Routes.account);
   }
 
   @override
@@ -131,7 +184,9 @@ class _SignupPageState extends ConsumerState<SignupPage> {
               const SizedBox(height: 8),
             ],
             ElevatedButton(
-              onPressed: _submitting ? null : _submit,
+              // Also held while Google is in flight, so the two ways of
+              // registering can't be started at once.
+              onPressed: _busy ? null : _submit,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
               ),
@@ -142,6 +197,13 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text('Daftar'),
+            ),
+            SocialButtons(
+              mode: SocialButtonsMode.signup,
+              loading: _googleLoading,
+              appleLoading: _appleLoading,
+              onGooglePressed: _busy ? null : _google,
+              onApplePressed: _busy ? null : _apple,
             ),
           ],
         ),

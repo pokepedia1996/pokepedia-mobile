@@ -9,10 +9,12 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
+import '../../../shared/widgets/inline_pill.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/presentation/widgets/order_thumbnail.dart';
 import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/seller_order_detail.dart';
 import '../../orders/usecase/orders_notifier.dart';
@@ -86,19 +88,23 @@ class _Body extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
+        // Web's header: the title, then the package number under it. The
+        // creation date moves into the Pesanan card, where web keeps it as
+        // "Tanggal pesan".
+        Text('Detail pesanan', style: AppTypography.h1(colors.onSurface)),
+        const SizedBox(height: 2),
         Text(
           order.orderNumber.toUpperCase(),
           style: AppTypography.bodySmSemibold(context.mutedForeground),
         ),
-        const SizedBox(height: 2),
-        Text(
-          'Dibuat ${formatSaleDate(order.createdAt)}',
-          style: AppTypography.caption(context.mutedForeground),
-        ),
         const SizedBox(height: 16),
 
         _Section(
-          title: 'Item (${order.items.length})',
+          title: 'Items',
+          trailing: Text(
+            '${order.items.length} item${order.items.length > 1 ? "s" : ""}',
+            style: AppTypography.caption(context.mutedForeground),
+          ),
           child: Column(
             children: [
               for (var i = 0; i < order.items.length; i++) ...[
@@ -124,16 +130,44 @@ class _Body extends StatelessWidget {
           ),
         const SizedBox(height: 12),
 
-        if (detail.destination != null) ...[
-          _Section(
-            title: 'Alamat tujuan',
-            child: _DestinationBlock(destination: detail.destination!),
-          ),
-          const SizedBox(height: 12),
-        ],
-
         _Section(
-          title: 'Rincian',
+          title: 'Pesanan',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Web keeps the order's identity, its date, who bought it and
+              // where it's going in one card rather than scattering them —
+              // they're all answers to "whose order is this?".
+              _InfoRow(
+                label: 'Order ID',
+                value: order.orderNumber.toUpperCase(),
+              ),
+              _InfoRow(
+                label: 'Tanggal pesan',
+                value: formatSaleDate(order.createdAt),
+              ),
+              _InfoRow(
+                label: 'Pembeli',
+                value: detail.buyerUsername == null
+                    ? 'Pembeli'
+                    : '@${detail.buyerUsername}',
+              ),
+              if (detail.destination case final destination?
+                  when !destination.isEmpty) ...[
+                Divider(color: context.borderColor, height: 20),
+                Text(
+                  'ALAMAT PENGIRIMAN',
+                  style: AppTypography.overline(context.mutedForeground),
+                ),
+                const SizedBox(height: 6),
+                _DestinationBlock(destination: destination),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _Section(
+          title: 'Pembayaran',
           child: Column(
             children: [
               _MoneyRow(label: 'Subtotal', amount: detail.subtotal),
@@ -142,17 +176,17 @@ class _Body extends StatelessWidget {
                 _MoneyRow(label: 'Asuransi', amount: detail.insuranceFee),
               Divider(color: context.borderColor, height: 20),
               _MoneyRow(
-                label: 'Dibayar pembeli ke kamu',
+                label: 'Total dibayar',
                 amount: detail.buyerPaid,
                 emphasis: true,
               ),
               _MoneyRow(
-                label: 'Komisi platform',
+                label: 'Komisi platform (3%)',
                 amount: -detail.commissionAmount,
               ),
               Divider(color: context.borderColor, height: 20),
               _MoneyRow(
-                label: 'Kamu terima',
+                label: 'Pendapatan',
                 amount: detail.sellerNetAmount,
                 emphasis: true,
                 color: colors.primary,
@@ -166,22 +200,6 @@ class _Body extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-
-        _Section(
-          title: 'Pembeli',
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  detail.buyerUsername == null
-                      ? 'Pembeli'
-                      : '@${detail.buyerUsername}',
-                  style: AppTypography.bodySm(colors.onSurface),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -211,23 +229,41 @@ String _payoutNote(SellerOrderDetail detail) {
   return 'Komisi sudah dipotong dari jumlah yang kamu terima.';
 }
 
+/// Ports `order-items-section.tsx`'s row — a `[64px | 1fr | auto]` grid.
+///
+/// The thumbnail is a square crop, not [CardArt]'s 245:342 portrait: web uses
+/// `size-16 object-cover` on every order surface, which is what made the two
+/// screens read so differently.
 class _ItemRow extends StatelessWidget {
   const _ItemRow({required this.item});
 
   final OrderItemModel item;
 
+  /// Ports `itemStatusPill`, in web's order of precedence.
+  ({String label, InlinePillTone tone})? get _pill {
+    if (item.dispute != null) {
+      return (label: 'Dikomplain', tone: InlinePillTone.danger);
+    }
+    if (item.releasedAt != null) {
+      return (label: 'Dana dirilis', tone: InlinePillTone.success);
+    }
+    if (item.settlementStatus == 'refunded' ||
+        item.settlementStatus == 'cancelled') {
+      return (label: 'Dibatalkan', tone: InlinePillTone.neutral);
+    }
+    return (label: 'Dalam escrow', tone: InlinePillTone.progress);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final pill = _pill;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 44,
-          height: 61,
-          child: CardArt(imageUrl: item.card.imageUrl),
-        ),
-        const SizedBox(width: 10),
+        OrderThumbnail(imageUrl: item.card.imageUrl, radius: AppRadius.sm),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,33 +274,58 @@ class _ItemRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: AppTypography.bodySmSemibold(colors.onSurface),
               ),
-              const SizedBox(height: 2),
-              Text(
-                '${item.card.expansionCode} · ${item.card.collectorNumber}',
-                style: AppTypography.caption(context.mutedForeground),
-              ),
-              const SizedBox(height: 5),
-              Row(
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  ConditionBadge(condition: item.condition),
-                  const SizedBox(width: 6),
+                  if (item.card.expansionCode.isNotEmpty)
+                    ExpansionChip(code: item.card.expansionCode),
                   Text(
-                    '${item.matchedQuantity}x',
+                    '#${item.card.collectorNumber}',
                     style: AppTypography.caption(context.mutedForeground),
                   ),
-                  const Spacer(),
-                  Text(
-                    formatRupiah(item.subtotal),
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
-                  ),
+                  ConditionBadge(condition: item.condition, dense: true),
                 ],
               ),
-              if (item.dispute != null) ...[
+              const SizedBox(height: 4),
+              // Each line carries its own number: a package can hold several,
+              // and this is the one a seller quotes about one card.
+              Text(
+                item.orderNumber.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.captionSemibold(colors.onSurface),
+              ),
+              if (pill != null) ...[
                 const SizedBox(height: 6),
-                StatusPill(label: 'Komplain dibuka', color: colors.error),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: InlinePill(tone: pill.tone, label: pill.label),
+                ),
               ],
             ],
           ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '×${item.matchedQuantity}',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            Text(
+              formatRupiah(item.matchPrice),
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              formatRupiah(item.subtotal),
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+          ],
         ),
       ],
     );
@@ -365,6 +426,51 @@ class _ShipmentBlock extends ConsumerWidget {
               style: AppTypography.caption(context.mutedForeground),
             )
           else ...[
+            // What the buyer actually paid for. Without it the seller has to
+            // guess which courier to hand the parcel to — web leads the
+            // dispatch step with this card for that reason.
+            if (detail.buyerCourierLabel case final courier?) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colors.secondary.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.truck, size: 18, color: colors.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Kurir pilihan pembeli',
+                            style: AppTypography.caption(
+                              context.mutedForeground,
+                            ),
+                          ),
+                          Text(
+                            courier,
+                            style: AppTypography.bodySmSemibold(
+                              colors.onSurface,
+                            ),
+                          ),
+                          if (detail.etd case final etd?)
+                            Text(
+                              'Estimasi $etd',
+                              style: AppTypography.caption(
+                                context.mutedForeground,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             Text(
               'Pesanan ini menunggu dikirim. Atur penjemputan kurir atau isi '
               'nomor resi kalau kamu antar sendiri.',
@@ -395,7 +501,15 @@ class _ShipmentBlock extends ConsumerWidget {
         if (order.shipmentDeadline != null) ...[
           const SizedBox(height: 8),
           Text(
-            'Batas kirim ${formatSaleDate(order.shipmentDeadline!)}',
+            // Web pairs the date with how long is actually left; a bare
+            // date makes a deadline three hours away look like any other.
+            [
+              'Kirim sebelum ${formatDeadlineId(order.shipmentDeadline!)}',
+              if (order.shipmentDeadline!.isAfter(DateTime.now()))
+                'Sisa ${formatCountdownId(order.shipmentDeadline!.difference(DateTime.now()))}'
+              else
+                'Lewat batas',
+            ].join(' · '),
             style: AppTypography.caption(context.mutedForeground),
           ),
         ],
@@ -443,10 +557,13 @@ class _DestinationBlock extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
+  const _Section({required this.title, required this.child, this.trailing});
 
   final String title;
   final Widget child;
+
+  /// The right-hand side of the header — web puts an item count there.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -465,9 +582,18 @@ class _Section extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: context.borderColor)),
             ),
-            child: Text(
-              title,
-              style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTypography.bodySmSemibold(
+                      context.appColors.onSurface,
+                    ),
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
             ),
           ),
           Padding(padding: const EdgeInsets.all(14), child: child),
@@ -489,9 +615,11 @@ class _Notice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colors.tertiary.withValues(alpha: 0.08),
+        color: context.appSemantic.condMp.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: colors.tertiary.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: context.appSemantic.condMp.withValues(alpha: 0.4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -499,6 +627,41 @@ class _Notice extends StatelessWidget {
           Text(title, style: AppTypography.bodySmSemibold(colors.onSurface)),
           const SizedBox(height: 4),
           Text(body, style: AppTypography.caption(context.mutedForeground)),
+        ],
+      ),
+    );
+  }
+}
+
+/// A label on the left, its value on the right — the `<dt>`/`<dd>` pairs
+/// web's Pesanan card is built from.
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+            ),
+          ),
         ],
       ),
     );
@@ -563,7 +726,11 @@ Color _shipmentColor(BuildContext context, OrderModel order) {
   return switch (order.shipmentStatus) {
     'delivered' => colors.primary,
     'cancelled' || 'rejected' || 'returned' => colors.error,
-    'awaiting_shipment' || null => colors.tertiary,
+    // `condMp` is the app's amber, which is the warning tone web paints a
+    // waiting state in. `tertiary` was never set on either ColorScheme, so
+    // it resolved to Material's default — a near-black in dark mode, which
+    // is why "Menunggu dikirim" was unreadable.
+    'awaiting_shipment' || null => context.appSemantic.condMp,
     _ => context.mutedForeground,
   };
 }

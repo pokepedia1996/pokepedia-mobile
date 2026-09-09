@@ -375,6 +375,28 @@ class ExpansionsRepository {
     return CardMarketPrice.fromRow(list.first as Map<String, dynamic>);
   }
 
+  /// Ports `usePackCardPrices` — every cached price in one expansion, keyed
+  /// by card id.
+  ///
+  /// One call for the whole pack rather than `get_card_prices_by_ids` over
+  /// the ids the page just loaded: the RPC joins `cards` on the expansion
+  /// itself, so the grid does not have to wait for its own card list to come
+  /// back before the prices can be asked for.
+  Future<Map<int, CardMarketPrice>> fetchPackCardPrices(
+    String expansionCode,
+  ) async {
+    final rows = await _client.rpc(
+      'get_pack_card_prices',
+      params: {'p_expansion_code': expansionCode},
+    );
+    if (rows is! List) return const {};
+    return {
+      for (final row in rows.cast<Map<String, dynamic>>())
+        if ((row['card_id'] as num?)?.toInt() case final id?)
+          id: CardMarketPrice.fromRow(row),
+    };
+  }
+
   /// Ports `fetchOrderBook` (`features/card-detail/server/order-book.ts`) —
   /// the aggregated bid/ask ladder plus the count of in-flight matches.
   /// `p_viewer_id` is what flags the viewer's own bids server-side.

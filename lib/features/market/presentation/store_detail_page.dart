@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
@@ -266,10 +267,6 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
           controller: _searchController,
           enabled: _tab.isListing,
           onChanged: (value) => setState(() => _query = value.trim()),
-          onClear: () {
-            _searchController.clear();
-            setState(() => _query = '');
-          },
         ),
         actions: [
           _FilterToggle(
@@ -825,52 +822,19 @@ class _StoreSearchField extends StatelessWidget {
     required this.controller,
     required this.enabled,
     required this.onChanged,
-    required this.onClear,
   });
 
   final TextEditingController controller;
   final bool enabled;
   final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: TextField(
-        controller: controller,
-        enabled: enabled,
-        textInputAction: TextInputAction.search,
-        onChanged: onChanged,
-        style: AppTypography.bodySm(context.appColors.onSurface),
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: Theme.of(context).cardColor.withValues(alpha: 0.92),
-          hintText: 'Cari di toko ini',
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          prefixIcon: const Icon(LucideIcons.search, size: 18),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 34,
-            minHeight: 34,
-          ),
-          suffixIcon: controller.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(LucideIcons.x, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onClear,
-                ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            borderSide: BorderSide(color: context.borderColor),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            borderSide: BorderSide(color: context.borderColor),
-          ),
-        ),
-      ),
+    return AppSearchField(
+      hintText: 'Cari di toko ini',
+      controller: controller,
+      enabled: enabled,
+      onChanged: onChanged,
     );
   }
 }

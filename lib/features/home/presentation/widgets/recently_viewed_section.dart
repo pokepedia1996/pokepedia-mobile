@@ -49,7 +49,9 @@ class RecentlyViewedSection extends ConsumerWidget {
         );
       },
       loading: () =>
-          const SizedBox(height: 108, child: PikachuLoader(size: 96)),
+          // 120, not 108: the caption adds a second line under Pikachu and
+          // the old box clipped it by 11.
+          const SizedBox(height: 120, child: PikachuLoader(size: 96)),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

@@ -1,4 +1,5 @@
 import '../../core/utils/image_url.dart';
+import 'card_market_price.dart';
 import 'pokemon_type.dart';
 
 /// `cards.category` check constraint.
@@ -324,6 +325,8 @@ class CardModel {
     this.variant = 'normal',
     this.details = const CardDetails(),
     this.marketPrice,
+    this.price7dAgo,
+    this.priceSource,
     this.owned = 0,
     this.imageUrl,
   });
@@ -341,6 +344,15 @@ class CardModel {
   final String variant;
   final CardDetails details;
   final int? marketPrice;
+
+  /// What [marketPrice] was a week ago, from the same price cache row.
+  /// Null when the cache has no comparison to make — a card priced for the
+  /// first time this week, or one priced off the order book.
+  final int? price7dAgo;
+
+  /// Which side of the book [marketPrice] came from.
+  final CardPriceSource? priceSource;
+
   final int owned;
 
   /// CDN-resolved `cards.image_url` (see `proxyImageUrl`). Null for dummy
@@ -350,7 +362,22 @@ class CardModel {
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
 
-  CardModel copyWith({int? owned}) => CardModel(
+  /// How far the market price has moved in the last week, as a percentage,
+  /// or null when there is nothing to say.
+  ///
+  /// Mirrors web's `pricePct` in `components/card/card-item.tsx`: only a
+  /// confirmed price — one built from actual sales — is compared. An ask or
+  /// a bid is one person's number, so a week-on-week move in it would be a
+  /// trend line drawn through a single listing.
+  double? get priceChangePct {
+    final now = marketPrice;
+    final then = price7dAgo;
+    if (priceSource != CardPriceSource.confirmed) return null;
+    if (now == null || then == null || then <= 0) return null;
+    return (now - then) / then * 100;
+  }
+
+  CardModel copyWith({int? owned, CardMarketPrice? price}) => CardModel(
     id: id,
     category: category,
     nameId: nameId,
@@ -363,7 +390,9 @@ class CardModel {
     language: language,
     variant: variant,
     details: details,
-    marketPrice: marketPrice,
+    marketPrice: price?.price ?? marketPrice,
+    price7dAgo: price?.price7dAgo ?? price7dAgo,
+    priceSource: price?.source ?? priceSource,
     owned: owned ?? this.owned,
     imageUrl: imageUrl,
   );

@@ -34,12 +34,7 @@ class ListDetailPage extends ConsumerWidget {
             return GridView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: cards.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.62,
-              ),
+              gridDelegate: cardGridDelegate(context),
               itemBuilder: (context, i) =>
                   CardGridItem(card: cards[i], onTap: () {}),
             );

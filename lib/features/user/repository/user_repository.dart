@@ -1,6 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/image_url.dart';
+import '../../../shared/models/card_model.dart';
+import '../../../shared/utils/card_filtering.dart';
+import '../../../shared/utils/card_pricing.dart';
 import 'models/profile_models.dart';
 
 /// The `user_cards` → `cards` → `expansions` embed web's
@@ -63,10 +66,14 @@ class UserRepository {
     }
   }
 
-  /// Ports `fetchPublicCollection` — every owned card grouped by expansion,
-  /// newest expansion first. [canView] mirrors the web's guard: the owner
-  /// always sees their own collection, everyone else only a public one.
-  Future<List<CollectionExpansionGroup>> fetchPublicCollection(
+  /// Ports `fetchPublicCollection` — every card the user owns, priced, most
+  /// valuable first. [canView] mirrors the web's guard: the owner always
+  /// sees their own collection, everyone else only a public one.
+  ///
+  /// Flat rather than grouped by expansion: the profile shows a portfolio
+  /// now, the same grid the Koleksi page draws, and a portfolio is a pile of
+  /// cards with a value rather than a shelf per set.
+  Future<List<CardModel>> fetchPublicCollection(
     String userId, {
     required bool canView,
   }) async {
@@ -79,53 +86,24 @@ class UserRepository {
         .gt('quantity', 0)
         .order('card_id', ascending: true);
 
-    final groups = <String, CollectionExpansionGroup>{};
-    final cardsByKey = <String, List<CollectionCardEntry>>{};
-
+    final cards = <CardModel>[];
     for (final row in rows) {
-      final card = row['cards'] as Map<String, dynamic>?;
-      if (card == null) continue;
-      final expansion = card['expansions'] as Map<String, dynamic>?;
-      final code = card['expansion_code'] as String? ?? '';
-      final language = card['language'] as String? ?? 'id';
-      final key = '$code-$language';
-
-      groups.putIfAbsent(
-        key,
-        () => CollectionExpansionGroup(
-          expansionCode: code,
-          expansionName: expansion?['name_id'] as String? ?? code,
-          language: language,
-          totalCards: (expansion?['total_cards'] as num?)?.toInt() ?? 0,
-          packImage: proxyImageUrl(expansion?['pack_image_url'] as String?),
-          releasedAt: expansion?['released_at'] as String? ?? '',
-          cards: const [],
-        ),
+      final joined = row['cards'] as Map<String, dynamic>?;
+      if (joined == null) continue;
+      // `user_cards` carries the id; the join carries everything else the
+      // catalog model reads, and defaults cover what it doesn't select.
+      cards.add(
+        CardModel.fromRow({
+          ...joined,
+          'id': (row['card_id'] as num).toInt(),
+        }).copyWith(owned: (row['quantity'] as num?)?.toInt() ?? 0),
       );
-
-      cardsByKey
-          .putIfAbsent(key, () => [])
-          .add(
-            CollectionCardEntry(
-              cardId: (row['card_id'] as num).toInt(),
-              name: card['name_id'] as String? ?? '',
-              number: card['collector_number'] as String? ?? '',
-              quantity: (row['quantity'] as num?)?.toInt() ?? 0,
-              imageUrl: proxyImageUrl(card['image_url'] as String?),
-              rarity: card['rarity'] as String?,
-              variantKey: row['variant_key'] as String?,
-            ),
-          );
     }
 
-    final result = <CollectionExpansionGroup>[];
-    for (final entry in groups.entries) {
-      final cards = cardsByKey[entry.key] ?? const <CollectionCardEntry>[];
-      cards.sort(_compareCollectionCards);
-      result.add(entry.value.withCards(cards));
-    }
-    result.sort((a, b) => b.releasedAt.compareTo(a.releasedAt));
-    return result;
+    return sortCards(
+      await priceCards(_client, cards),
+      CardSortOption.priceDesc,
+    );
   }
 
   /// Ports `fetchPublicContributionsAsList` — approved image submissions,
@@ -200,6 +178,34 @@ class UserRepository {
           ),
         )
         .toList();
+  }
+
+  /// Both follow counts for one profile — `get_profile_follow_stats`.
+  ///
+  /// Null when the function isn't deployed yet (PostgREST answers PGRST202)
+  /// or the username matches nobody, which the caller reads as "fall back to
+  /// what can be counted client-side".
+  Future<({String userId, int followers, int following})?> fetchFollowStats(
+    String username,
+  ) async {
+    try {
+      final rows = await _client.rpc(
+        'get_profile_follow_stats',
+        params: {'p_username': username},
+      );
+      final list = rows as List?;
+      if (list == null || list.isEmpty) return null;
+      final row = list.first as Map<String, dynamic>;
+      final id = row['user_id'] as String?;
+      if (id == null) return null;
+      return (
+        userId: id,
+        followers: (row['followers_count'] as num?)?.toInt() ?? 0,
+        following: (row['following_count'] as num?)?.toInt() ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Follows a shop. `follow_shop` is idempotent server-side and refuses a
@@ -301,21 +307,3 @@ String _escapeLike(String value) => value
     .replaceAll('\\', '\\\\')
     .replaceAll('%', '\\%')
     .replaceAll('_', '\\_');
-
-/// Collector number order, with the base print ahead of its variants —
-/// mirrors the comparator in `fetchPublicCollection`.
-int _compareCollectionCards(CollectionCardEntry a, CollectionCardEntry b) {
-  final numCmp = _compareNumeric(a.number, b.number);
-  if (numCmp != 0) return numCmp;
-  if (a.variantKey == null && b.variantKey != null) return -1;
-  if (a.variantKey != null && b.variantKey == null) return 1;
-  return (a.variantKey ?? '').compareTo(b.variantKey ?? '');
-}
-
-/// `localeCompare(..., { numeric: true })` — "9" before "10".
-int _compareNumeric(String a, String b) {
-  final numA = int.tryParse(a.replaceAll(RegExp(r'[^0-9]'), ''));
-  final numB = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), ''));
-  if (numA != null && numB != null && numA != numB) return numA.compareTo(numB);
-  return a.compareTo(b);
-}

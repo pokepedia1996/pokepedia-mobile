@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -21,7 +22,6 @@ import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/store_card.dart';
 import '../usecase/market_notifier.dart';
-import 'widgets/proposals_banner.dart';
 
 /// Ports `app/market/page.tsx` — marketplace bucket tabs
 /// (Semua/Listing/Buylist/Toko), search, and the listing sort/filter rail
@@ -162,7 +162,6 @@ class _MarketPageState extends ConsumerState<MarketPage>
                                       style: AppTypography.h2(colors.onSurface),
                                     ),
                                   ),
-                                  const _CartButton(),
                                 ],
                               ),
                             ),
@@ -180,68 +179,47 @@ class _MarketPageState extends ConsumerState<MarketPage>
                     child: Row(
                       children: [
                         Expanded(
-                          child: TextField(
+                          child: AppSearchField(
+                            hintText: 'Cari kartu atau toko...',
                             onChanged: (v) =>
                                 ref.read(marketQueryProvider.notifier).state =
                                     v,
-                            decoration: const InputDecoration(
-                              hintText: 'Cari kartu atau toko...',
-                              prefixIcon: Icon(LucideIcons.search, size: 20),
-                            ),
                           ),
                         ),
-                        // The cart that slides in beside the search once the
-                        // title row's copy is gone. `widthFactor` animates
-                        // the web's `width: 0 -> auto`, and `IgnorePointer`
-                        // stands in for `pointerEvents: none` so the
-                        // zero-width button can't be tapped.
-                        IgnorePointer(
-                          ignoring: !_scrolled,
-                          child: ClipRect(
-                            child: AnimatedAlign(
-                              alignment: Alignment.centerRight,
-                              widthFactor: _scrolled ? 1 : 0,
-                              duration: _morphDuration,
-                              curve: _morphCurve,
-                              child: AnimatedOpacity(
-                                opacity: _scrolled ? 1 : 0,
-                                duration: _morphDuration,
-                                curve: _morphCurve,
-                                child: const Padding(
-                                  padding: EdgeInsets.only(left: 8),
-                                  child: _CartButton(),
-                                ),
-                              ),
-                            ),
-                          ),
+                        // Always beside the field, not sliding in on scroll:
+                        // that width-morph is what let the search box run the
+                        // full width of the screen in the first place.
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: _CartButton(),
                         ),
                       ],
                     ),
                   ),
-                  // Web puts this above the feed; here it also collapses on
-                  // scroll, the same way the logo does, so it doesn't hold
-                  // 60-odd pixels of a phone screen hostage while browsing.
+                  // The bucket tabs fold away once the grid is moving, the
+                  // same collapse the title row does: past the first screen
+                  // the choice is already made and the rail is just holding
+                  // pixels. Scrolling back up brings it straight back.
                   AnimatedSize(
                     duration: _morphDuration,
                     curve: _morphCurve,
                     alignment: Alignment.topCenter,
                     child: _scrolled
                         ? const SizedBox(width: double.infinity)
-                        : const ProposalsBanner(),
-                  ),
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: colors.primary,
-                    unselectedLabelColor: context.mutedForeground,
-                    indicatorColor: colors.primary,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    dividerColor: Colors.transparent,
-                    tabs: const [
-                      Tab(text: 'Semua'),
-                      Tab(text: 'Listing'),
-                      Tab(text: 'Buylist'),
-                      Tab(text: 'Toko'),
-                    ],
+                        : TabBar(
+                            controller: _tabController,
+                            labelColor: colors.primary,
+                            unselectedLabelColor: context.mutedForeground,
+                            indicatorColor: colors.primary,
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            dividerColor: Colors.transparent,
+                            tabs: const [
+                              Tab(text: 'Semua'),
+                              Tab(text: 'Listing'),
+                              Tab(text: 'Buylist'),
+                              Tab(text: 'Toko'),
+                            ],
+                          ),
                   ),
                   if (bucket != MarketBucket.toko) const _SortFilterBar(),
                   const SizedBox(height: 8),
@@ -325,37 +303,43 @@ class _SortFilterBar extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+
+      // Sized to their labels and pushed left, rather than each taking half
+      // the screen: two controls that read as chips, not as a pair of
+      // full-width actions competing with the grid below them.
       child: Row(
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _showMarketSheet(context, const _SortSheet()),
-              icon: const Icon(LucideIcons.arrowUpDown, size: 16),
-              label: Text(
-                'Urutkan: ${sort.labelId}',
-                overflow: TextOverflow.ellipsis,
-              ),
+          const Spacer(),
+
+          OutlinedButton.icon(
+            onPressed: () => _showMarketSheet(context, const _SortSheet()),
+            style: _railButton(),
+            icon: const Icon(LucideIcons.arrowUpDown, size: 15),
+            label: Text(
+              sort.labelId,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+
           const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _showMarketSheet(context, const _FilterSheet()),
-              style: filters.activeCount > 0
-                  ? OutlinedButton.styleFrom(
-                      foregroundColor: colors.primary,
-                      side: BorderSide(
-                        color: colors.primary.withValues(alpha: 0.4),
-                      ),
-                    )
-                  : null,
-              icon: const Icon(LucideIcons.listFilter, size: 16),
-              label: Text(
-                filters.activeCount > 0
-                    ? 'Filter (${filters.activeCount})'
-                    : 'Filter',
-                overflow: TextOverflow.ellipsis,
-              ),
+          OutlinedButton.icon(
+            onPressed: () => _showMarketSheet(context, const _FilterSheet()),
+            style: filters.activeCount > 0
+                ? _railButton().copyWith(
+                    foregroundColor: WidgetStatePropertyAll(colors.primary),
+                    side: WidgetStatePropertyAll(
+                      BorderSide(color: colors.primary.withValues(alpha: 0.4)),
+                    ),
+                  )
+                : _railButton(),
+            icon: const Icon(LucideIcons.listFilter, size: 15),
+            label: Text(
+              filters.activeCount > 0
+                  ? 'Filter (${filters.activeCount})'
+                  : 'Filter',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -363,6 +347,15 @@ class _SortFilterBar extends ConsumerWidget {
     );
   }
 }
+
+/// The rail chips are shorter and tighter than a standard button — they
+/// label the grid rather than act on it.
+ButtonStyle _railButton() => OutlinedButton.styleFrom(
+  minimumSize: const Size(0, 34),
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  visualDensity: VisualDensity.compact,
+);
 
 /// Presents a market sheet the way `components/ui/sheet.tsx` does on web —
 /// bottom-anchored, rounded, over the bottom nav (the root navigator, since a

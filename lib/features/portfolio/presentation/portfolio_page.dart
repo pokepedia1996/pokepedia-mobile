@@ -95,7 +95,11 @@ class _CollectionTab extends ConsumerStatefulWidget {
 
 class _CollectionTabState extends ConsumerState<_CollectionTab> {
   CardFilters _filters = const CardFilters();
-  CardSortOption _sortBy = CardSortOption.numberAsc;
+
+  /// Most valuable first. The collection is a portfolio rather than a
+  /// checklist, so what it is worth is the order that answers the question
+  /// the page is opened with.
+  CardSortOption _sortBy = CardSortOption.priceDesc;
   CardViewMode _viewMode = CardViewMode.grid;
 
   bool _editMode = false;
@@ -163,17 +167,26 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     setState(() => _saving = true);
     final byId = {for (final card in cards) card.id: card};
     final controller = ref.read(cardOwnershipControllerProvider);
+    // Which shelf the grid is showing. A list holds its own copies, so an
+    // edit there sets the list's quantity rather than moving the main
+    // collection's — the numbers on screen are the list's.
+    final target = ref.read(selectedPortfolioProvider);
     String? failure;
 
     for (final entry in _edits.entries) {
       final owned = byId[entry.key]?.owned ?? 0;
-      final delta = entry.value - owned;
-      if (delta == 0) continue;
-      final error = await controller.adjustQuantity(
-        userId: user.id,
-        cardId: entry.key,
-        delta: delta,
-      );
+      if (entry.value == owned) continue;
+      final error = target.isPrimary
+          ? await controller.adjustQuantity(
+              userId: user.id,
+              cardId: entry.key,
+              delta: entry.value - owned,
+            )
+          : await controller.setListCardQuantity(
+              listId: target.listId!,
+              cardId: entry.key,
+              quantity: entry.value,
+            );
       failure ??= error;
     }
 
@@ -185,7 +198,16 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     });
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(failure ?? 'Koleksi diperbarui')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            failure ??
+                (target.isPrimary
+                    ? 'Koleksi diperbarui'
+                    : '"${target.name}" diperbarui'),
+          ),
+        ),
+      );
   }
 
   @override
@@ -279,12 +301,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.62,
-              ),
+              gridDelegate: cardGridDelegate(context),
               delegate: SliverChildBuilderDelegate(
                 (context, i) => _collectionCard(visible[i]),
                 childCount: visible.length,
@@ -334,10 +351,10 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     setState(() => _working = true);
     final repository = ref.read(portfolioRepositoryProvider);
 
-    var error = await repository.addCardsToList(
+    var error = (await repository.addCardsToList(
       listId: destination.id,
       cardIds: ids,
-    );
+    )).error;
     if (error == null && move) {
       error = await repository.removeCardsFromList(
         listId: target.listId!,
@@ -532,7 +549,8 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
   }
 }
 
-/// Title, counts, total value and the action row — web's header block.
+/// Total value, how the market has moved it, and the action row — web's
+/// header block.
 class _CollectionHeader extends StatelessWidget {
   const _CollectionHeader({
     required this.cards,
@@ -559,7 +577,6 @@ class _CollectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final totalQuantity = cards.fold<int>(0, (sum, c) => sum + c.owned);
     final totalValue = cards.fold<int>(
       0,
       (sum, c) => sum + (c.marketPrice ?? 0) * c.owned,
@@ -570,24 +587,16 @@ class _CollectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text.rich(
-            TextSpan(
-              style: AppTypography.h3(colors.onSurface),
-              children: [
-                TextSpan(
-                  // Web shows "Rp–" rather than Rp0 when nothing is priced
-                  // yet, so a missing price never reads as a zero valuation.
-                  text: totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
-                  style: AppTypography.h2(colors.primary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
           Text(
-            '${cards.length} kartu unik · $totalQuantity total',
-            style: AppTypography.bodySm(context.mutedForeground),
+            // Web shows "Rp–" rather than Rp0 when nothing is priced yet, so
+            // a missing price never reads as a zero valuation.
+            totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
+            // Plain foreground, not the brand red: red on a portfolio total
+            // reads as a loss rather than as a headline.
+            style: AppTypography.h2(colors.onSurface),
           ),
+          const SizedBox(height: 6),
+          const _MarketTrend(),
           const SizedBox(height: 6),
           if (editMode)
             Row(
@@ -646,6 +655,48 @@ class _CollectionHeader extends StatelessWidget {
   }
 }
 
+/// How the market has moved the portfolio over the selected range — the
+/// same figure Beranda shows under its headline, in place of the card
+/// counts that used to sit here.
+///
+/// The series only exists for the whole collection, so when a single list is
+/// on screen there is nothing to state and the line is left out rather than
+/// borrowing the collection's trend under a list's name.
+class _MarketTrend extends ConsumerWidget {
+  const _MarketTrend();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final delta = ref.watch(portfolioDeltaProvider);
+    if (delta == null) return const SizedBox.shrink();
+
+    final colors = context.appColors;
+    final tone = delta.isUp ? context.appSemantic.success : colors.error;
+    final range = ref.watch(portfolioRangeProvider);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          delta.isUp ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+          size: 16,
+          color: tone,
+        ),
+        Text(
+          '${formatRupiah(delta.amount.abs())} '
+          '(${delta.percent.abs().toStringAsFixed(2)}%)',
+          style: AppTypography.bodySm(tone),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '· ${range.label}',
+          style: AppTypography.bodySm(context.mutedForeground),
+        ),
+      ],
+    );
+  }
+}
+
 /// The collection's search box, with the heart that opens the wishlist.
 class _SearchRow extends ConsumerWidget {
   const _SearchRow();
@@ -661,7 +712,6 @@ class _SearchRow extends ConsumerWidget {
         children: [
           Expanded(
             child: CardSearchField(
-              dense: true,
               value: query,
               onChanged: (value) =>
                   ref.read(collectionSearchProvider.notifier).state = value,

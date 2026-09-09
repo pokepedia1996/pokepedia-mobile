@@ -36,15 +36,25 @@ class PortfolioValueChart extends ConsumerWidget {
           detail: 'Coba tarik untuk memuat ulang.',
         ),
         data: (series) {
-          if (series.length < 2) {
+          // Only genuinely *nothing* gets a message. A single day is a value
+          // we already have, and it is drawn as a dot — telling someone to
+          // come back tomorrow for a number that is on screen above the
+          // chart would be silly.
+          if (series.isEmpty) {
+            final empty = holdings?.isEmpty ?? true;
+            final onList = !ref.watch(selectedPortfolioProvider).isPrimary;
             return _ChartMessage(
-              title: (holdings?.isEmpty ?? true)
+              title: empty
                   ? 'Belum ada kartu di portofolio ini'
+                  : onList
+                  ? 'Grafik hanya untuk Portofolio Utama'
                   : 'Riwayat nilai belum tersedia',
-              detail: (holdings?.isEmpty ?? true)
+              detail: empty
                   ? 'Tambahkan kartu ke koleksi untuk mulai melacak nilainya.'
-                  : 'Grafik akan terisi setelah ada riwayat harga harian '
-                        'untuk kartu-kartu ini.',
+                  : onList
+                  ? 'Nilai harian dicatat untuk seluruh koleksi, belum per '
+                        'list.'
+                  : 'Tarik untuk memuat ulang.',
             );
           }
           return PortfolioSparkline(series: series);
@@ -64,8 +74,13 @@ class PortfolioSparkline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final rising = series.last.value >= series.first.value;
-    final line = rising ? context.appSemantic.success : colors.error;
+    // A single point has nowhere to have come from, so it is neither up nor
+    // down: it takes the neutral accent rather than claiming a gain.
+    final line = series.length < 2
+        ? colors.primary
+        : series.last.value >= series.first.value
+        ? context.appSemantic.success
+        : colors.error;
 
     return CustomPaint(
       size: Size.infinite,
@@ -91,7 +106,7 @@ class _ValueLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (series.length < 2 || size.width <= 0 || size.height <= 0) return;
+    if (series.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     var min = series.first.value;
     var max = series.first.value;
@@ -99,27 +114,45 @@ class _ValueLinePainter extends CustomPainter {
       if (point.value < min) min = point.value;
       if (point.value > max) max = point.value;
     }
-    // A dead-flat series would divide by zero; give it a band so the line
-    // lands in the middle instead of at the top edge.
-    final span = (max - min) == 0 ? 1 : max - min;
 
-    // Points are spaced by index: `price_history` only has rows for days a
-    // card traded, so spacing by date would leave gaps that imply the
-    // portfolio didn't exist on the quiet days.
-    final stepX = size.width / (series.length - 1);
     // Inset so the stroke isn't clipped at the top and bottom.
     const padY = 3.0;
     final usableHeight = size.height - padY * 2;
 
+    // A single reading, or a series that never moved, has no span to spread
+    // over. Both sit at mid-height and read as a flat line rather than
+    // collapsing onto an edge — the value is real, it just hasn't changed as
+    // far as we know it.
+    final flat = max == min;
+    final span = flat ? 1 : max - min;
+    double yFor(int value) => flat
+        ? size.height / 2
+        : padY + usableHeight - ((value - min) / span) * usableHeight;
+
     final path = Path();
-    for (var i = 0; i < series.length; i++) {
-      final x = stepX * i;
-      final y =
-          padY + usableHeight - ((series[i].value - min) / span) * usableHeight;
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
+    if (series.length == 1) {
+      // One reading, drawn as a rise from the chart floor to the value at the
+      // right, so the shape carries the change rather than sitting flat.
+      //
+      // The floor is where measuring started, not a claim the collection was
+      // once worth nothing — there is no axis and no label on it. As soon as
+      // a second day lands this branch is gone and the line is real
+      // throughout.
+      path
+        ..moveTo(0, size.height)
+        ..lineTo(size.width, padY);
+    } else {
+      // Points are spaced by index: snapshots can miss a day, and spacing by
+      // date would leave gaps that imply the portfolio didn't exist then.
+      final stepX = size.width / (series.length - 1);
+      for (var i = 0; i < series.length; i++) {
+        final x = stepX * i;
+        final y = yFor(series[i].value);
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
       }
     }
 
@@ -138,6 +171,19 @@ class _ValueLinePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round,
     );
+
+    // The marker on the single-reading line: it says where the value is
+    // rather than letting a bare rule look like a chart axis. A real series
+    // needs no such marker — its own shape says where it ends.
+    if (series.length == 1) {
+      canvas
+        ..drawCircle(
+          Offset(size.width, padY),
+          4,
+          Paint()..color = line.withValues(alpha: 0.25),
+        )
+        ..drawCircle(Offset(size.width, padY), 2.5, Paint()..color = line);
+    }
   }
 
   @override

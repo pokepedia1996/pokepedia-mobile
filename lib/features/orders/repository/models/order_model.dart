@@ -2,6 +2,7 @@ import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/utils/postgrest_embed.dart';
 import '../../../../shared/models/card_model.dart';
 import 'seller_order.dart';
+import 'shipment_destination.dart';
 
 /// `orders.status` check constraint — the shipment-level status shown on
 /// the buyer's order list.
@@ -142,11 +143,15 @@ class OrderItemModel {
       paidAt: DateTime.tryParse(
         settlement?['paid_at'] as String? ?? '',
       )?.toLocal(),
+      releasedAt: DateTime.tryParse(
+        settlement?['released_at'] as String? ?? '',
+      )?.toLocal(),
       paymentDeadline: DateTime.tryParse(
         settlement?['payment_deadline'] as String? ?? '',
       )?.toLocal(),
       cancelStatus: settlement?['cancel_status'] as String?,
       cancelReason: settlement?['cancel_reason'] as String?,
+      invoiceUrl: embeddedRow(settlement?['carts'])?['invoice_url'] as String?,
       statusRaw: row['status'] as String?,
       dispute: _openDispute(row['disputes']),
     );
@@ -165,9 +170,11 @@ class OrderItemModel {
     this.shippingCost = 0,
     this.settlementStatus,
     this.paidAt,
+    this.releasedAt,
     this.paymentDeadline,
     this.cancelStatus,
     this.cancelReason,
+    this.invoiceUrl,
     this.statusRaw,
     this.dispute,
   });
@@ -193,6 +200,10 @@ class OrderItemModel {
   final String? settlementStatus;
   final DateTime? paidAt;
 
+  /// `settlements.released_at` — when escrow paid out, which is what web
+  /// dates "Pesanan selesai" from.
+  final DateTime? releasedAt;
+
   /// `settlements.payment_deadline` — when an unpaid checkout expires.
   final DateTime? paymentDeadline;
 
@@ -200,6 +211,10 @@ class OrderItemModel {
   /// this seller to approve or refuse a cancellation.
   final String? cancelStatus;
   final String? cancelReason;
+
+  /// `carts.invoice_url` — only selected by the detail query, and only
+  /// present while the checkout is still open.
+  final String? invoiceUrl;
 
   /// The raw `order_items.status`, kept alongside the parsed [status] because
   /// the seller buckets test it against string sets ported from web.
@@ -245,6 +260,19 @@ extension OrderTabX on OrderTab {
     OrderTab.dispute => 'Komplain',
   };
 
+  /// Ports `ORDER_EMPTY_COPY` — what each tab says when it has nothing to
+  /// show. A single "Tidak ada pesanan di tab ini" told the buyer nothing
+  /// about which shelf they were looking at.
+  String get emptyHeadline => switch (this) {
+    OrderTab.all => 'Belum ada pesanan',
+    OrderTab.unpaid => 'Tidak ada pesanan menunggu pembayaran',
+    OrderTab.processing => 'Tidak ada pesanan diproses',
+    OrderTab.shipped => 'Tidak ada paket dikirim',
+    OrderTab.completed => 'Belum ada pesanan selesai',
+    OrderTab.cancelled => 'Tidak ada riwayat pembatalan',
+    OrderTab.dispute => 'Tidak ada komplain aktif',
+  };
+
   /// Web marks these two with a coloured dot when they aren't empty: one
   /// costs the buyer their order, the other their money.
   bool get isUrgent => this == OrderTab.unpaid || this == OrderTab.dispute;
@@ -266,6 +294,7 @@ class OrderModel {
       slug: row['slug'] as String? ?? '',
       orderNumber: row['order_number'] as String? ?? '',
       storeName: storeName,
+      sellerId: row['seller_id'] as String?,
       status: OrderStatusX.fromRaw(row['status'] as String?),
       createdAt:
           DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ??
@@ -284,6 +313,20 @@ class OrderModel {
       biteshipBookError: shipment?['biteship_book_error'] as String?,
       originCollectionMethod: shipment?['origin_collection_method'] as String?,
       statusHistory: _statusHistory(shipment?['status_history']),
+      // Declared, passed through `withSeller` and read by the history card
+      // and the not-received window — but never parsed, so both silently saw
+      // null on every order.
+      shippedAt: DateTime.tryParse(
+        shipment?['shipped_at'] as String? ?? '',
+      )?.toLocal(),
+      deliveredAt: DateTime.tryParse(
+        shipment?['delivered_at'] as String? ?? '',
+      )?.toLocal(),
+      // Only the detail query selects these, so a list row leaves it null
+      // rather than carrying an empty address.
+      destination: shipment == null || !shipment.containsKey('destination_city')
+          ? null
+          : ShipmentDestination.fromRow(shipment),
     );
   }
 
@@ -292,10 +335,12 @@ class OrderModel {
     required this.orderNumber,
     required this.storeName,
     required this.status,
+    this.sellerId,
     required this.createdAt,
     required this.items,
     this.trackingNumber,
     this.courier,
+    this.destination,
     this.shipmentSlug,
     this.shipmentStatus,
     this.shipmentDeadline,
@@ -314,11 +359,19 @@ class OrderModel {
   final String slug;
   final String orderNumber;
   final String storeName;
+
+  /// `orders.seller_id` — who to open a chat with.
+  final String? sellerId;
+
   final OrderStatus status;
   final DateTime createdAt;
   final List<OrderItemModel> items;
   final String? trackingNumber;
   final String? courier;
+
+  /// Where the parcel is going. Null on a list row, which doesn't fetch it,
+  /// and before a shipment exists at all.
+  final ShipmentDestination? destination;
 
   /// `shipments.slug`, the id the shipment routes take. Only the seller's
   /// query selects it; a buyer has nothing to dispatch.
@@ -351,6 +404,8 @@ class OrderModel {
   /// not by a status.
   DateTime? get paidAt => items.isEmpty ? null : items.first.paidAt;
 
+  DateTime? get releasedAt => items.isEmpty ? null : items.first.releasedAt;
+
   /// What the buyer paid for the cards alone.
   int get itemsSubtotal => items.fold(0, (sum, item) => sum + item.subtotal);
 
@@ -375,17 +430,59 @@ class OrderModel {
     return storeName.trim() == username ? null : '@$username';
   }
 
+  /// The storefront handle to open for this seller, or null when there is
+  /// nothing to open.
+  ///
+  /// `resolveSellerDisplay` falls back to the username when a seller has no
+  /// `store_slug`: they still have a page at `/market/<username>`. Mobile
+  /// only ever looked at the slug, so every seller without a storefront row
+  /// drew a chevron that led nowhere. Guarded by web's `isSafeHandle`, since
+  /// the handle goes straight into a route.
+  static final _safeHandle = RegExp(r'^[\w.\-]{1,50}$');
+
+  String? get sellerHandle {
+    final slug = sellerSlug;
+    if (slug != null && slug.isNotEmpty) return slug;
+    final username = sellerUsername;
+    if (username != null && _safeHandle.hasMatch(username)) return username;
+    return null;
+  }
+
   /// The store's logo if it has one, else the person's avatar.
   String? get sellerImageUrl =>
       (sellerLogoUrl?.isNotEmpty ?? false) ? sellerLogoUrl : sellerAvatarUrl;
 
-  /// `confirm_receipt` refuses anything but a shipped settlement that the
-  /// courier has recorded as delivered, with no open dispute — so the button
-  /// only appears where the server would accept it.
-  bool get canConfirmReceipt =>
-      shipmentStatus == 'shipped' &&
-      !isUnpaid &&
-      latestBiteshipStatus(statusHistory) == 'delivered';
+  /// Ports `canConfirmReceipt`.
+  ///
+  /// The old rule demanded `shipmentStatus == 'shipped'` *and* a courier
+  /// history saying delivered, so the button vanished the moment the
+  /// shipment flipped to `received` — which is exactly when a buyer goes
+  /// looking for it. Web accepts either a delivery timestamp or the
+  /// `received` state, and additionally lets an untrackable manual courier
+  /// be confirmed a day after dispatch, since no history is ever coming.
+  bool canConfirmReceiptAt([DateTime? now]) {
+    if (isUnpaid) return false;
+    if (deliveredAt != null ||
+        shipmentStatus == 'received' ||
+        latestBiteshipStatus(statusHistory) == 'delivered') {
+      return true;
+    }
+    final shipped = shippedAt;
+    if (isUntrackableManual && shipped != null) {
+      return (now ?? DateTime.now()).isAfter(
+        shipped.add(untrackableConfirmDelay),
+      );
+    }
+    return false;
+  }
+
+  bool get canConfirmReceipt => canConfirmReceiptAt();
+
+  /// Ports `isUntrackableManual` — a hand-entered resi on a courier whose
+  /// tracking the platform can't read, so no status will ever arrive.
+  bool get isUntrackableManual =>
+      originCollectionMethod == 'manual' &&
+      untrackableCourierCodes.contains(courier?.trim().toLowerCase());
 
   /// `order_items.id` of the first line — what `confirm_receipt` takes.
   int? get firstItemId => items.isEmpty ? null : items.first.id;
@@ -396,6 +493,17 @@ class OrderModel {
       items.isEmpty ? null : items.first.settlementStatus;
 
   String? get itemStatusRaw => items.isEmpty ? null : items.first.statusRaw;
+
+  /// The status to reason about, which is the *item's*.
+  ///
+  /// `orders.status` lags: a delivered, released, fully finished order can
+  /// still read `awaiting_shipment` on the package row. Anything asking
+  /// "is this done?" has to go through here.
+  String get effectiveStatus => itemStatusRaw ?? status.raw;
+
+  /// `REVIEWABLE_MATCH_STATUSES` — settled well enough to rate.
+  bool get isSettledSuccessfully =>
+      effectiveStatus == 'completed' || effectiveStatus == 'resolved';
 
   /// A cancellation waiting on the seller, from whichever item carries it.
   String? get cancelStatus {
@@ -415,6 +523,15 @@ class OrderModel {
 
   String? get disputeStatus => openDispute?.status;
 
+  /// The open invoice behind this order, when there is one to pay.
+  String? get invoiceUrl {
+    for (final item in items) {
+      final url = item.invoiceUrl;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
   /// When the buyer's payment window closes.
   DateTime? get paymentDeadline =>
       items.isEmpty ? null : items.first.paymentDeadline;
@@ -431,16 +548,37 @@ class OrderModel {
                 item.settlementStatus == 'awaiting_payment'),
       );
 
-  /// Which tab of the Pesanan list this order belongs under — the app's
-  /// read of web's `bucketPackage`, over the fields the app actually holds.
-  OrderTab get tab => switch (status) {
-    OrderStatus.issue => OrderTab.dispute,
-    OrderStatus.cancelled => OrderTab.cancelled,
-    OrderStatus.completed => OrderTab.completed,
-    OrderStatus.shipped || OrderStatus.received => OrderTab.shipped,
-    OrderStatus.awaitingShipment =>
-      isUnpaid ? OrderTab.unpaid : OrderTab.processing,
-  };
+  /// Which tab of the Pesanan list this order belongs under — a port of
+  /// web's `bucketMatch`.
+  ///
+  /// Switches on `order_items.status`, which is what web reads. `orders.status`
+  /// lags behind it: a delivered, released, fully finished order can still sit
+  /// at `awaiting_shipment` on the package row, and bucketing on that filed
+  /// finished orders under Diproses with a "Selesai" badge on them.
+  OrderTab get tab {
+    if (openDispute != null) return OrderTab.dispute;
+
+    final deadline = paymentDeadline;
+    if (isUnpaid) {
+      final expired = deadline != null && deadline.isBefore(DateTime.now());
+      return expired ? OrderTab.cancelled : OrderTab.unpaid;
+    }
+
+    final dispatched = switch (shipmentStatus) {
+      'shipped' || 'received' || 'completed' => true,
+      _ => false,
+    };
+
+    return switch (itemStatusRaw ?? status.raw) {
+      'shipped' => OrderTab.shipped,
+      'completed' || 'resolved' => OrderTab.completed,
+      'cancelled' ||
+      'expired' ||
+      'rejected' ||
+      'refunded' => OrderTab.cancelled,
+      _ => dispatched ? OrderTab.shipped : OrderTab.processing,
+    };
+  }
 
   int get total =>
       items.fold(0, (sum, item) => sum + item.subtotal + item.shippingCost);
@@ -458,6 +596,7 @@ class OrderModel {
       slug: this.slug,
       orderNumber: orderNumber,
       storeName: storeName,
+      sellerId: sellerId,
       status: status,
       createdAt: createdAt,
       items: items,
@@ -471,6 +610,7 @@ class OrderModel {
       statusHistory: statusHistory,
       shippedAt: shippedAt,
       deliveredAt: deliveredAt,
+      destination: destination,
       sellerUsername: username,
       sellerAvatarUrl: avatarUrl,
       sellerLogoUrl: logoUrl,
@@ -487,6 +627,7 @@ List<ShipmentStatusEntry>? _statusHistory(Object? raw) {
         ShipmentStatusEntry(
           status: entry['status'] as String?,
           at: DateTime.tryParse(entry['at'] as String? ?? '')?.toLocal(),
+          note: entry['note'] as String?,
         ),
   ];
 }

@@ -24,7 +24,7 @@ class SupportPage extends StatelessWidget {
     ),
     (
       'Bagaimana jika barang tidak sesuai?',
-      'Ajukan sengketa dari halaman detail pesanan dalam 3x24 jam setelah barang diterima.',
+      'Ajukan komplain dari halaman detail pesanan dalam 3x24 jam setelah barang diterima.',
     ),
   ];
 

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/utils/postgrest_embed.dart';
 import 'models/dispute_model.dart';
 import 'models/order_model.dart';
+import 'models/order_rating.dart';
 import 'models/order_ref.dart';
 import 'models/pending_checkout.dart';
 import 'models/seller_order_detail.dart';
@@ -44,6 +45,28 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
       'biteship_book_error, origin_collection_method, status_history)';
+
+  /// The buyer's *detail* columns: [_orderColumns] plus where the parcel is
+  /// going, which the detail page shows and the list has no room for.
+  ///
+  /// Separate from [_orderColumns] on purpose — the list fetches fifty orders
+  /// and would be paying for seven destination columns it never draws.
+  static const _buyerOrderDetailColumns =
+      'id, slug, order_number, status, created_at, seller_id, buyer_id,'
+      'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
+      'status, created_at, cards($_cardColumns),'
+      'settlements(condition, escrow_amount, shipping_cost, status,'
+      'paid_at, released_at, payment_deadline, cancel_status, cancel_reason,'
+      // The invoice lives on the checkout, not the settlement, so an unpaid
+      // order can only offer "Bayar Sekarang" by reaching through `cart_id`.
+      'carts(invoice_url)),'
+      'disputes(slug, current_status)),'
+      'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
+      'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'biteship_book_error, origin_collection_method, status_history,'
+      'destination_contact_name, destination_contact_phone,'
+      'destination_full_address, destination_district, destination_city,'
+      'destination_province, destination_postal_code)';
 
   /// The caller's orders. As a buyer by default; [asSeller] flips it to the
   /// ones they're selling, which `orders_select_own` covers too — the policy
@@ -221,13 +244,92 @@ class OrdersRepository {
   Future<OrderModel?> fetchOrder(String ref) async {
     if (_uid == null) return null;
 
-    final row = await _orderRowByRef(ref, _orderColumns);
+    final row = await _orderRowByRef(ref, _buyerOrderDetailColumns);
     if (row == null) return null;
 
     final sellerId = row['seller_id'] as String?;
-    final names = await _sellerNames({if (sellerId != null) sellerId});
-    return OrderModel.fromRow(row, storeName: names[sellerId] ?? 'Penjual');
+    final ids = {if (sellerId != null) sellerId};
+    // The detail page shows the same seller chip the list does — logo,
+    // `@username`, and a tap through to the storefront. It used to fetch only
+    // the store *name*, so the chip drew a chevron over an identity with no
+    // slug in it and the tap went nowhere.
+    final names = await _sellerNames(ids);
+    final identities = await _sellerIdentities(ids);
+
+    final order = OrderModel.fromRow(
+      row,
+      storeName: names[sellerId] ?? 'Penjual',
+    );
+    final identity = identities[sellerId];
+    if (identity == null) return order;
+    return order.withSeller(
+      username: identity.username,
+      avatarUrl: identity.avatarUrl,
+      logoUrl: identity.logoUrl,
+      slug: identity.slug,
+    );
   }
+
+  /// The rating this buyer already left on [order], if any.
+  ///
+  /// Read from `trade_ratings` joined back through `order_items` on the
+  /// item's slug, the same shape web's detail page checks — `ratings_select_public`
+  /// makes the row readable, and `rater_id` scopes it to the caller's own.
+  Future<OrderRating?> fetchMyRating(OrderModel order) async {
+    final me = _uid;
+    final itemSlug = order.items.isEmpty ? null : order.items.first.slug;
+    if (me == null || itemSlug == null) return null;
+
+    final row = await _client
+        .from('trade_ratings')
+        .select(
+          'id, feedback, comment, reply, reply_at, created_at, '
+          'order_item_id, order_items!inner(slug)',
+        )
+        .eq('order_items.slug', itemSlug)
+        .eq('rater_id', me)
+        .maybeSingle();
+    if (row == null) return null;
+    return OrderRating.fromRow(row);
+  }
+
+  /// Ports `POST /api/feedback` — the route only resolves the item's slug to
+  /// its id and calls `submit_feedback`, which the app can do directly.
+  ///
+  /// Returns null on success, or a message to show.
+  Future<String?> submitRating({
+    required int orderItemId,
+    required FeedbackKind feedback,
+    String? comment,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'submit_feedback',
+        params: {
+          'p_match_id': orderItemId,
+          'p_feedback': feedback.raw,
+          'p_comment': (comment?.trim().isEmpty ?? true)
+              ? null
+              : comment!.trim(),
+        },
+      );
+      if (result is Map && result['ok'] == true) return null;
+      final code = result is Map ? result['error'] as String? : null;
+      return _feedbackErrorMessage(code);
+    } on PostgrestException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Ports `feedbackErrorMessage`.
+  String _feedbackErrorMessage(String? code) => switch (code) {
+    'not_authenticated' => 'Masuk dulu untuk memberi penilaian',
+    'not_participant' => 'Kamu bukan bagian dari transaksi ini',
+    'not_completed' => 'Penilaian bisa diberi setelah transaksi selesai',
+    'already_rated' => 'Kamu sudah memberi penilaian untuk pesanan ini',
+    'window_expired' => 'Waktu penilaian sudah lewat',
+    _ => 'Gagal mengirim penilaian',
+  };
 
   /// The `orders` row a reference names, whichever kind of reference it is.
   ///
@@ -303,7 +405,11 @@ class OrdersRepository {
       'commission_amount, seller_net_amount, insurance_premium_idr,'
       // Which dispatch methods this order's courier supports, and who it is
       // — the shipment sheet offers pickup or a manual resi accordingly.
-      'available_collection_method, courier_company),'
+      // What the buyer picked and paid for — the seller's dispatch step has
+      // to show it, or they can't tell which courier to hand the parcel to.
+      'available_collection_method, courier_company, courier_service,'
+      'courier_service_code, estimated_delivery_text,'
+      'estimated_delivery_unit),'
       'disputes(slug, current_status)),'
       'shipments!shipments_order_id_fkey(slug, tracking_number, courier, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'

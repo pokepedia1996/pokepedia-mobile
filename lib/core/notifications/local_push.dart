@@ -24,6 +24,15 @@ class LocalPush {
   final _taps = StreamController<String>.broadcast();
   Stream<String> get taps => _taps.stream;
 
+  /// A tap that launched the app, held until someone asks for it.
+  ///
+  /// This cannot go out on [taps]: the payload is discovered inside [init],
+  /// and every listener attaches *after* awaiting that same call, so a
+  /// broadcast stream has nobody on it yet and drops the event on the floor.
+  /// Tapping a notification that starts the app from cold then did nothing at
+  /// all. Held here instead, and claimed once by [takeLaunchRoute].
+  String? _launchRoute;
+
   bool _ready = false;
   bool _permitted = false;
 
@@ -71,9 +80,17 @@ class LocalPush {
     if (launch?.didNotificationLaunchApp == true &&
         payload != null &&
         payload.isNotEmpty) {
-      // After the first frame, so whoever listens is already listening.
-      scheduleMicrotask(() => _taps.add(payload));
+      _launchRoute = payload;
     }
+  }
+
+  /// The route a cold-start tap asked for, or null. Returns it once: a second
+  /// caller — or a later sign-in rebuilding the listener — must not send the
+  /// user back to the same screen again.
+  String? takeLaunchRoute() {
+    final route = _launchRoute;
+    _launchRoute = null;
+    return route;
   }
 
   /// Asks for permission the first time there is something to show. Returns

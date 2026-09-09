@@ -71,9 +71,11 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
     final ids = _selected.toList();
     setState(() => _working = true);
 
-    var error = await ref
-        .read(portfolioRepositoryProvider)
-        .addCardsToList(listId: destination.id, cardIds: ids);
+    var error =
+        (await ref
+                .read(portfolioRepositoryProvider)
+                .addCardsToList(listId: destination.id, cardIds: ids))
+            .error;
     if (error == null && move) error = await _unwishlist(ids);
 
     if (!mounted) return;
@@ -239,12 +241,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.62,
-              ),
+              gridDelegate: cardGridDelegate(context),
               delegate: SliverChildBuilderDelegate(
                 (context, i) => _tile(visible[i]),
                 childCount: visible.length,

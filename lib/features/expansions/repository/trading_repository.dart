@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_condition.dart';
@@ -92,6 +93,168 @@ class TradingRepository {
     }
     return urls;
   }
+
+  /// How much a bid price level can still absorb, and how many buyers are
+  /// behind it — what the proposal sheet caps its quantity to.
+  ///
+  /// Ports `fetchLevel` in `bid-proposal-modal.tsx`. The caller's own bids
+  /// are excluded: you can't propose to yourself, and counting them would
+  /// promise quantity the broadcast will never reach.
+  Future<({int buyerCount, int availableQty})> fetchBidLevel({
+    required int cardId,
+    required CardCondition condition,
+    required int price,
+    String? variantKey,
+  }) async {
+    final me = _client.auth.currentUser?.id;
+    if (me == null) return (buyerCount: 0, availableQty: 0);
+
+    var query = _client
+        .from('listings')
+        .select('quantity, qty_locked, user_id')
+        .eq('side', 'bid')
+        .eq('status', 'open')
+        .eq('card_id', cardId)
+        .eq('condition', condition.raw)
+        .eq('price', price)
+        .neq('user_id', me);
+    query = variantKey == null
+        ? query.isFilter('variant_key', null)
+        : query.eq('variant_key', variantKey);
+
+    final rows = await query as List;
+    var available = 0;
+    var buyers = 0;
+    for (final row in rows.cast<Map<String, dynamic>>()) {
+      final remaining =
+          ((row['quantity'] as num?)?.toInt() ?? 0) -
+          ((row['qty_locked'] as num?)?.toInt() ?? 0);
+      if (remaining <= 0) continue;
+      available += remaining;
+      buyers++;
+    }
+    return (buyerCount: buyers, availableQty: available);
+  }
+
+  /// Offers the caller's card to every buyer bidding at one price level.
+  ///
+  /// Ports `POST /api/bid-proposals/broadcast`, which only validates the
+  /// photo URLs before calling this RPC — and the app uploads to the same
+  /// `listing-photos/{uid}/` prefix that validation checks for.
+  ///
+  /// A broadcast rather than a message to one buyer, which is why the order
+  /// book can act on a price level that carries no listing slug.
+  Future<({int sentCount, String? error})> broadcastBidProposal({
+    required int cardId,
+    required CardCondition condition,
+    required int price,
+    required int quantity,
+    List<String> photoUrls = const [],
+    String? variantKey,
+    String? message,
+    int? proposedPrice,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'submit_bid_proposal_broadcast',
+        params: {
+          'p_card_id': cardId,
+          'p_variant_key': variantKey,
+          'p_condition': condition.raw,
+          'p_price': price,
+          'p_quantity': quantity,
+          'p_photos': photoUrls,
+          'p_message': message,
+          'p_proposed_price': proposedPrice,
+        },
+      );
+      final row = result is Map ? result : const {};
+      final error = row['error'] as String?;
+      if (error != null) {
+        return (sentCount: 0, error: _proposalErrorMessage(error));
+      }
+      return (
+        sentCount: (row['sent_count'] as num?)?.toInt() ?? 0,
+        error: null,
+      );
+    } on PostgrestException catch (e) {
+      return (sentCount: 0, error: e.message);
+    }
+  }
+
+  /// Proposes to **one** bid, by its listing slug — `submit_bid_proposal`.
+  ///
+  /// The sibling of [broadcastBidProposal], and the difference is who hears
+  /// about it: the broadcast offers the card to everyone bidding at a price
+  /// level, this answers the single wanted-ad the seller is looking at. The
+  /// order book has only a price level to work with, so it broadcasts; the
+  /// bid detail page has the listing itself.
+  ///
+  /// The condition can't be chosen — the RPC rejects anything but the bid's
+  /// own with `condition_mismatch`.
+  Future<({String? proposalSlug, String? error})> submitBidProposal({
+    required String bidSlug,
+    required CardCondition condition,
+    required int quantity,
+    List<String> photoUrls = const [],
+    String? message,
+    int? proposedPrice,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'submit_bid_proposal',
+        params: {
+          'p_bid_order_slug': bidSlug,
+          'p_quantity': quantity,
+          'p_condition': condition.raw,
+          'p_photos': photoUrls,
+          'p_message': message,
+          'p_proposed_price': proposedPrice,
+        },
+      );
+      final row = result is Map ? result : const {};
+      final error = row['error'] as String?;
+      if (error != null) {
+        return (proposalSlug: null, error: _proposalErrorMessage(error));
+      }
+      return (proposalSlug: row['proposal_slug'] as String?, error: null);
+    } on PostgrestException catch (e) {
+      return (proposalSlug: null, error: e.message);
+    }
+  }
+
+  String _proposalErrorMessage(String code) => switch (code) {
+    'unauthorized' ||
+    'not_authenticated' => 'Masuk dulu untuk mengirim proposal',
+    'phone_not_verified' => 'Verifikasi nomor teleponmu dulu',
+    'seller_not_active' => 'Aktifkan toko dulu untuk mengirim proposal',
+    'no_bids' => 'Tidak ada bid di harga ini lagi',
+    'photos_required' || 'invalid_photos' => 'Unggah foto kartumu dulu',
+    'rate_limited' => 'Terlalu banyak proposal. Coba lagi nanti.',
+    // The rest only `submit_bid_proposal` answers with — proposing to one
+    // named bid can fail in ways a broadcast to a price level cannot.
+    'cannot_propose_on_own_bid' => 'Ini bid kamu sendiri',
+    'proposal_already_pending' =>
+      'Kamu sudah mengirim proposal untuk bid ini. Cek halaman Proposal.',
+    'order_not_found' ||
+    'order_not_available' ||
+    'not_a_bid_order' => 'Bid ini sudah tidak aktif',
+    'insufficient_quantity' => 'Jumlahnya melebihi yang dicari pembeli',
+    'condition_mismatch' =>
+      'Kondisi kartumu harus sama dengan yang dicari pembeli',
+    'invalid_proposed_price' => 'Harga jualmu tidak boleh di bawah bid',
+    'invalid_quantity' => 'Jumlahnya tidak valid',
+    'seller_profile_incomplete' => 'Lengkapi profil tokomu dulu',
+    'no_couriers' => 'Atur kurir pengirimanmu dulu',
+    'trading_disabled' => 'Kartu ini belum bisa diperdagangkan',
+    _ => 'Gagal mengirim proposal',
+  };
+
+  /// Indonesian copy for the error codes the two proposal RPCs return.
+  /// Exposed for tests: those codes are the contract between the RPC and
+  /// what a seller reads, and an unmapped one says nothing.
+  @visibleForTesting
+  String debugMessageFor(String code) => _proposalErrorMessage(code);
 
   /// The gates `place_order` enforces, read before the form opens.
   /// `profiles_private` and `seller_profiles` are both own-row-only under

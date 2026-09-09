@@ -15,11 +15,38 @@ import '../usecase/chat_notifier.dart';
 
 /// Ports `components/chat/ConversationList.tsx` / `app/chat/page.tsx`, backed
 /// by `get_chat_room_summaries`.
-class ChatInboxPage extends ConsumerWidget {
+class ChatInboxPage extends ConsumerStatefulWidget {
   const ChatInboxPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatInboxPage> createState() => _ChatInboxPageState();
+}
+
+class _ChatInboxPageState extends ConsumerState<ChatInboxPage> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (position.pixels < position.maxScrollExtent - 400) return;
+    ref.read(chatThreadsProvider.notifier).loadMore();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final signedIn = ref.watch(authProvider).valueOrNull != null;
     final async = ref.watch(chatThreadsProvider);
 
@@ -44,17 +71,33 @@ class ChatInboxPage extends ConsumerWidget {
                         'Percakapan muncul di sini setelah kamu menghubungi penjual.',
                   );
                 }
+                final more = ref.read(chatThreadsProvider.notifier).hasMore;
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(chatThreadsProvider),
                   child: ListView.separated(
-                    itemCount: threads.length,
+                    controller: _scroll,
+                    // One past the rows for the spinner under the last one
+                    // while the next page is on its way.
+                    itemCount: threads.length + (more ? 1 : 0),
                     separatorBuilder: (context, i) => Divider(
                       height: 1,
                       color: context.borderColor,
                       indent: 76,
                     ),
-                    itemBuilder: (context, i) =>
-                        _ThreadTile(thread: threads[i]),
+                    itemBuilder: (context, i) => i >= threads.length
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          )
+                        : _ThreadTile(thread: threads[i]),
                   ),
                 );
               },
@@ -103,20 +146,58 @@ class _ThreadTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    thread.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          thread.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
+                        ),
+                      ),
+                      // A shop's own handle, beside its name.
+                      if (thread.secondaryName case final handle?) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            handle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption(
+                              context.mutedForeground,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    thread.preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: unread
-                        ? AppTypography.bodySmSemibold(colors.onSurface)
-                        : AppTypography.bodySm(context.mutedForeground),
+                  Row(
+                    children: [
+                      // The little glyph web puts in front of a photo or an
+                      // order line, so the row reads without the words.
+                      if (thread.previewIsPhoto || thread.previewIsOrder) ...[
+                        Icon(
+                          thread.previewIsPhoto
+                              ? LucideIcons.image
+                              : LucideIcons.package,
+                          size: 13,
+                          color: context.mutedForeground,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          thread.preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: unread
+                              ? AppTypography.bodySmSemibold(colors.onSurface)
+                              : AppTypography.bodySm(context.mutedForeground),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

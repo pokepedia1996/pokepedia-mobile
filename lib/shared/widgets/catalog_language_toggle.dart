@@ -83,11 +83,6 @@ class _LanguageButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                language.flag,
-                style: const TextStyle(fontSize: 13, height: 1),
-              ),
-              const SizedBox(width: 5),
-              Text(
                 language.shortLabel,
                 style: AppTypography.captionSemibold(
                   selected ? colors.onSurface : context.mutedForeground,

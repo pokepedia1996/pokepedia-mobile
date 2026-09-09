@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/card_ownership_controller.dart';
@@ -202,12 +203,9 @@ class _DeckTabState extends ConsumerState<DeckTab> {
             if (decks.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: TextField(
+                child: AppSearchField(
+                  hintText: 'Cari deck...',
                   onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Cari deck...',
-                    prefixIcon: Icon(LucideIcons.search, size: 20),
-                  ),
                 ),
               ),
             Expanded(

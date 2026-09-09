@@ -21,6 +21,8 @@ class SentProposalModel {
     this.createdAt,
     this.expiresAt,
     this.message,
+    this.seenAt,
+    this.photos = const [],
   });
 
   factory SentProposalModel.fromRow(
@@ -44,6 +46,11 @@ class SentProposalModel {
         row['expires_at'] as String? ?? '',
       )?.toLocal(),
       message: row['message'] as String?,
+      seenAt: DateTime.tryParse(row['seen_at'] as String? ?? '')?.toLocal(),
+      photos: [
+        for (final url in (row['photos'] as List? ?? const []))
+          if (url is String && url.isNotEmpty) url,
+      ],
     );
   }
 
@@ -66,6 +73,19 @@ class SentProposalModel {
   final DateTime? expiresAt;
   final String? message;
 
+  /// `bid_proposals.seen_at` — when the buyer first opened it. Null means
+  /// they haven't, which the row says out loud so a seller isn't left
+  /// wondering whether silence means refusal.
+  final DateTime? seenAt;
+
+  /// `bid_proposals.photos` — what the seller attached to prove the card
+  /// they're offering. Required above Rp100.000, so most rows have them.
+  final List<String> photos;
+
+  /// Ports `isStockPhoto`: the first photo being the catalog art means
+  /// the seller sent stock imagery rather than their own copy.
+  bool get usesStockPhoto => photos.isNotEmpty && photos.first == card.imageUrl;
+
   /// The price actually being proposed, falling back to the bid's own.
   int get effectivePrice => proposedPrice ?? bidPrice;
 
@@ -79,5 +99,15 @@ class SentProposalModel {
   bool get isExpiringSoon {
     final expiresAt = this.expiresAt;
     return status == BidProposalStatus.pending && expiresAt != null;
+  }
+
+  /// How long the buyer still has to answer, or null when the proposal has
+  /// settled and the clock no longer matters. Clamped at zero so a lapsed
+  /// proposal never counts upward.
+  Duration? get remaining {
+    final expiresAt = this.expiresAt;
+    if (status != BidProposalStatus.pending || expiresAt == null) return null;
+    final left = expiresAt.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
   }
 }

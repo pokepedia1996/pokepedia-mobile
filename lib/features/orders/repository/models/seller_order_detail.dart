@@ -1,52 +1,10 @@
 import '../../../../shared/utils/postgrest_embed.dart';
 import 'order_model.dart';
+import 'shipment_destination.dart';
 
-/// Where the parcel is going. Only populated once a shipment row exists —
-/// before that the buyer's address is still theirs alone.
-class ShipmentDestination {
-  const ShipmentDestination({
-    this.contactName,
-    this.contactPhone,
-    this.fullAddress,
-    this.district,
-    this.city,
-    this.province,
-    this.postalCode,
-  });
-
-  factory ShipmentDestination.fromRow(Map<String, dynamic> row) {
-    return ShipmentDestination(
-      contactName: row['destination_contact_name'] as String?,
-      contactPhone: row['destination_contact_phone'] as String?,
-      fullAddress: row['destination_full_address'] as String?,
-      district: row['destination_district'] as String?,
-      city: row['destination_city'] as String?,
-      province: row['destination_province'] as String?,
-      postalCode: row['destination_postal_code'] as String?,
-    );
-  }
-
-  final String? contactName;
-  final String? contactPhone;
-  final String? fullAddress;
-  final String? district;
-  final String? city;
-  final String? province;
-  final String? postalCode;
-
-  /// District · city · province · postcode, skipping whatever is missing.
-  String get areaLine => [
-    district,
-    city,
-    province,
-    postalCode,
-  ].whereType<String>().where((s) => s.trim().isNotEmpty).join(', ');
-
-  bool get isEmpty =>
-      (contactName ?? '').isEmpty &&
-      (fullAddress ?? '').isEmpty &&
-      areaLine.isEmpty;
-}
+// Re-exported: this file used to define `ShipmentDestination`, and the
+// seller detail page still imports it from here.
+export 'shipment_destination.dart';
 
 /// `INSTANT_COURIER_COMPANY_CODES` in `lib/shipping/core/instant-couriers.ts`
 /// — the on-demand couriers, which only ever pick up.
@@ -86,6 +44,9 @@ class SellerOrderDetail {
     this.destination,
     this.availableCollectionMethods,
     this.courierCompany,
+    this.courierService,
+    this.etdText,
+    this.etdUnit,
   });
 
   /// Builds the seller view from one `orders` row.
@@ -106,6 +67,9 @@ class SellerOrderDetail {
     var net = 0;
     List<String>? collectionMethods;
     String? courierCompany;
+    String? courierService;
+    String? etdText;
+    String? etdUnit;
 
     for (final entry in (row['order_items'] as List?) ?? const []) {
       if (entry is! Map<String, dynamic>) continue;
@@ -124,6 +88,11 @@ class SellerOrderDetail {
         settlement['available_collection_method'],
       );
       courierCompany ??= settlement['courier_company'] as String?;
+      courierService ??=
+          settlement['courier_service'] as String? ??
+          settlement['courier_service_code'] as String?;
+      etdText ??= settlement['estimated_delivery_text'] as String?;
+      etdUnit ??= settlement['estimated_delivery_unit'] as String?;
     }
 
     final shipment = embeddedRow(row['shipments']);
@@ -136,6 +105,9 @@ class SellerOrderDetail {
       buyerUsername: buyerUsername,
       availableCollectionMethods: collectionMethods,
       courierCompany: courierCompany,
+      courierService: courierService,
+      etdText: etdText,
+      etdUnit: etdUnit,
       destination: destination != null && !destination.isEmpty
           ? destination
           : null,
@@ -158,6 +130,37 @@ class SellerOrderDetail {
 
   /// `settlements.courier_company`, the code the courier is booked under.
   final String? courierCompany;
+
+  /// The service level the buyer paid for — "Reguler", "Instant", and so on.
+  final String? courierService;
+
+  /// `estimated_delivery_text` / `_unit`, the courier's own ETA.
+  final String? etdText;
+  final String? etdUnit;
+
+  /// "1 - 2 hari" — web's `translateEtdUnit`, which turns the courier's
+  /// English unit into the one the rest of the app speaks.
+  String? get etd {
+    final text = etdText?.trim();
+    if (text == null || text.isEmpty) return null;
+    final unit = switch (etdUnit?.toLowerCase()) {
+      'day' || 'days' => 'hari',
+      'hour' || 'hours' => 'jam',
+      'minute' || 'minutes' => 'menit',
+      final other => other ?? '',
+    };
+    return unit.isEmpty ? text : '$text $unit';
+  }
+
+  /// How the buyer's courier reads on screen: name, then service level.
+  String? get buyerCourierLabel {
+    final company = courierCompany?.trim();
+    if (company == null || company.isEmpty) return null;
+    final service = courierService?.trim();
+    return service == null || service.isEmpty
+        ? company.toUpperCase()
+        : '${company.toUpperCase()} · $service';
+  }
 
   /// Instant couriers ride along with a driver and cannot take a resi the
   /// seller typed in — web's `isInstantCourierCompany`.

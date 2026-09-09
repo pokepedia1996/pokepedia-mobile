@@ -56,7 +56,7 @@ class _HomeLoadingGateState extends ConsumerState<HomeLoadingGate> {
           Positioned.fill(
             child: ColoredBox(
               color: context.appColors.surface,
-              child: const PikachuLoader(size: 180, label: 'Memuat...'),
+              child: const PikachuLoader(size: 180),
             ),
           ),
       ],

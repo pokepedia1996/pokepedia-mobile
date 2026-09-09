@@ -5,6 +5,7 @@ import '../../../core/providers/supabase_provider.dart';
 
 import '../repository/models/dispute_model.dart';
 import '../repository/models/order_model.dart';
+import '../repository/models/order_rating.dart';
 import '../repository/models/pending_checkout.dart';
 import '../repository/models/seller_order.dart';
 import '../repository/orders_repository.dart';
@@ -68,6 +69,17 @@ final orderDetailProvider = FutureProvider.family<OrderModel?, String>((
   slug,
 ) {
   return ref.read(ordersRepositoryProvider).fetchOrder(slug);
+});
+
+/// The rating this buyer already left on an order, if any — what decides
+/// whether the Penilaian card offers the button or shows the review.
+final orderRatingProvider = FutureProvider.family<OrderRating?, String>((
+  ref,
+  slug,
+) async {
+  final order = await ref.watch(orderDetailProvider(slug).future);
+  if (order == null) return null;
+  return ref.read(ordersRepositoryProvider).fetchMyRating(order);
 });
 
 final orderDisputeProvider = FutureProvider.family<DisputeModel?, String>((

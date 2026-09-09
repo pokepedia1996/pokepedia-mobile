@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/router/routes.dart';
-import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../features/cart/usecase/cart_notifier.dart';
+import 'quick_search_field.dart';
 
 /// Whether the tab under the top bar has been scrolled past the threshold.
 ///
@@ -21,9 +21,9 @@ final topBarScrolledProvider = StateProvider<bool>((ref) => false);
 /// tap-to-search field.
 ///
 /// On scroll the logo row folds away and its cart button slides in beside
-/// the search field, the same morph the web plays with GSAP. Tapping the
-/// field pushes [Routes.search] (no inline suggestions), standing in for the
-/// dedicated "Pencarian" bottom-nav tab.
+/// the search field, the same morph the web plays with GSAP. The field
+/// itself searches in place — see [QuickSearchField] — and hands the whole
+/// query to advanced search only when asked to.
 class AppTopBar extends ConsumerWidget {
   const AppTopBar({super.key, this.showCart = true});
 
@@ -108,12 +108,15 @@ class AppTopBar extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16, scrolled ? 0 : 8, 16, 8),
             child: Row(
               children: [
-                const Expanded(child: _SearchField()),
-                // Sits beside search because it's the same job by another
-                // route: search is "I know what I'm looking for", scan is "I'm
-                // holding it". Kept out of the scroll-morph the cart does — the
-                // scanner is a primary action, not a contextual one.
-                const _ScanButton(),
+                // The scanner lives inside the field, where web keeps it:
+                // same job by another route — search is "I know what I'm
+                // looking for", scan is "I'm holding it" — so it belongs on
+                // the search control rather than beside it.
+                Expanded(
+                  child: QuickSearchField(
+                    onScan: () => context.push(Routes.scan),
+                  ),
+                ),
                 if (showCart)
                   // The cart that takes over once the logo row's copy is gone.
                   // `widthFactor` animates the web's `width: 0 -> auto`, and
@@ -143,56 +146,6 @@ class AppTopBar extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Opens the camera card scanner.
-class _ScanButton extends StatelessWidget {
-  const _ScanButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: IconButton(
-        onPressed: () => context.push(Routes.scan),
-        tooltip: 'Pindai kartu',
-        icon: Icon(LucideIcons.focus, color: context.appColors.onSurface),
-      ),
-    );
-  }
-}
-
-class _SearchField extends StatelessWidget {
-  const _SearchField();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.full),
-      onTap: () => context.go(Routes.search),
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: colors.secondary,
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(color: context.borderColor),
-        ),
-        child: Row(
-          children: [
-            Icon(LucideIcons.search, size: 18, color: context.mutedForeground),
-            const SizedBox(width: 8),
-            Text(
-              'Cari kartu...',
-              style: AppTypography.bodySm(context.mutedForeground),
-            ),
-          ],
-        ),
       ),
     );
   }

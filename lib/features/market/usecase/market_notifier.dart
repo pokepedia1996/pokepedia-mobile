@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/supabase_provider.dart';
+import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
@@ -96,6 +97,43 @@ typedef StoreCardListingData = ({
   int otherSellersCount,
   double? positivePct,
   int feedbackScore,
+});
+
+/// Everything the WTB detail page needs for one bid: the bid itself, the
+/// full card behind it, and the buyer's standing.
+typedef BidListingData = ({
+  ListingModel listing,
+  CardModel card,
+  double? positivePct,
+  int feedbackScore,
+});
+
+/// One WTB bid, by listing slug — backs the page a bid tap opens.
+///
+/// The card comes from [cardDetailProvider] rather than from the bid row:
+/// the listing carries only enough of a card to draw a tile, and this page
+/// shows the card's own detail sections underneath.
+final bidListingProvider = FutureProvider.family<BidListingData?, String>((
+  ref,
+  slug,
+) async {
+  final repo = ref.read(marketRepositoryProvider);
+  final listing = await repo.fetchBidListing(slug);
+  if (listing == null) return null;
+
+  final card = await ref.watch(cardDetailProvider(listing.card.id).future);
+  if (card == null) return null;
+
+  final reputation = listing.sellerId.isEmpty
+      ? (positivePct: null, feedbackScore: 0)
+      : await repo.fetchReputation(listing.sellerId);
+
+  return (
+    listing: listing,
+    card: card,
+    positivePct: reputation.positivePct,
+    feedbackScore: reputation.feedbackScore,
+  );
 });
 
 /// One seller's open asks for a single card — backs the compact

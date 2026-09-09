@@ -1,3 +1,4 @@
+import 'app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -171,28 +172,24 @@ class _MapPickerSheetState extends State<_MapPickerSheet> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: TextField(
+              child: AppSearchField(
+                hintText: 'Cari alamat atau nama tempat',
                 controller: _search,
-                textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _runSearch(),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Cari alamat atau nama tempat',
-                  prefixIcon: const Icon(LucideIcons.search, size: 18),
-                  suffixIcon: _searching
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : IconButton(
-                          icon: const Icon(LucideIcons.arrowRight, size: 18),
-                          onPressed: _runSearch,
+                trailing: _searching
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                ),
+                      )
+                    : IconButton(
+                        icon: const Icon(LucideIcons.arrowRight, size: 18),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _runSearch,
+                      ),
               ),
             ),
             Expanded(

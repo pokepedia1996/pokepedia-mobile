@@ -71,8 +71,9 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
     switch (e.card.category) {
       case CardCategory.pokemon:
         pokemonCount += e.quantity;
-        if (e.card.details.evolutionStage == EvolutionStage.basic)
+        if (e.card.details.evolutionStage == EvolutionStage.basic) {
           hasBasicPokemon = true;
+        }
       case CardCategory.trainer:
         trainerCount += e.quantity;
       case CardCategory.energy:
@@ -88,8 +89,9 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
   if (totalCards != deckMaxCards) errors.add(DeckErrorNot60Cards(totalCards));
   if (!hasBasicPokemon) errors.add(const DeckErrorNoBasicPokemon());
   for (final entry in nameQuantities.entries) {
-    if (entry.value > deckMaxCopies)
+    if (entry.value > deckMaxCopies) {
       errors.add(DeckErrorOver4Copies(entry.key, entry.value));
+    }
   }
   if (aceCount > 1) errors.add(DeckErrorOverAce(aceCount));
 

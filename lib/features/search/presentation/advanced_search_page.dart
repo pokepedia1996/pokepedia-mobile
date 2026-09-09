@@ -38,11 +38,35 @@ import 'widgets/search_filter_controls.dart';
 /// happened. The web's anchored dropdown panels open as bottom sheets here,
 /// the touch equivalent of a floating popover; the triggers themselves are
 /// the same bordered pill with a count badge and chevron.
-class AdvancedSearchPage extends ConsumerWidget {
-  const AdvancedSearchPage({super.key});
+class AdvancedSearchPage extends ConsumerStatefulWidget {
+  const AdvancedSearchPage({super.key, this.initialQuery});
+
+  /// What the top bar's search field was holding when "Cari semua" was
+  /// tapped. The form opens on that query and runs it, rather than making
+  /// the user type it a second time.
+  final String? initialQuery;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdvancedSearchPage> createState() => _AdvancedSearchPageState();
+}
+
+class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
+  @override
+  void initState() {
+    super.initState();
+    final seed = widget.initialQuery?.trim();
+    if (seed == null || seed.isEmpty) return;
+    // After the frame: the notifier is read by a tree that is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(searchNotifierProvider.notifier);
+      notifier.setQuery(seed);
+      notifier.search();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(searchNotifierProvider);
     final notifier = ref.read(searchNotifierProvider.notifier);
     final optionsAsync = ref.watch(searchFilterOptionsProvider);
@@ -71,19 +95,17 @@ class AdvancedSearchPage extends ConsumerWidget {
                                 'Pencarian Detail',
                                 style: AppTypography.h2(colors.onSurface),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Cari kartu berdasarkan berbagai kriteria',
-                                style: AppTypography.bodySm(
-                                  context.mutedForeground,
-                                ),
-                              ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 12),
                         const CatalogLanguageToggle(),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Cari kartu berdasarkan berbagai kriteria',
+                      style: AppTypography.bodySm(context.mutedForeground),
                     ),
                     const SizedBox(height: 14),
                     _FilterForm(
@@ -148,12 +170,7 @@ class AdvancedSearchPage extends ConsumerWidget {
           AppBottomNav.reservedSpace(context) + 12,
         ),
         sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.62,
-          ),
+          gridDelegate: cardGridDelegate(context),
           delegate: SliverChildBuilderDelegate((context, i) {
             if (i >= state.results.length) {
               return LoadMoreTile(
@@ -578,6 +595,12 @@ class _SearchTextFieldState extends State<SearchTextField> {
     return TextField(
       controller: _controller,
       textInputAction: TextInputAction.search,
+      // `typo-body-sm` with `py-2.5`, as web's `IconInput variant="search"`
+      // is styled. Left on the shared form decoration these two stood 48
+      // tall against the filter row's 37 — the theme's padding and default
+      // 16pt text are sized for a form field, not for the search box sitting
+      // directly above a row of filter chips.
+      style: AppTypography.bodySm(context.appColors.onSurface),
       onChanged: (value) {
         widget.onChanged(value);
         // Rebuild so the clear button appears with the first character.
@@ -586,7 +609,9 @@ class _SearchTextFieldState extends State<SearchTextField> {
       onSubmitted: widget.onSubmitted,
       decoration: InputDecoration(
         hintText: widget.hint,
+        hintStyle: AppTypography.bodySm(context.mutedForeground),
         isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
         prefixIcon: Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
           child: widget.prefix,

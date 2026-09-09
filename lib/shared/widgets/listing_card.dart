@@ -62,10 +62,19 @@ SliverGridDelegate listingGridDelegate(
 
 /// Everything in the card that isn't artwork: the four text rows, the
 /// card's padding, and the seller strip.
-const listingCardChrome = 149.0;
+///
+/// Measured, not guessed — `listing_card_height_test` binary-searches the
+/// shortest cell the card fits in and fails the build when this drifts under
+/// it. It went 149 -> 165 when the verified badge and reputation star moved
+/// out of the seller row and became their own lines in the column.
+const listingCardChrome = 165.0;
 
 /// The same without the seller strip (`showSeller: false`).
-const listingCardChromeNoSeller = 119.0;
+///
+/// 123, not 119: the measured need is 122.2, and at 119 the card overflowed
+/// by three points — little enough that the harness only caught it on some
+/// runs, which is worse than catching it on none.
+const listingCardChromeNoSeller = 123.0;
 
 class ListingCard extends ConsumerStatefulWidget {
   const ListingCard({
@@ -119,7 +128,16 @@ class _ListingCardState extends ConsumerState<ListingCard> {
       return;
     }
     final listing = widget.listing;
-    if (listing.side == ListingSide.bid || listing.storeSlug.isEmpty) {
+    if (listing.side == ListingSide.bid) {
+      // A wanted-ad has its own page now. Without a slug there's nothing to
+      // look it up by, so the catalog card page stays the fallback — that's
+      // where web's `linkHref` sends every bid.
+      if (listing.slug.isEmpty) {
+        context.push(Routes.cardDetail(listing.card.packSlug, listing.card.id));
+      } else {
+        context.push(Routes.bidListing(listing.slug));
+      }
+    } else if (listing.storeSlug.isEmpty) {
       context.push(Routes.cardDetail(listing.card.packSlug, listing.card.id));
     } else {
       context.push(Routes.storeCardDetail(listing.storeSlug, listing.card.id));
@@ -280,6 +298,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                 ),
               ],
             ),
+
             if (listing.acceptsOffers) ...[
               const SizedBox(height: 4),
               Container(
@@ -295,69 +314,79 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                 ),
               ),
             ],
+            const SizedBox(height: 6),
+
             if (widget.showSeller && listing.storeSlug.isNotEmpty) ...[
               Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.only(top: 6),
                 decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: context.borderColor)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        SellerAvatar(
-                          name: listing.storeName,
-                          imageUrl: listing.sellerImageUrl,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            listing.storeName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.captionSemibold(
-                              colors.onSurface,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Who is selling comes first, then what is known
+                      // about them: the tick, then the reputation star.
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              listing.storeName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.captionSemibold(
+                                colors.onSurface,
+                              ),
                             ),
                           ),
-                        ),
-                        if (listing.isVerified) ...[
-                          const SizedBox(width: 2),
-                          Icon(
-                            LucideIcons.badgeCheck,
-                            size: 13,
-                            color: colors.primary,
-                          ),
+                          if (listing.isVerified) ...[
+                            const SizedBox(width: 3),
+                            Icon(
+                              LucideIcons.badgeCheck,
+                              size: 13,
+                              color: colors.primary,
+                            ),
+                          ],
+                          const SizedBox(width: 4),
+                          ReputationStar(score: listing.sellerFeedbackScore),
                         ],
-                        const SizedBox(width: 4),
-                        ReputationStar(score: listing.sellerFeedbackScore),
-                      ],
-                    ),
-                    // if (listing.cityName.isNotEmpty) ...[
-                    //   const SizedBox(height: 2),
-                    //   Row(
-                    //     children: [
-                    //       Icon(
-                    //         LucideIcons.mapPin,
-                    //         size: 11,
-                    //         color: context.mutedForeground,
-                    //       ),
-                    //       const SizedBox(width: 2),
-                    //       Expanded(
-                    //         child: Text(
-                    //           listing.cityName,
-                    //           maxLines: 1,
-                    //           overflow: TextOverflow.ellipsis,
-                    //           style: AppTypography.caption(
-                    //             context.mutedForeground,
-                    //           ),
-                    //         ),
-                    //       ),
-                    //     ],
-                    //   ),
-                    // ],
-                  ],
+                      ),
+                      // The city sits under the name now rather than
+                      // standing in for it, so it reads as the detail it is.
+                      if (listing.cityName.isNotEmpty)
+                        Text(
+                          listing.cityName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+
+                      // if (listing.cityName.isNotEmpty) ...[
+                      //   const SizedBox(height: 2),
+                      //   Row(
+                      //     children: [
+                      //       Icon(
+                      //         LucideIcons.mapPin,
+                      //         size: 11,
+                      //         color: context.mutedForeground,
+                      //       ),
+                      //       const SizedBox(width: 2),
+                      //       Expanded(
+                      //         child: Text(
+                      //           listing.cityName,
+                      //           maxLines: 1,
+                      //           overflow: TextOverflow.ellipsis,
+                      //           style: AppTypography.caption(
+                      //             context.mutedForeground,
+                      //           ),
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ],
+                    ],
+                  ),
                 ),
               ),
             ],

@@ -1,8 +1,8 @@
+import '../../../../shared/widgets/app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -90,15 +90,11 @@ class _ScanCardSearchSheetState extends ConsumerState<ScanCardSearchSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            child: AppSearchField(
+              hintText: 'Cari kartu…',
               controller: _controller,
               autofocus: true,
               onChanged: _onChanged,
-              textInputAction: TextInputAction.search,
-              decoration: const InputDecoration(
-                hintText: 'Cari kartu…',
-                prefixIcon: Icon(LucideIcons.search),
-              ),
             ),
           ),
           Expanded(child: _buildBody(scrollController)),

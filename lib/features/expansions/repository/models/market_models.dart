@@ -1,6 +1,11 @@
 import '../../../../core/utils/image_url.dart';
 import '../../../../shared/models/card_condition.dart';
 
+// `CardMarketPrice` and `CardPriceSource` live in `shared/models` — the
+// catalog tiles read them too — but every caller here already imports this
+// file for them, so it stays their entry point.
+export '../../../../shared/models/card_market_price.dart';
+
 /// One `(condition, day)` row of the `get_market_price_series` RPC — the
 /// series behind the market activity chart. [rawPrice] is that day's average
 /// transaction price, [avgPrice] the EWMA the web draws as the solid line.
@@ -72,39 +77,6 @@ class MarketHeadline {
 
 /// The window `useMarketHeadline` measures its delta over.
 const headlineDays = 7;
-
-/// Where a cached market price came from, mirroring
-/// `card_market_price_cache.source`.
-enum CardPriceSource { confirmed, ask, bid }
-
-/// One row of the `get_card_prices_by_ids` RPC — the cached headline price
-/// used as a fallback when a card has no sale history to build a series from.
-class CardMarketPrice {
-  const CardMarketPrice({
-    required this.price,
-    required this.condition,
-    required this.source,
-    this.price7dAgo,
-  });
-
-  final int price;
-  final CardCondition condition;
-  final CardPriceSource source;
-  final int? price7dAgo;
-
-  factory CardMarketPrice.fromRow(Map<String, dynamic> row) {
-    return CardMarketPrice(
-      price: (row['price'] as num?)?.toInt() ?? 0,
-      condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
-      source: switch (row['source'] as String?) {
-        'ask' => CardPriceSource.ask,
-        'bid' => CardPriceSource.bid,
-        _ => CardPriceSource.confirmed,
-      },
-      price7dAgo: (row['price_7d_ago'] as num?)?.toInt(),
-    );
-  }
-}
 
 /// A price level of the order book — every open listing on one side at one
 /// price/condition, aggregated by the `get_order_book` RPC.

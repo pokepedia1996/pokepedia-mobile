@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -10,13 +11,32 @@ class SocialButtons extends StatelessWidget {
   const SocialButtons({
     super.key,
     required this.onGooglePressed,
+    this.onApplePressed,
     this.mode = SocialButtonsMode.login,
     this.loading = false,
+    this.appleLoading = false,
   });
 
-  final VoidCallback onGooglePressed;
+  /// Null disables the button — a caller that is busy with the email form
+  /// passes null rather than a no-op, so the control looks as dead as it is.
+  final VoidCallback? onGooglePressed;
+
+  /// Apple's sheet. Null on Android, where the button isn't shown at all —
+  /// Apple's own flow there is a browser redirect, which this app avoids.
+  final VoidCallback? onApplePressed;
+
   final SocialButtonsMode mode;
   final bool loading;
+  final bool appleLoading;
+
+  /// Apple requires the button wherever a third-party social login is
+  /// offered (App Store guideline 4.8), and only iOS can serve it natively.
+  ///
+  /// `defaultTargetPlatform` rather than `Platform.isIOS`: the latter reports
+  /// the *host* under `flutter test`, which would leave this branch
+  /// unreachable in a widget test. Both answer iOS on a real device.
+  bool get _showApple =>
+      defaultTargetPlatform == TargetPlatform.iOS && onApplePressed != null;
 
   @override
   Widget build(BuildContext context) {
@@ -43,18 +63,92 @@ class SocialButtons extends StatelessWidget {
               else
                 const _GoogleMark(),
               const SizedBox(width: 10),
-              Text(
-                mode == SocialButtonsMode.login
-                    ? 'Masuk dengan Google'
-                    : 'Daftar dengan Google',
-                style: AppTypography.bodySmSemibold(
-                  context.appColors.onSurface,
+              // Flexible because the signup label ("Daftar dengan Google") is
+              // wider than the login one and overflowed the row on a narrow
+              // card. Shrinking beats a yellow-and-black overflow stripe.
+              Flexible(
+                child: Text(
+                  mode == SocialButtonsMode.login
+                      ? 'Masuk dengan Google'
+                      : 'Daftar dengan Google',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmSemibold(
+                    context.appColors.onSurface,
+                  ),
                 ),
               ),
             ],
           ),
         ),
+        if (_showApple) ...[
+          const SizedBox(height: 10),
+          _AppleButton(
+            mode: mode,
+            loading: appleLoading,
+            onPressed: loading ? null : onApplePressed,
+          ),
+        ],
       ],
+    );
+  }
+}
+
+/// Apple's button, in the black-on-white treatment their Human Interface
+/// Guidelines allow. The mark and wording are theirs to specify, so neither
+/// follows the app's own palette.
+class _AppleButton extends StatelessWidget {
+  const _AppleButton({
+    required this.mode,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final SocialButtonsMode mode;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    // Fixed black/white either way: Apple's guidelines don't allow recolouring
+    // the mark to match a theme.
+    const foreground = Colors.white;
+
+    return ElevatedButton(
+      onPressed: loading ? null : onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.black,
+        foregroundColor: foreground,
+        disabledBackgroundColor: Colors.black54,
+        minimumSize: const Size.fromHeight(48),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (loading)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: foreground,
+              ),
+            )
+          else
+            const Icon(Icons.apple, size: 20, color: foreground),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              mode == SocialButtonsMode.login
+                  ? 'Masuk dengan Apple'
+                  : 'Daftar dengan Apple',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmSemibold(foreground),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

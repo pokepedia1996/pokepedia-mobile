@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -433,13 +434,10 @@ class _AreaPickerState extends State<_AreaPicker> {
               style: AppTypography.h3(context.appColors.onSurface),
             ),
             const SizedBox(height: 10),
-            TextField(
+            AppSearchField(
+              hintText: 'Cari...',
               autofocus: true,
               onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                hintText: 'Cari...',
-                prefixIcon: Icon(LucideIcons.search, size: 20),
-              ),
             ),
             const SizedBox(height: 8),
             Expanded(

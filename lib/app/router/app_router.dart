@@ -21,6 +21,7 @@ import '../../features/expansions/presentation/expansions_page.dart';
 import '../../features/expansions/presentation/pack_detail_page.dart';
 import '../../features/home/presentation/home_page.dart';
 import '../../features/market/presentation/market_page.dart';
+import '../../features/market/presentation/bid_listing_page.dart';
 import '../../features/market/presentation/store_card_listing_page.dart';
 import '../../features/market/presentation/store_detail_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
@@ -40,6 +41,7 @@ import '../../features/proposals/presentation/proposals_page.dart';
 import '../../features/proposals/repository/models/proposal_card_group.dart';
 import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
+import '../../features/search/presentation/search_results_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
 import '../../features/seller/presentation/seller_listing_offers_page.dart';
 import '../../features/seller/presentation/seller_order_detail_page.dart';
@@ -95,14 +97,23 @@ final appRouter = GoRouter(
               path: Routes.expansions,
               builder: (_, __) => const ExpansionsPage(),
               routes: [
+                // On the root navigator, not the branch's: these are leaf
+                // pages the whole app links to — a notification, an order,
+                // a chat event card — and pushing a branch route from a
+                // route that sits *above* the shell duplicates a page key,
+                // which trips Navigator's `!keyReservation.contains(key)`
+                // assertion and takes the screen down. They already hide
+                // the bottom nav, so nothing changes visually.
                 GoRoute(
                   path: ':packSlug',
+                  parentNavigatorKey: rootNavigatorKey,
                   builder: (_, state) => PackDetailPage(
                     packSlug: state.pathParameters['packSlug']!,
                   ),
                   routes: [
                     GoRoute(
                       path: ':cardId',
+                      parentNavigatorKey: rootNavigatorKey,
                       builder: (_, state) => CardDetailPage(
                         packSlug: state.pathParameters['packSlug']!,
                         cardId: int.parse(state.pathParameters['cardId']!),
@@ -118,7 +129,11 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: Routes.search,
-              builder: (_, __) => const AdvancedSearchPage(),
+              // `?q=` arrives from the results page's filter button, which
+              // hands the form the query already typed.
+              builder: (_, state) => AdvancedSearchPage(
+                initialQuery: state.uri.queryParameters['q'],
+              ),
             ),
           ],
         ),
@@ -143,12 +158,14 @@ final appRouter = GoRouter(
                   // app down with a null check. An empty handle resolves to
                   // no store, which the page already renders as "Toko tidak
                   // ditemukan".
+                  parentNavigatorKey: rootNavigatorKey,
                   builder: (_, state) => StoreDetailPage(
                     handle: state.pathParameters['handle'] ?? '',
                   ),
                   routes: [
                     GoRoute(
                       path: 'card/:cardId',
+                      parentNavigatorKey: rootNavigatorKey,
                       builder: (_, state) => StoreCardListingPage(
                         storeSlug: state.pathParameters['handle'] ?? '',
                         cardId:
@@ -175,10 +192,11 @@ final appRouter = GoRouter(
       ],
     ),
 
-    // Search (opened from AppTopBar's tap-to-search field).
+    // Full results for one query, from the search bar's "Cari semua" row.
     GoRoute(
-      path: Routes.search,
-      builder: (_, __) => const AdvancedSearchPage(),
+      path: '/search',
+      builder: (_, state) =>
+          SearchResultsPage(query: state.uri.queryParameters['q'] ?? ''),
     ),
 
     // Card scanner (opened from AppTopBar's scan button).
@@ -197,6 +215,11 @@ final appRouter = GoRouter(
     ),
 
     // Commerce.
+    GoRoute(
+      path: '/bid/:slug',
+      builder: (_, state) =>
+          BidListingPage(slug: state.pathParameters['slug'] ?? ''),
+    ),
     GoRoute(path: Routes.cart, builder: (_, __) => const CartPage()),
     // Review, delivery address and promo code are native; the page itself
     // pushes the WebView for courier choice and payment, which need the

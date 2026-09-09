@@ -1,3 +1,4 @@
+import '../../../shared/widgets/app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -464,13 +465,10 @@ class _SearchPane extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: [
-            TextField(
+            AppSearchField(
+              hintText: 'Cari kartu untuk ditambahkan ke deck...',
               controller: controller,
               onChanged: onChanged,
-              decoration: const InputDecoration(
-                hintText: 'Cari kartu untuk ditambahkan ke deck...',
-                prefixIcon: Icon(LucideIcons.search, size: 20),
-              ),
             ),
             const SizedBox(height: 12),
             if (resultsAsync == null)

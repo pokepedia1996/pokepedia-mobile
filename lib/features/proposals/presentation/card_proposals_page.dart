@@ -12,6 +12,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/photo_strip.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
@@ -595,54 +596,148 @@ class _SentRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: context.borderColor),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Bid dari @${proposal.buyerUsername ?? "pembeli"}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bid dari @${proposal.buyerUsername ?? "pembeli"}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodySmSemibold(colors.onSurface),
+                    ),
+                    Text(
+                      [
+                        formatRupiah(proposal.effectivePrice),
+                        '${proposal.proposedQuantity} pcs',
+                        if (proposal.createdAt case final at?)
+                          formatRelativeId(at),
+                        // Only while it can still be answered — a settled
+                        // proposal's clock is history.
+                        if (proposal.remaining case final left?)
+                          'Expired dalam ${formatCountdownId(left)}',
+                      ].join(' · '),
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  ],
                 ),
-                Text(
-                  '${formatRupiah(proposal.effectivePrice)} · '
-                  '${proposal.proposedQuantity} pcs',
-                  style: AppTypography.caption(context.mutedForeground),
+              ),
+              StatusPill(
+                label: proposal.status.label,
+                color: switch (proposal.status) {
+                  BidProposalStatus.pending => context.appSemantic.condMp,
+                  BidProposalStatus.accepted => context.appSemantic.success,
+                  BidProposalStatus.rejected => colors.error,
+                  _ => context.mutedForeground,
+                },
+              ),
+              // `dismiss_bid_proposal` refuses a pending row, so the button
+              // only exists once the proposal has settled.
+              if (proposal.isDismissible)
+                IconButton(
+                  onPressed: busy ? null : onDismiss,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Hapus dari daftar',
+                  icon: busy
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          LucideIcons.trash2,
+                          size: 18,
+                          color: context.mutedForeground,
+                        ),
+                ),
+            ],
+          ),
+
+          // Whether the buyer has actually opened it. Web shows this only
+          // while pending: once answered, being seen is implied.
+          if (proposal.status == BidProposalStatus.pending) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  proposal.seenAt == null
+                      ? LucideIcons.eyeOff
+                      : LucideIcons.eye,
+                  size: 13,
+                  color: proposal.seenAt == null
+                      ? context.mutedForeground
+                      : context.appSemantic.success,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    proposal.seenAt == null
+                        ? 'Belum dilihat pembeli'
+                        : 'Dilihat pembeli · '
+                              '${formatRelativeId(proposal.seenAt!)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(
+                      proposal.seenAt == null
+                          ? context.mutedForeground
+                          : context.appSemantic.success,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          StatusPill(
-            label: proposal.status.label,
-            color: switch (proposal.status) {
-              BidProposalStatus.pending => context.appSemantic.condMp,
-              BidProposalStatus.accepted => context.appSemantic.success,
-              BidProposalStatus.rejected => colors.error,
-              _ => context.mutedForeground,
-            },
-          ),
-          // `dismiss_bid_proposal` refuses a pending row, so the button only
-          // exists once the proposal has settled.
-          if (proposal.isDismissible)
-            IconButton(
-              onPressed: busy ? null : onDismiss,
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Hapus dari daftar',
-              icon: busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      LucideIcons.trash2,
-                      size: 18,
-                      color: context.mutedForeground,
-                    ),
+          ],
+
+          // The note the seller sent with the offer — web's blockquote.
+          if (proposal.message?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: colors.secondary.withValues(alpha: 0.4),
+                border: Border(
+                  left: BorderSide(color: context.borderColor, width: 2),
+                ),
+              ),
+              child: Text(
+                proposal.message!.trim(),
+                style: AppTypography.bodySm(
+                  colors.onSurface,
+                ).copyWith(fontStyle: FontStyle.italic),
+              ),
             ),
+          ],
+
+          // The photos that went with the proposal. Sending these is what
+          // makes an offer above Rp100.000 valid, so a row without them was
+          // hiding the seller's actual evidence.
+          if (proposal.photos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.secondary,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+                child: Text(
+                  // `isStockPhoto` — catalog art rather than the seller's own
+                  // copy, which a buyer should be able to tell apart.
+                  proposal.usesStockPhoto ? 'Foto Stok' : 'Foto Listing',
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            PhotoStrip(srcs: proposal.photos),
+          ],
         ],
       ),
     );

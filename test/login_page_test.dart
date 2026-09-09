@@ -188,8 +188,28 @@ void main() {
   group('translateAuthError', () {
     test('covers the provider-disabled cases', () {
       expect(
-        translateAuthError('Unsupported provider: provider is not enabled'),
+        translateAuthError(
+          'Unsupported provider: provider is not enabled',
+          provider: 'Google',
+        ),
         'Login dengan Google belum tersedia. Coba masuk dengan email.',
+      );
+      // The message used to say "Google" whatever the provider was, so an
+      // Apple failure named the wrong one.
+      expect(
+        translateAuthError(
+          'Unsupported provider: provider is not enabled',
+          provider: 'Apple',
+        ),
+        'Login dengan Apple belum tersedia. Coba masuk dengan email.',
+      );
+      expect(
+        translateAuthError('Unsupported provider: provider is not enabled'),
+        'Login belum tersedia. Coba masuk dengan email.',
+      );
+      expect(
+        translateAuthError('AuthorizationErrorCode.unknown, error 1000'),
+        contains('iCloud'),
       );
       expect(
         translateAuthError('Invalid login credentials'),

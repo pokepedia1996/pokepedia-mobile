@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -53,14 +54,11 @@ class UsersSearchPage extends ConsumerWidget {
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  AppSearchField(
+                    hintText: 'Cari berdasarkan username...',
                     onChanged: (value) =>
                         ref.read(usersSearchQueryProvider.notifier).state =
                             value,
-                    decoration: const InputDecoration(
-                      hintText: 'Cari berdasarkan username...',
-                      prefixIcon: Icon(LucideIcons.search, size: 20),
-                    ),
                   ),
                 ],
               ),

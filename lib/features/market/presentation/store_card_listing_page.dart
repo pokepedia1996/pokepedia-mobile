@@ -26,6 +26,7 @@ import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
+import 'widgets/report_listing_sheet.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/remote_image.dart';
 import '../../expansions/presentation/widgets/market_activity_section.dart';
@@ -209,7 +210,25 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     }
   }
 
-  void _reportListing() => _comingSoon('Fitur laporan segera hadir');
+  /// Ports `ReportListingDialog`'s open-and-submit: signed out goes to login
+  /// first, exactly as the web button does before it will show the form.
+  Future<void> _reportListing(ListingModel listing, String cardName) async {
+    if (ref.read(authProvider).valueOrNull == null) {
+      context.push(Routes.login);
+      return;
+    }
+    final sent = await showReportListingSheet(
+      context,
+      listingId: listing.id,
+      cardName: cardName,
+    );
+    if (!sent || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Laporan terkirim, terima kasih')),
+    );
+  }
 
   void _comingSoon(String message) {
     final messenger = ScaffoldMessenger.of(context);
@@ -426,7 +445,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                   myOffer: ref
                       .watch(myOfferOnListingProvider(active.slug))
                       .valueOrNull,
-                  onReport: _reportListing,
+                  onReport: () => _reportListing(active, card.name),
                   onToggleFollow: () => _toggleFollow(store),
                   onContact: () => _contactSeller(store, active),
                   onShare: () => showStoreShareSheet(context, store: store),
@@ -730,7 +749,8 @@ class _PurchasePanelState extends State<_PurchasePanel> {
       style: ElevatedButton.styleFrom(
         backgroundColor: context.appSemantic.success,
         foregroundColor: Colors.white,
-        minimumSize: const Size.fromHeight(44),
+        minimumSize: const Size.fromHeight(38),
+        textStyle: AppTypography.bodySmSemibold(Colors.white),
       ),
     );
   }
@@ -832,7 +852,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  // `items-center` on web: the stepper is centred against the
+                  // whole badge-and-price block, not pinned to its first line.
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Column(
@@ -840,7 +862,12 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                         children: [
                           Row(
                             children: [
-                              ConditionBadge(condition: active.condition),
+                              // Spelled out here, as web does in this panel.
+                              ConditionBadge(
+                                condition: active.condition,
+                                full: true,
+                                colored: true,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 '${active.available} tersedia',
@@ -853,7 +880,12 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                           const SizedBox(height: 4),
                           Text(
                             formatRupiah(active.price),
-                            style: AppTypography.h2(colors.onSurface),
+                            style: AppTypography.h2(colors.onSurface).copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -867,7 +899,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
                 _OtherListingsCta(
                   count: widget.otherSellersCount,
                   href: widget.globalCardHref,
@@ -876,7 +908,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                   const SizedBox(height: 12),
                   _VacationNotice(store: store),
                 ],
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
                 // Offer and cart share a row. Both are fixed-height and
                 // single-line so the pair stays level whichever label is
                 // showing; "Tawar" rather than web's "Buat Penawaran"
@@ -914,11 +946,10 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: colors.onSurface,
                             foregroundColor: colors.surface,
-                            minimumSize: const Size.fromHeight(44),
-                            // A button disabled because it is *working* keeps
-                            // its fill, just dimmed — the default disabled grey
-                            // would read as "unavailable" and hide the white
-                            // spinner.
+                            minimumSize: const Size.fromHeight(38),
+                            textStyle: AppTypography.bodySmSemibold(
+                              colors.surface,
+                            ).copyWith(fontWeight: FontWeight.bold),
                             disabledBackgroundColor: _adding
                                 ? colors.onSurface.withValues(alpha: 0.75)
                                 : null,
@@ -945,18 +976,20 @@ class _PurchasePanelState extends State<_PurchasePanel> {
             onContact: widget.onContact,
             onShare: widget.onShare,
           ),
-          Divider(height: 1, color: context.borderColor),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: widget.onReport,
-              icon: const Icon(LucideIcons.flag, size: 15),
-              label: const Text('Laporkan'),
-              style: TextButton.styleFrom(
-                foregroundColor: context.mutedForeground,
+          if (!widget.isOwnListing) ...[
+            Divider(height: 1, color: context.borderColor),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: widget.onReport,
+                icon: const Icon(LucideIcons.flag, size: 15),
+                label: const Text('Laporkan'),
+                style: TextButton.styleFrom(
+                  foregroundColor: context.mutedForeground,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -981,28 +1014,17 @@ class _OtherListingsCta extends StatelessWidget {
     return InkWell(
       onTap: () => context.push(href),
       borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
 
-        child: Row(
-          children: [
-            Icon(LucideIcons.store, size: 16, color: colors.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                // When nobody else lists the card the page is still worth
-                // the trip — it carries the order book and the WTB side —
-                // but naming a count of zero listings would be a promise of
-                // nothing.
-                count > 0
-                    ? 'Lihat $count listing lain'
-                    : 'Lihat semua listing kartu ini',
-                style: AppTypography.bodySmSemibold(colors.primary),
-              ),
-            ),
-            Icon(LucideIcons.arrowRight, size: 15, color: colors.primary),
-          ],
-        ),
+      child: Row(
+        children: [
+          Text(
+            count > 0
+                ? 'Lihat $count listing lain'
+                : 'Lihat semua listing kartu ini',
+            style: AppTypography.body(colors.primary).copyWith(fontSize: 12),
+          ),
+          Icon(LucideIcons.arrowRight, size: 15, color: colors.primary),
+        ],
       ),
     );
   }
@@ -1188,7 +1210,9 @@ class _SellerStrip extends StatelessWidget {
                   icon: const Icon(LucideIcons.messageCircle, size: 15),
                   label: const Text('Hubungi'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    minimumSize: const Size(0, 36),
+                    textStyle: const TextStyle(fontSize: 12),
                   ),
                 ),
               ),
@@ -1200,7 +1224,9 @@ class _SellerStrip extends StatelessWidget {
                         icon: const Icon(LucideIcons.check, size: 15),
                         label: const Text('Mengikuti'),
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(fontSize: 12),
                         ),
                       )
                     : OutlinedButton.icon(
@@ -1208,7 +1234,9 @@ class _SellerStrip extends StatelessWidget {
                         icon: const Icon(LucideIcons.userPlus, size: 15),
                         label: const Text('Ikuti'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
               ),
@@ -1219,7 +1247,9 @@ class _SellerStrip extends StatelessWidget {
                   icon: const Icon(LucideIcons.share, size: 15),
                   label: const Text('Bagikan'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    minimumSize: const Size(0, 36),
+                    textStyle: const TextStyle(fontSize: 12),
                   ),
                 ),
               ),

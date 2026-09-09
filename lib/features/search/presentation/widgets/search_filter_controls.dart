@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -275,7 +276,6 @@ class _OptionSheetState extends State<_OptionSheet> {
                 itemBuilder: (context, i) {
                   final option = widget.options[i];
                   return CheckboxListTile(
-                    dense: true,
                     value: _selected.contains(i),
                     controlAffinity: ListTileControlAffinity.leading,
                     onChanged: (_) {
@@ -749,13 +749,9 @@ class _ExpansionSheetState extends State<_ExpansionSheet> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: TextField(
+                child: AppSearchField(
+                  hintText: 'Cari ekspansi...',
                   onChanged: (value) => setState(() => _search = value),
-                  decoration: const InputDecoration(
-                    hintText: 'Cari ekspansi...',
-                    isDense: true,
-                    prefixIcon: Icon(LucideIcons.search, size: 18),
-                  ),
                 ),
               ),
               Flexible(

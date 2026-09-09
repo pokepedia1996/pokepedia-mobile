@@ -92,6 +92,7 @@ extension NotificationCategoryX on NotificationCategory {
 class NotificationModel {
   const NotificationModel({
     required this.id,
+    required this.slug,
     required this.type,
     required this.category,
     required this.title,
@@ -104,6 +105,7 @@ class NotificationModel {
   factory NotificationModel.fromRow(Map<String, dynamic> row) {
     return NotificationModel(
       id: (row['id'] as num).toInt(),
+      slug: row['slug'] as String? ?? '',
       type: NotificationTypeX.fromRaw(row['type'] as String?),
       category: NotificationCategoryX.fromRaw(row['category'] as String?),
       title: row['title'] as String? ?? '',
@@ -117,6 +119,11 @@ class NotificationModel {
   }
 
   final int id;
+
+  /// `notifications.slug` — the uuid `mark_notification_read` takes. The
+  /// row's `id` identifies it locally; this is what the server accepts.
+  final String slug;
+
   final NotificationType type;
   final NotificationCategory category;
   final String title;
@@ -133,6 +140,7 @@ class NotificationModel {
 
   NotificationModel copyWith({bool? isRead}) => NotificationModel(
     id: id,
+    slug: slug,
     type: type,
     category: category,
     title: title,

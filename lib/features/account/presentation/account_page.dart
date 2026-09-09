@@ -52,11 +52,11 @@ class AccountPage extends ConsumerWidget {
                     _Group(
                       title: 'Portofolio',
                       children: [
-                        _Row(
-                          icon: LucideIcons.listChecks,
-                          label: 'List',
-                          onTap: () => context.push(Routes.lists),
-                        ),
+                        // _Row(
+                        //   icon: LucideIcons.listChecks,
+                        //   label: 'List',
+                        //   onTap: () => context.push(Routes.lists),
+                        // ),
                         _Row(
                           icon: LucideIcons.layoutGrid,
                           label: 'Deck',
@@ -78,11 +78,16 @@ class AccountPage extends ConsumerWidget {
                           label: 'Pesanan',
                           onTap: () => context.push(Routes.orders),
                         ),
+                        // _Row(
+                        //   icon: LucideIcons.messageCircle,
+                        //   label: 'Pesan',
+                        //   badge: ref.watch(chatUnreadCountProvider),
+                        //   onTap: () => context.push(Routes.chat),
+                        // ),
                         _Row(
-                          icon: LucideIcons.messageCircle,
-                          label: 'Pesan',
-                          badge: ref.watch(chatUnreadCountProvider),
-                          onTap: () => context.push(Routes.chat),
+                          icon: LucideIcons.listChecks,
+                          label: 'Proposal WTB',
+                          onTap: () => context.push(Routes.proposals),
                         ),
                         _Row(
                           icon: LucideIcons.users,
@@ -367,9 +372,10 @@ class _QuickActions extends ConsumerWidget {
             VerticalDivider(width: 1, color: context.borderColor),
             Expanded(
               child: _QuickAction(
-                icon: LucideIcons.listChecks,
-                label: 'Proposal',
-                onTap: () => context.push(Routes.proposals),
+                icon: LucideIcons.messageCircle,
+                label: 'Pesan',
+                badge: ref.watch(chatUnreadCountProvider),
+                onTap: () => context.push(Routes.chat),
               ),
             ),
           ],

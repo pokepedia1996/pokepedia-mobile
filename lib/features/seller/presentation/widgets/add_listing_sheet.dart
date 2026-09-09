@@ -1,3 +1,4 @@
+import '../../../../shared/widgets/app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -119,14 +120,11 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                  child: TextField(
+                  child: AppSearchField(
+                    hintText: 'Cari kartu yang mau dijual...',
                     controller: _controller,
                     autofocus: true,
                     onChanged: _onChanged,
-                    decoration: const InputDecoration(
-                      hintText: 'Cari kartu yang mau dijual...',
-                      prefixIcon: Icon(LucideIcons.search, size: 20),
-                    ),
                   ),
                 ),
                 Flexible(

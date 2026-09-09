@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/utils/courier.dart';
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
@@ -203,35 +205,11 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-          child: TextField(
+          child: AppSearchField(
+            hintText: 'Cari order ID, kartu, pembeli, atau no. resi',
             controller: _search,
-            textInputAction: TextInputAction.search,
-            style: AppTypography.bodySm(colors.onSurface),
             onChanged: (v) =>
                 ref.read(sellerOrderQueryProvider.notifier).state = v,
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 11,
-              ),
-              hintText: 'Cari order ID, kartu, pembeli, atau no. resi',
-              hintStyle: AppTypography.bodySm(context.mutedForeground),
-              prefixIcon: const Icon(LucideIcons.search, size: 18),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 36,
-                minHeight: 0,
-              ),
-              suffixIcon: needle.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      onPressed: () {
-                        _search.clear();
-                        ref.read(sellerOrderQueryProvider.notifier).state = '';
-                      },
-                    ),
-            ),
           ),
         ),
         _FilterBar(
@@ -417,7 +395,7 @@ class _FilterBar extends StatelessWidget {
                 value: courier,
                 label: courier == null
                     ? 'Semua kurir'
-                    : courierDisplayName(courier!),
+                    : courierDisplayName(courier)!,
                 items: [
                   const PopupMenuItem<String?>(
                     value: null,
@@ -426,7 +404,7 @@ class _FilterBar extends StatelessWidget {
                   for (final c in couriers)
                     PopupMenuItem<String?>(
                       value: c,
-                      child: Text(courierDisplayName(c)),
+                      child: Text(courierDisplayName(c)!),
                     ),
                 ],
                 onSelected: onCourier,
@@ -504,33 +482,6 @@ class _Dropdown<T> extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Biteship's courier codes are what the column holds; web maps them to the
-/// names people recognise before printing them.
-String courierDisplayName(String code) {
-  const names = {
-    'jne': 'JNE',
-    'jnt': 'J&T',
-    'sicepat': 'SiCepat',
-    'anteraja': 'AnterAja',
-    'ninja': 'Ninja Xpress',
-    'tiki': 'TIKI',
-    'pos': 'POS Indonesia',
-    'wahana': 'Wahana',
-    'lion': 'Lion Parcel',
-    'idexpress': 'ID Express',
-    'rpx': 'RPX',
-    'sap': 'SAP Express',
-    'jet': 'JET Express',
-    'first': 'First Logistics',
-    'gojek': 'GoSend',
-    'grab': 'GrabExpress',
-    'paxel': 'Paxel',
-    'lalamove': 'Lalamove',
-    'borzo': 'Borzo',
-  };
-  return names[code.toLowerCase()] ?? code.toUpperCase();
 }
 
 /// Ports `order-row.tsx`'s `OrderCard` — the layout web itself falls back to
@@ -716,7 +667,7 @@ class SellerOrderCard extends StatelessWidget {
                     style: AppTypography.captionSemibold(colors.onSurface),
                   ),
                   if (order.courier != null)
-                    TextSpan(text: ' · ${courierDisplayName(order.courier!)}'),
+                    TextSpan(text: ' · ${courierDisplayName(order.courier)}'),
                 ],
               ),
               maxLines: 1,

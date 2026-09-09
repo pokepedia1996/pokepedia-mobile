@@ -39,11 +39,22 @@ String? normalizeBiteshipStatus(String? raw) {
 
 /// One entry of `shipments.status_history`.
 class ShipmentStatusEntry {
-  const ShipmentStatusEntry({this.status, this.at});
+  const ShipmentStatusEntry({this.status, this.at, this.note});
 
   final String? status;
   final DateTime? at;
+
+  /// The courier's own line about the step, shown under it on the timeline.
+  final String? note;
 }
+
+/// `UNTRACKABLE_COURIER_CODES` — couriers whose tracking the platform can't
+/// read, so a shipment with one never receives status updates.
+const untrackableCourierCodes = {'jne', 'idexpress', 'pos', 'tiki', 'paxel'};
+
+/// `UNTRACKABLE_CONFIRM_DELAY_MS` — how long after dispatch a buyer may
+/// confirm receipt when no courier history is coming.
+const untrackableConfirmDelay = Duration(hours: 24);
 
 /// Ports `latestBiteshipStatus` — the most recent recognisable courier state,
 /// by timestamp, with the pipeline order breaking ties.

@@ -179,9 +179,13 @@ class PokepediaApi {
       try {
         return await send();
       } on ApiAuthException {
-        // Refused again on a token minted seconds ago — not something
-        // another retry fixes.
-        throw const ApiSessionExpiredException();
+        // Refused again on a token minted seconds ago. The session is fine —
+        // it was just refreshed — so this is the server not accepting it:
+        // a route that authenticates from the browser cookie and never reads
+        // `Authorization`, a token issued by a different Supabase project,
+        // or a clock far enough out for `exp` to look stale. Sending the user
+        // to the login screen for any of those is advice that cannot work.
+        throw const ApiAuthRefusedException();
       }
     } on ApiChallengedException {
       // The edge turned us away. Either we had no key yet or it was
@@ -306,6 +310,15 @@ class PokepediaApi {
           ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
         // Satisfies the Vercel firewall rule.
         if (bypass != null) request.headers.set(_bypassHeader, bypass);
+        // Some routes authenticate from the browser's `@supabase/ssr` cookie
+        // rather than through `getRequestAuth`, and ignore the header above
+        // entirely — `/api/scan` is one. Presenting the session in that
+        // shape as well is the only way a native client can satisfy them
+        // without a change on the server.
+        final cookie = _sessionCookie(token);
+        if (cookie != null) {
+          request.headers.set(HttpHeaders.cookieHeader, cookie);
+        }
         if (multipart != null) {
           // The boundary has to travel on the header, not just between the
           // parts — without it the server sees an unparseable body and
@@ -429,6 +442,68 @@ class PokepediaApi {
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// The `@supabase/ssr` cookie name this project's sessions are stored
+  /// under: `sb-` + the first label of the Supabase host + `-auth-token`,
+  /// which is how supabase-js derives its `storageKey` and therefore what
+  /// `createServerClient` looks for.
+  static String sessionCookieName(String supabaseUrl) {
+    final host = Uri.parse(supabaseUrl).host;
+    final label = host.split('.').first;
+    return 'sb-$label-auth-token';
+  }
+
+  /// `@supabase/ssr` splits a long cookie into `name.0`, `name.1`, … at this
+  /// many characters (`MAX_CHUNK_SIZE`), and reads at most five chunks back.
+  static const _cookieChunkSize = 3180;
+
+  /// The session encoded the way the browser client writes it: `base64-`
+  /// followed by the base64url of the session JSON, chunked if long.
+  ///
+  /// The refresh token is deliberately left out. A server that found the
+  /// access token expired would otherwise refresh it — rotating the refresh
+  /// token on the server, where the app never sees the replacement, and
+  /// ending the session it was trying to use. Without one, an expired access
+  /// token simply fails auth, which [_retrying] already handles by
+  /// refreshing on this side and trying again.
+  static String? buildSessionCookie(
+    String cookieName,
+    Session session,
+    String accessToken,
+  ) {
+    final payload = session.toJson()
+      ..['access_token'] = accessToken
+      ..['refresh_token'] = '';
+    // Unpadded base64url, as `stringToBase64URL` emits it.
+    final encoded =
+        'base64-'
+        '${base64Url.encode(utf8.encode(jsonEncode(payload))).replaceAll('=', '')}';
+
+    if (encoded.length <= _cookieChunkSize) return '$cookieName=$encoded';
+
+    final chunks = <String>[];
+    for (var i = 0; i * _cookieChunkSize < encoded.length; i++) {
+      final start = i * _cookieChunkSize;
+      final end = start + _cookieChunkSize;
+      chunks.add(
+        '$cookieName.$i='
+        '${encoded.substring(start, end > encoded.length ? encoded.length : end)}',
+      );
+    }
+    // Only the chunks, never the bare name alongside them: the reader
+    // concatenates everything it finds under both.
+    return chunks.join('; ');
+  }
+
+  String? _sessionCookie(String accessToken) {
+    final session = _auth.currentSession;
+    if (session == null) return null;
+    return buildSessionCookie(
+      sessionCookieName(AppConfig.supabaseUrl),
+      session,
+      accessToken,
+    );
   }
 
   /// PostgREST rejects an expired JWT, and so does `getRequestAuth`'s
@@ -568,6 +643,21 @@ class ApiAuthException extends ApiException {
 class ApiSessionExpiredException extends ApiAuthException {
   const ApiSessionExpiredException()
     : super('Sesi kamu sudah berakhir. Masuk lagi untuk melanjutkan.');
+}
+
+/// The server refused a token minted seconds earlier.
+///
+/// Deliberately not an [ApiSessionExpiredException]: signing out and back in
+/// changes nothing, because the session was never the problem. The causes are
+/// all on the other side — most commonly a route that reads the browser's
+/// `@supabase/ssr` cookie instead of the `Authorization` header this client
+/// sends, which no native client can satisfy.
+class ApiAuthRefusedException extends ApiAuthException {
+  const ApiAuthRefusedException()
+    : super(
+        'Server menolak sesi ini. Bukan karena kamu perlu masuk lagi — coba '
+        'lagi sebentar, dan laporkan kalau terus muncul.',
+      );
 }
 
 final pokepediaApiProvider = Provider(

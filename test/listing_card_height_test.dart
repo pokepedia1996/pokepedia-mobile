@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/expansions/usecase/expansions_notifier.dart';
 import 'package:pokepedia_mobile/features/portfolio/usecase/portfolio_notifier.dart';
@@ -37,7 +38,7 @@ ListingModel _listing() => ListingModel(
   storeSlug: 'toko',
   storeName: 'Toko Ash',
   isVerified: true,
-  cityName: 'Jakarta',
+  cityName: 'Kota Jakarta Selatan',
   createdAt: DateTime(2026, 8, 1),
 );
 
@@ -85,6 +86,34 @@ double _extentFor(double cellWidth, {required bool showSeller}) =>
     (showSeller ? listingCardChrome : listingCardChromeNoSeller);
 
 void main() {
+  testWidgets('the seller strip names the shop before it rates it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1170, 3000);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    // A tile whose seller footer showed only a tick, a star and a city was
+    // the one thing on it that never said who was selling.
+    await _overflows(
+      tester,
+      260,
+      _extentFor(260, showSeller: true),
+      showSeller: true,
+    );
+
+    expect(find.text('Toko Ash'), findsOneWidget);
+    expect(find.text('Kota Jakarta Selatan'), findsOneWidget);
+
+    final name = tester.getTopLeft(find.text('Toko Ash'));
+    final tick = tester.getTopLeft(find.byIcon(LucideIcons.badgeCheck));
+    expect(name.dx, lessThan(tick.dx), reason: 'the name leads the badges');
+    expect(
+      name.dy,
+      lessThan(tester.getTopLeft(find.text('Kota Jakarta Selatan')).dy),
+    );
+  });
+
   testWidgets('the harness can see an overflow at all', (tester) async {
     // Without this the numbers below would be meaningless: a harness that
     // never reports overflow reports every height as fine.

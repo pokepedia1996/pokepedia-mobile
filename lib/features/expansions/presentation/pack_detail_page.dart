@@ -8,6 +8,7 @@ import '../../../core/providers/card_ownership_controller.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/models/card_market_price.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
@@ -16,6 +17,9 @@ import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../home/repository/models/portfolio_value.dart';
+import '../../portfolio/presentation/widgets/add_destination_sheet.dart';
+import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
 
@@ -41,8 +45,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
   /// either RPC is in flight.
   bool _bulkLoading = false;
 
-  /// Ports `handleBulkAdd` / `handleBulkRemove`. [add] false removes.
-  Future<void> _runBulk({required bool add, required List<int> cardIds}) async {
+  /// Ports `handleBulkAdd` / `handleBulkRemove`. [add] false removes, and
+  /// [destination] is the portfolio an add was filed under (null when
+  /// removing, since that always comes out of the collection itself).
+  Future<void> _runBulk({
+    required bool add,
+    required List<int> cardIds,
+    PortfolioTarget? destination,
+  }) async {
     final user = ref.read(authProvider).valueOrNull;
     // The web opens `AuthGateModal` here; mobile sends guests to the login
     // route, as every other signed-out action on this app does.
@@ -56,6 +66,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
         ? await controller.bulkAddToCollection(
             userId: user.id,
             cardIds: cardIds,
+            listId: destination?.listId,
           )
         : await controller.bulkRemoveFromCollection(
             userId: user.id,
@@ -71,11 +82,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
       );
       return;
     }
+    final where = destination == null
+        ? 'koleksi'
+        : portfolioDestinationLabel(destination);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           add
-              ? '${result.count} kartu ditambahkan ke koleksi'
+              ? '${result.count} kartu ditambahkan ke $where'
               : '${result.count} kartu dihapus dari koleksi',
         ),
         persist: false,
@@ -83,16 +97,39 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
     );
   }
 
-  Future<void> _confirmBulkAdd(List<int> cardIds) {
-    return showConfirmDialog(
+  /// Asks where the cards should go first, then confirms — the destination
+  /// is what the confirmation is confirming, so it has to be known by then.
+  Future<void> _confirmBulkAdd({
+    required List<int> allIds,
+    required List<int> notOwnedIds,
+  }) async {
+    final destination = await showAddDestinationSheet(
+      context,
+      ref,
+      subtitle: 'Tambah semua kartu dari ekspansi ini',
+    );
+    if (destination == null || !mounted) return;
+
+    // "Belum dimiliki" counts copies in the main collection, which says
+    // nothing about what a list holds — so a list gets offered every card in
+    // the pack, and the ones already on that shelf are skipped there.
+    final toList = !destination.isPrimary;
+    final cardIds = toList ? allIds : notOwnedIds;
+    final where = portfolioDestinationLabel(destination);
+
+    await showConfirmDialog(
       context,
       title: 'Tambah semua kartu?',
-      description:
-          '${cardIds.length} kartu yang belum dimiliki akan ditambahkan ke koleksi kamu.',
+      description: toList
+          ? 'Kartu dari ekspansi ini yang belum ada di "$where" akan '
+                'ditambahkan.'
+          : '${cardIds.length} kartu yang belum dimiliki akan ditambahkan ke '
+                '$where.',
       confirmLabel: 'Tambah Semua',
       loadingLabel: 'Menambahkan...',
       destructive: false,
-      onConfirm: () => _runBulk(add: true, cardIds: cardIds),
+      onConfirm: () =>
+          _runBulk(add: true, cardIds: cardIds, destination: destination),
     );
   }
 
@@ -138,12 +175,21 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                     .watch(packOwnedQuantitiesProvider(widget.packSlug))
                     .valueOrNull ??
                 const <int, int>{};
+            // Prices are the same story: the catalog table holds none, so
+            // they arrive from the price cache and are stamped on here.
+            // Before they land the tiles read "Rp-", and a price sort has
+            // nothing to sort by — both settle on the frame they arrive.
+            final prices =
+                ref
+                    .watch(packCardPricesProvider(widget.packSlug))
+                    .valueOrNull ??
+                const <int, CardMarketPrice>{};
             final owned = [
               for (final card in cards)
-                if (quantities[card.id] case final qty?)
-                  card.copyWith(owned: qty)
-                else
-                  card,
+                card.copyWith(
+                  owned: quantities[card.id],
+                  price: prices[card.id],
+                ),
             ];
 
             var visible = applyCardFilters(owned, _filters);
@@ -162,6 +208,8 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
               for (final c in owned)
                 if (c.owned == 0) c.id,
             ];
+            final hasLists =
+                (ref.watch(listsProvider).valueOrNull ?? const []).isNotEmpty;
 
             return CustomScrollView(
               slivers: [
@@ -176,13 +224,20 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       // user to login — the web enables it for the same
                       // reason and opens its auth gate. Remove needs cards
                       // to remove, so it can only ever be a no-op there.
+                      // Owning every card only closes the button off when
+                      // the main collection is the only place they could go;
+                      // with a list to file them into there's still work to
+                      // do, whatever `user_cards` already holds.
                       onAddAll: _bulkLoading
                           ? null
                           : user == null
                           ? () => _runBulk(add: true, cardIds: const [])
-                          : notOwnedIds.isEmpty
+                          : notOwnedIds.isEmpty && !hasLists
                           ? null
-                          : () => _confirmBulkAdd(notOwnedIds),
+                          : () => _confirmBulkAdd(
+                              allIds: [for (final c in owned) c.id],
+                              notOwnedIds: notOwnedIds,
+                            ),
                       onRemoveAll:
                           _bulkLoading || user == null || ownedIds.isEmpty
                           ? null
@@ -223,13 +278,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                     sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 0.62,
-                          ),
+                      gridDelegate: cardGridDelegate(context),
                       delegate: SliverChildBuilderDelegate((context, i) {
                         final card = visible[i];
                         return CardGridItem(

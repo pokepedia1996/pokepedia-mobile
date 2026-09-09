@@ -62,8 +62,8 @@ void main() {
   testWidgets('says history is missing rather than drawing a zero line', (
     tester,
   ) async {
-    // The production case today: cards are held, but `price_history` has
-    // nothing to price them across time.
+    // Nothing at all to draw — no snapshots and no live value. Distinct
+    // from one day, which is now drawn as a dot.
     await tester.pumpWidget(_host(series: const []));
     await tester.pumpAndSettle();
 
@@ -71,11 +71,18 @@ void main() {
     expect(find.text('Riwayat nilai belum tersedia'), findsOneWidget);
   });
 
-  testWidgets('a single point is not a trend', (tester) async {
+  testWidgets('a single day is drawn, not withheld', (tester) async {
+    // Today's value is computed live from the priced holdings, so it exists
+    // as soon as a card is added — it does not wait for the nightly
+    // snapshot. Showing "no history yet" for a number already printed above
+    // the chart told the reader to come back tomorrow for something they
+    // could already see.
     await tester.pumpWidget(_host(series: [_point('2026-08-20', 1000000)]));
     await tester.pumpAndSettle();
 
-    expect(find.text('Riwayat nilai belum tersedia'), findsOneWidget);
+    expect(find.text('Riwayat nilai belum tersedia'), findsNothing);
+    expect(find.byType(PortfolioSparkline), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an empty portfolio says so instead', (tester) async {

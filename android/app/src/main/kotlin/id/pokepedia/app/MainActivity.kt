@@ -1,4 +1,4 @@
-package com.example.pokepedia_mobile
+package id.pokepedia.app
 
 import io.flutter.embedding.android.FlutterActivity
 

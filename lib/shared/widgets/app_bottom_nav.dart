@@ -62,7 +62,7 @@ class AppBottomNav extends StatelessWidget {
       usePokeball: true,
     ),
     BottomNavItem(label: 'Pencarian', icon: LucideIcons.search),
-    BottomNavItem(label: 'Koleksi', icon: LucideIcons.wallet),
+    BottomNavItem(label: 'Portofolio', icon: LucideIcons.walletCards),
     BottomNavItem(label: 'Market', icon: LucideIcons.store),
     BottomNavItem(label: 'Akun', icon: LucideIcons.user),
   ];

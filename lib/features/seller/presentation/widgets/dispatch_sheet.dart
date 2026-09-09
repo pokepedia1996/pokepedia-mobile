@@ -180,6 +180,62 @@ class _DispatchSheetState extends ConsumerState<_DispatchSheet> {
                         'bisa memakai resi manual.',
               style: AppTypography.bodySm(context.mutedForeground),
             ),
+            const SizedBox(height: 12),
+            // Web's amber "Penting" block. Choosing pickup and then walking
+            // the parcel to a counter is the mistake this prevents, and it
+            // costs the seller the shipment — worth saying before the choice,
+            // not after.
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: context.appSemantic.condMp.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: context.appSemantic.condMp.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    LucideIcons.circleAlert,
+                    size: 14,
+                    color: context.appSemantic.condMp,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        style: AppTypography.caption(
+                          context.appColors.onSurface,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'Penting: ',
+                            style: AppTypography.captionSemibold(
+                              context.appColors.onSurface,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _allowsManual
+                                ? 'Jika memilih Pickup oleh kurir, paket tidak '
+                                      'bisa diantar sendiri ke counter kurir. '
+                                      'Tunggu kurir datang menjemput. Jika '
+                                      'ingin drop off sendiri, gunakan opsi '
+                                      'kirim sendiri dan pesan resi langsung '
+                                      'di counter kurir secara offline.'
+                                : 'Kurir instan hanya menjemput ke lokasi kamu '
+                                      'dan tidak bisa memakai resi manual. '
+                                      'Pesan kurir dari halaman ini, lalu '
+                                      'siapkan paket sebelum driver datang.',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
             if (_allowsPickup)
               _ChoiceCard(

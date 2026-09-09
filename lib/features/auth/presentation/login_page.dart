@@ -33,6 +33,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _obscure = true;
   bool _submitting = false;
   bool _googleLoading = false;
+  bool _appleLoading = false;
   String? _emailError;
   String? _passwordError;
   String? _generalError;
@@ -119,7 +120,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() {
       _googleLoading = false;
       if (result.error != null) {
-        _generalError = translateAuthError(result.error!);
+        _generalError = translateAuthError(result.error!, provider: 'Google');
       }
     });
 
@@ -127,6 +128,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     // the old browser hand-off there is somewhere to go immediately.
     // Backing out of the sheet lands here with neither flag set, and that
     // deliberately does nothing.
+    if (result.signedIn && mounted) context.go(Routes.account);
+  }
+
+  Future<void> _apple() async {
+    setState(() {
+      _appleLoading = true;
+      _generalError = null;
+    });
+    final result = await ref.read(authProvider.notifier).signInWithApple();
+    if (!mounted) return;
+
+    setState(() {
+      _appleLoading = false;
+      if (result.error != null) {
+        _generalError = translateAuthError(result.error!, provider: 'Apple');
+      }
+    });
+
+    // Dismissing Apple's sheet sets neither flag, which deliberately does
+    // nothing — the same as backing out of Google's picker.
     if (result.signedIn && mounted) context.go(Routes.account);
   }
 
@@ -153,6 +174,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     controller: _email,
                     error: _emailError,
                     googleLoading: _googleLoading,
+                    appleLoading: _appleLoading,
                     onChanged: () {
                       if (_emailError != null) {
                         setState(() => _emailError = null);
@@ -160,6 +182,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     },
                     onContinue: _continue,
                     onGoogle: _google,
+                    onApple: _apple,
                   )
                 : _PasswordStep(
                     email: _email.text.trim(),
@@ -205,17 +228,21 @@ class _EmailStep extends StatelessWidget {
     required this.controller,
     required this.error,
     required this.googleLoading,
+    required this.appleLoading,
     required this.onChanged,
     required this.onContinue,
     required this.onGoogle,
+    required this.onApple,
   });
 
   final TextEditingController controller;
   final String? error;
   final bool googleLoading;
+  final bool appleLoading;
   final VoidCallback onChanged;
   final VoidCallback onContinue;
   final VoidCallback onGoogle;
+  final VoidCallback onApple;
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +267,12 @@ class _EmailStep extends StatelessWidget {
           ),
           child: const Text('Lanjutkan'),
         ),
-        SocialButtons(onGooglePressed: onGoogle, loading: googleLoading),
+        SocialButtons(
+          onGooglePressed: onGoogle,
+          onApplePressed: onApple,
+          loading: googleLoading,
+          appleLoading: appleLoading,
+        ),
       ],
     );
   }

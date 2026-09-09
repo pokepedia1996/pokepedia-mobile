@@ -5,6 +5,7 @@ import 'package:pokepedia_mobile/features/seller/presentation/widgets/listing_ta
 import 'package:pokepedia_mobile/features/seller/repository/models/listing_offer.dart';
 import 'package:pokepedia_mobile/features/seller/repository/models/seller_listing.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:pokepedia_mobile/shared/widgets/card_art.dart';
 
 Map<String, dynamic> _row({
   int id = 1,
@@ -84,6 +85,35 @@ Future<void> _pumpTable(
 }
 
 void main() {
+  group('Gambar column', () {
+    testWidgets('the thumbnail is a landscape crop of the card', (
+      tester,
+    ) async {
+      // A column of whole 245:342 cards at row height is a column of stamps.
+      // The crop is what makes a listing recognisable at a glance, and its
+      // shape is the contract with the column's own width — a portrait
+      // thumbnail in a 108pt column is what this guards against.
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+
+      await _pumpTable(tester, [SellerListing.fromRow(_row())]);
+
+      final art = tester.widget<CardArt>(find.byType(CardArt).first);
+      expect(art.aspectRatio, greaterThan(1), reason: 'landscape, not tall');
+      expect(
+        art.alignment.y,
+        lessThan(0),
+        reason: 'cropped towards the artwork, not the attack text',
+      );
+
+      final box = tester.getSize(find.byType(CardArt).first);
+      expect(box.width, greaterThan(box.height));
+      // Comfortably bigger than the 32pt stamp it replaced.
+      expect(box.width, greaterThanOrEqualTo(88));
+    });
+  });
+
   group('ListingSort', () {
     final listings = [
       SellerListing.fromRow(_row(id: 1, name: 'Alakazam', price: 50000)),

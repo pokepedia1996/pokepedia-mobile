@@ -88,37 +88,27 @@ final portfolioTargetsProvider = Provider<List<PortfolioTarget>>((ref) {
   ];
 });
 
-/// The selected portfolio's cards — the whole collection, or just the ones
-/// named by the chosen list. What the Koleksi page lists.
-final selectedPortfolioCardsProvider = FutureProvider<List<CardModel>>((
-  ref,
-) async {
+/// The selected portfolio's cards — the whole collection, or the ones the
+/// chosen list holds. What the Koleksi page lists.
+///
+/// Each list keeps its own cards at its own quantities rather than pointing
+/// into `user_cards`, so this reads the list itself. Intersecting the two
+/// would hide every card that was filed into a list instead of the main
+/// collection, which is most of them.
+final selectedPortfolioCardsProvider = FutureProvider<List<CardModel>>((ref) {
   final target = ref.watch(selectedPortfolioProvider);
-  final collection = await ref.watch(collectionProvider.future);
-  if (target.isPrimary) return collection;
-
-  final listCards = await ref.watch(listCardsProvider(target.listId!).future);
-  final wanted = {for (final card in listCards) card.id};
-  return collection.where((card) => wanted.contains(card.id)).toList();
+  if (target.isPrimary) return ref.watch(collectionProvider.future);
+  return ref.watch(listCardsProvider(target.listId!).future);
 });
 
 /// The selected portfolio's cards, priced.
 ///
-/// Only cards the user actually holds count toward the value: a list can
-/// name cards that aren't in the collection, and those contribute nothing
-/// rather than being valued as if owned.
+/// Derived from the same provider the grid renders, so the headline value
+/// and the cards on screen can't disagree about what's in the portfolio.
 final portfolioHoldingsProvider = FutureProvider<List<PortfolioHolding>>((
   ref,
 ) async {
-  final target = ref.watch(selectedPortfolioProvider);
-  final collection = await ref.watch(collectionProvider.future);
-
-  var cards = collection;
-  if (!target.isPrimary) {
-    final listCards = await ref.watch(listCardsProvider(target.listId!).future);
-    final wanted = {for (final card in listCards) card.id};
-    cards = collection.where((card) => wanted.contains(card.id)).toList();
-  }
+  final cards = await ref.watch(selectedPortfolioCardsProvider.future);
 
   return [
     for (final card in cards)
@@ -153,14 +143,45 @@ final topHoldingsProvider = Provider<List<PortfolioHolding>>((ref) {
 });
 
 /// The chart series for the selected portfolio and range.
+///
+/// Yesterday and earlier come from `portfolio_value_snapshots`; **today is
+/// always computed live** from the priced holdings.
+///
+/// Today is deliberately not read from the table. The snapshot is taken once
+/// at 00:20 UTC, so a card added at noon would not move the chart until the
+/// following night — the reader would add something worth real money and
+/// watch the line ignore it. The live value is the same arithmetic
+/// [portfolioValueProvider] already shows as the headline, so the chart's
+/// last point and the number above it can never disagree either.
+///
+/// `portfolio_value_snapshots` records the whole collection, which is what
+/// "Portofolio Utama" is. A single list has no snapshot of its own, so the
+/// chart says so there rather than drawing the collection's line under a
+/// list's name — a wrong number rather than a missing one.
 final portfolioValueSeriesProvider = FutureProvider<List<PortfolioValuePoint>>((
   ref,
 ) async {
-  final holdings = await ref.watch(portfolioHoldingsProvider.future);
+  final target = ref.watch(selectedPortfolioProvider);
+  if (!target.isPrimary) return const [];
+
   final range = ref.watch(portfolioRangeProvider);
-  return ref
+  final history = await ref
       .read(portfolioValueRepositoryProvider)
-      .fetchValueSeries(holdings: holdings, range: range);
+      .fetchValueSeries(range: range);
+
+  final holdings = await ref.watch(portfolioHoldingsProvider.future);
+  if (holdings.isEmpty) return history;
+
+  final now = DateTime.now().toUtc();
+  final today = DateTime.utc(now.year, now.month, now.day);
+  final live = holdings.fold(0, (sum, holding) => sum + holding.value);
+
+  // Today's snapshot, if the cron already wrote one, is replaced rather than
+  // appended to: two points for one day would draw a vertical step.
+  return [
+    ...history.where((point) => point.day.isBefore(today)),
+    PortfolioValuePoint(day: today, value: live),
+  ];
 });
 
 /// Change across the visible series — the figure under the headline value.

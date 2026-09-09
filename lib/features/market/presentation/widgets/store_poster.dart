@@ -165,7 +165,7 @@ class StorePoster extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Belanja aman tanpa potongan di pokepedia.id',
+                  '100% aman. 0% potongan.',
                   style: AppTypography.h3(const Color(0xFF5A6270)),
                 ),
               ),

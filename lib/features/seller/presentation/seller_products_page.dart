@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
@@ -237,27 +238,11 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
             if (bucket.isListingBucket)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: TextField(
+                child: AppSearchField(
+                  hintText: 'Cari nama, ekspansi, nomor, kondisi...',
                   controller: _search,
                   onChanged: (v) =>
                       ref.read(sellerListingQueryProvider.notifier).state = v,
-                  style: AppTypography.bodySm(colors.onSurface),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
-                    ),
-                    hintText: 'Cari nama, ekspansi, nomor, kondisi...',
-                    hintStyle: AppTypography.bodySm(context.mutedForeground),
-                    prefixIcon: const Icon(LucideIcons.search, size: 18),
-                    // Without this the icon claims a 48dp box and sets the
-                    // field's height on its own.
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 36,
-                      minHeight: 0,
-                    ),
-                  ),
                 ),
               ),
             if (bucket.isListingBucket)

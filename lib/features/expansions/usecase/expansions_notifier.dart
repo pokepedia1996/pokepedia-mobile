@@ -77,6 +77,18 @@ final relatedCardsProvider =
           );
     });
 
+/// Ports `usePackCardPrices(expansionCode)` — the cached market price of
+/// every card in one expansion.
+///
+/// Kept apart from [packCardsProvider] so the grid paints as soon as the
+/// catalog rows arrive and the prices fill in behind them, which is how the
+/// web page behaves. The pack slug is the expansion code lowercased, which
+/// is what the RPC matches on.
+final packCardPricesProvider =
+    FutureProvider.family<Map<int, CardMarketPrice>, String>((ref, slug) {
+      return ref.read(expansionsRepositoryProvider).fetchPackCardPrices(slug);
+    });
+
 /// Ports `useUserCardQuantities(cardIds)` as the pack detail page uses it:
 /// the owned quantity of every card in one expansion, keyed by card id.
 /// Empty for guests, mirroring the hook only fetching once a `user` exists.

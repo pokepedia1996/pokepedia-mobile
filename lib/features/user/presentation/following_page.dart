@@ -14,6 +14,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
+import '../../../shared/widgets/shimmer_box.dart';
 
 /// Ports `app/account/following/page.tsx` — the shops the signed-in user
 /// follows, each with its banner, seller line and four most recent listings.
@@ -58,7 +59,11 @@ class FollowingPage extends ConsumerWidget {
                         'Kunjungi halaman toko penjual favoritmu dan tekan '
                         '"Ikuti" untuk menambahkannya di sini.',
                     action: ElevatedButton(
-                      onPressed: () => context.push(Routes.market),
+                      // `go`, not `push`: Market is a shell tab, and this
+                      // page sits above the shell — pushing a branch route
+                      // from up here duplicates a page key and crashes.
+                      // Switching to the tab is the intent anyway.
+                      onPressed: () => context.go(Routes.market),
                       child: const Text('Jelajahi Market'),
                     ),
                   ),
@@ -203,6 +208,8 @@ class _ListingThumb extends StatelessWidget {
                 Image.network(
                   listing.photoUrl!,
                   fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) =>
+                      progress == null ? child : const ShimmerBox(),
                   errorBuilder: (_, __, ___) =>
                       ColoredBox(color: colors.secondary),
                 ),

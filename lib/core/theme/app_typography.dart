@@ -52,6 +52,18 @@ class AppTypography {
     color: color,
   );
 
+  /// A market price on a card tile. Web writes it `typo-body-sm font-bold
+  /// tabular-nums`: a step bolder than the semibold card name beside it, and
+  /// on tabular figures so the digits are evenly spaced and prices in a grid
+  /// line up column for column instead of drifting with the glyph widths.
+  static TextStyle price(Color color) => GoogleFonts.urbanist(
+    fontSize: 15,
+    height: 1.4,
+    fontWeight: FontWeight.w700,
+    color: color,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
   static TextStyle caption(Color color) =>
       GoogleFonts.urbanist(fontSize: 12, height: 1.4, color: color);
 

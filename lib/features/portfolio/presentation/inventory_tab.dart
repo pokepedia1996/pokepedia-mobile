@@ -1,3 +1,4 @@
+import '../../../shared/widgets/app_search_field.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -245,12 +246,9 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: AppSearchField(
+                hintText: 'Cari nama, ekspansi, atau nomor...',
                 onChanged: (v) => setState(() => _query = v),
-                decoration: const InputDecoration(
-                  hintText: 'Cari nama, ekspansi, atau nomor...',
-                  prefixIcon: Icon(LucideIcons.search, size: 20),
-                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -440,13 +438,10 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
-        TextField(
+        AppSearchField(
+          hintText: 'Cari kartu untuk ditambahkan...',
           controller: _searchController,
           onChanged: _onSearchChanged,
-          decoration: const InputDecoration(
-            hintText: 'Cari kartu untuk ditambahkan...',
-            prefixIcon: Icon(LucideIcons.search, size: 20),
-          ),
         ),
         if (resultsAsync != null) ...[
           const SizedBox(height: 10),
@@ -888,12 +883,9 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: AppSearchField(
+                hintText: 'Cari kartu untuk dihapus...',
                 onChanged: (v) => setState(() => _query = v),
-                decoration: const InputDecoration(
-                  hintText: 'Cari kartu untuk dihapus...',
-                  prefixIcon: Icon(LucideIcons.search, size: 20),
-                ),
               ),
             ),
             const SizedBox(height: 10),

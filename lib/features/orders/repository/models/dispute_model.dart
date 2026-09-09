@@ -140,22 +140,22 @@ extension DisputeEventTypeX on DisputeEventType {
 
   /// What the timeline says when the event carries no note of its own.
   String get defaultDescription => switch (this) {
-    DisputeEventType.opened => 'Sengketa dibuka.',
+    DisputeEventType.opened => 'Komplain dibuka.',
     DisputeEventType.evidenceSubmitted => 'Bukti diunggah.',
     DisputeEventType.adminAssigned => 'Admin ditugaskan.',
-    DisputeEventType.escalated => 'Sengketa dieskalasi ke admin.',
-    DisputeEventType.messagePosted => 'Pesan baru pada sengketa.',
+    DisputeEventType.escalated => 'Komplain dieskalasi ke admin.',
+    DisputeEventType.messagePosted => 'Pesan baru pada komplain.',
     DisputeEventType.refundIssued => 'Refund diterbitkan.',
-    DisputeEventType.statusChanged => 'Status sengketa berubah.',
-    DisputeEventType.resolved => 'Sengketa diselesaikan.',
-    DisputeEventType.closed => 'Sengketa ditutup.',
+    DisputeEventType.statusChanged => 'Status komplain berubah.',
+    DisputeEventType.resolved => 'Komplain diselesaikan.',
+    DisputeEventType.closed => 'Komplain ditutup.',
     DisputeEventType.partialRefundProposed => 'Refund sebagian diajukan.',
     DisputeEventType.partialRefundAccepted => 'Refund sebagian diterima.',
     DisputeEventType.partialRefundRejected => 'Refund sebagian ditolak.',
     DisputeEventType.returnRequested => 'Pengembalian barang diminta.',
     DisputeEventType.returnTrackingSubmitted => 'Resi pengembalian dikirim.',
     DisputeEventType.returnReceived => 'Barang pengembalian diterima.',
-    DisputeEventType.autoResolved => 'Sengketa diselesaikan otomatis.',
+    DisputeEventType.autoResolved => 'Komplain diselesaikan otomatis.',
   };
 }
 

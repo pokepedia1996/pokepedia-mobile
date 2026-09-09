@@ -15,6 +15,12 @@ void main() {
     test('chat opens the thread when the row names one', () {
       expect(appRouteForActionUrl('/chat'), '/chat');
       expect(appRouteForActionUrl('/chat/room-9'), '/chat/room-9');
+      // chat_rooms.slug is a uuid, which is what notify_chat_message actually
+      // writes — and it must not be mistaken for the '/chat/new' route.
+      expect(
+        appRouteForActionUrl('/chat/6f1c2a54-9c1e-4f6a-9a2b-0d3e5f7a1b2c'),
+        '/chat/6f1c2a54-9c1e-4f6a-9a2b-0d3e5f7a1b2c',
+      );
     });
 
     test('a storefront opens by its handle', () {
