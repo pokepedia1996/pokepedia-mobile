@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Ports `app/support/page.tsx`.
 class SupportPage extends StatelessWidget {
@@ -23,7 +24,7 @@ class SupportPage extends StatelessWidget {
     ),
     (
       'Bagaimana jika barang tidak sesuai?',
-      'Ajukan sengketa dari halaman detail pesanan dalam 3x24 jam setelah barang diterima.',
+      'Ajukan komplain dari halaman detail pesanan dalam 3x24 jam setelah barang diterima.',
     ),
   ];
 
@@ -31,9 +32,9 @@ class SupportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Scaffold(
-      appBar: AppBar(title: const Text('Bantuan')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -51,9 +52,15 @@ class SupportPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(q, style: AppTypography.bodySmSemibold(colors.onSurface)),
+                    Text(
+                      q,
+                      style: AppTypography.bodySmSemibold(colors.onSurface),
+                    ),
                     const SizedBox(height: 6),
-                    Text(a, style: AppTypography.bodySm(context.mutedForeground)),
+                    Text(
+                      a,
+                      style: AppTypography.bodySm(context.mutedForeground),
+                    ),
                   ],
                 ),
               ),
@@ -67,7 +74,10 @@ class SupportPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Masih butuh bantuan?', style: AppTypography.bodySmSemibold(colors.onSurface)),
+                  Text(
+                    'Masih butuh bantuan?',
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     'Hubungi tim kami di support@pokepedia.id',

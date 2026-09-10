@@ -18,6 +18,30 @@ enum PokemonType {
   water,
 }
 
+/// Parses a single type token (e.g. `"Fire"`, `"fire"`) coming out of
+/// `cards.details` jsonb. Returns null for unrecognized/blank tokens
+/// instead of throwing, matching the "drop malformed data" convention used
+/// when mapping Supabase rows.
+PokemonType? pokemonTypeFromRaw(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  final needle = raw.trim().toLowerCase();
+  for (final type in PokemonType.values) {
+    if (type.assetName.toLowerCase() == needle) return type;
+  }
+  return null;
+}
+
+/// Splits a delimited type string (e.g. `"Fire/Water"`, `"Fire, Water"`)
+/// into the recognized [PokemonType]s it names.
+List<PokemonType> pokemonTypesFromRaw(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  return raw
+      .split(RegExp(r'[\/,]'))
+      .map(pokemonTypeFromRaw)
+      .whereType<PokemonType>()
+      .toList();
+}
+
 extension PokemonTypeX on PokemonType {
   /// Matches the asset filename / `details` jsonb value casing exactly.
   String get assetName {

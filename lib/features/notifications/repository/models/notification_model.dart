@@ -1,3 +1,5 @@
+import '../../../../core/utils/formatters.dart';
+
 /// `notifications.category` — the `public.notification_category` Postgres
 /// enum in `supabase/migrations/00000000000000_baseline.sql`.
 enum NotificationCategory { actionRequired, statusUpdate, social, admin }
@@ -22,6 +24,10 @@ enum NotificationType {
   offerCountered,
   ratingReceived,
   chatMessage,
+
+  /// Anything outside the curated list above — still shown, just with the
+  /// generic icon. The constraint carries ~48 types and grows server-side.
+  other,
 }
 
 extension NotificationTypeX on NotificationType {
@@ -59,36 +65,88 @@ extension NotificationTypeX on NotificationType {
         return 'rating_received';
       case NotificationType.chatMessage:
         return 'chat_message';
+      case NotificationType.other:
+        return 'other';
     }
   }
+
+  /// Parses `notifications.type`, falling back rather than throwing on a
+  /// type the app doesn't name.
+  static NotificationType fromRaw(String? raw) {
+    for (final type in NotificationType.values) {
+      if (type != NotificationType.other && type.raw == raw) return type;
+    }
+    return NotificationType.other;
+  }
+}
+
+extension NotificationCategoryX on NotificationCategory {
+  static NotificationCategory fromRaw(String? raw) => switch (raw) {
+    'action_required' => NotificationCategory.actionRequired,
+    'social' => NotificationCategory.social,
+    'admin' => NotificationCategory.admin,
+    _ => NotificationCategory.statusUpdate,
+  };
 }
 
 class NotificationModel {
   const NotificationModel({
     required this.id,
+    required this.slug,
     required this.type,
     required this.category,
     required this.title,
     required this.body,
     required this.createdAt,
     required this.isRead,
+    this.actionUrl,
   });
 
+  factory NotificationModel.fromRow(Map<String, dynamic> row) {
+    return NotificationModel(
+      id: (row['id'] as num).toInt(),
+      slug: row['slug'] as String? ?? '',
+      type: NotificationTypeX.fromRaw(row['type'] as String?),
+      category: NotificationCategoryX.fromRaw(row['category'] as String?),
+      title: row['title'] as String? ?? '',
+      body: row['body'] as String? ?? '',
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ??
+          DateTime.now(),
+      isRead: row['is_read'] as bool? ?? false,
+      actionUrl: row['action_url'] as String?,
+    );
+  }
+
   final int id;
+
+  /// `notifications.slug` — the uuid `mark_notification_read` takes. The
+  /// row's `id` identifies it locally; this is what the server accepts.
+  final String slug;
+
   final NotificationType type;
   final NotificationCategory category;
   final String title;
   final String body;
-  final String createdAt;
+  final DateTime createdAt;
   final bool isRead;
+
+  /// Where tapping the row should go, as the server wrote it — a web path
+  /// like `/orders/<slug>`.
+  final String? actionUrl;
+
+  /// Against the real clock, not the dummy catalog's fixed "today".
+  String get createdLabel => formatRelativeId(createdAt, now: DateTime.now());
 
   NotificationModel copyWith({bool? isRead}) => NotificationModel(
     id: id,
+    slug: slug,
     type: type,
     category: category,
     title: title,
     body: body,
     createdAt: createdAt,
     isRead: isRead ?? this.isRead,
+    actionUrl: actionUrl,
   );
 }

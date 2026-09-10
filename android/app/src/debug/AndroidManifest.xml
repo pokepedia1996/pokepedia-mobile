@@ -4,4 +4,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Debug only. Android 9+ blocks plain http, which is what a local
+         `next dev` server speaks; release builds keep the block. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

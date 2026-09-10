@@ -1,3 +1,5 @@
+import '../../core/utils/image_url.dart';
+import 'card_market_price.dart';
 import 'pokemon_type.dart';
 
 /// `cards.category` check constraint.
@@ -15,10 +17,22 @@ extension CardCategoryX on CardCategory {
     }
   }
 
+  static CardCategory fromRaw(String? raw) {
+    switch (raw) {
+      case 'Trainer':
+        return CardCategory.trainer;
+      case 'Energy':
+        return CardCategory.energy;
+      case 'Pokemon':
+      default:
+        return CardCategory.pokemon;
+    }
+  }
+
   String get labelId {
     switch (this) {
       case CardCategory.pokemon:
-        return 'Pokémon';
+        return 'Pokemon';
       case CardCategory.trainer:
         return 'Trainer';
       case CardCategory.energy:
@@ -39,8 +53,19 @@ extension TrainerSubtypeX on TrainerSubtype {
       case TrainerSubtype.stadium:
         return 'Stadium';
       case TrainerSubtype.tool:
-        return 'Pokémon Tool';
+        return 'Pokemon Tool';
     }
+  }
+
+  static TrainerSubtype? fromRaw(String? raw) {
+    if (raw == null) return null;
+    final needle = raw.trim().toLowerCase();
+    for (final subtype in TrainerSubtype.values) {
+      if (subtype.labelId.toLowerCase() == needle || subtype.name == needle) {
+        return subtype;
+      }
+    }
+    return null;
   }
 }
 
@@ -57,6 +82,17 @@ extension EvolutionStageX on EvolutionStage {
         return 'Stage 2';
     }
   }
+
+  static EvolutionStage? fromRaw(String? raw) {
+    if (raw == null) return null;
+    final needle = raw.trim().toLowerCase();
+    for (final stage in EvolutionStage.values) {
+      if (stage.labelId.toLowerCase() == needle || stage.name == needle) {
+        return stage;
+      }
+    }
+    return null;
+  }
 }
 
 /// `cards.language` check constraint.
@@ -64,6 +100,36 @@ enum CardLanguage { id, en, jp }
 
 extension CardLanguageX on CardLanguage {
   String get raw => name;
+
+  /// Two-letter form used by the catalog language switch, mirroring
+  /// `LANGUAGE_LABELS` in `lib/catalog/language.ts`.
+  String get shortLabel {
+    switch (this) {
+      case CardLanguage.id:
+        return 'ID';
+      case CardLanguage.en:
+        return 'EN';
+      case CardLanguage.jp:
+        return 'JP';
+    }
+  }
+
+  /// The country flag for this catalog language, as a regional-indicator
+  /// pair the platform renders as a real flag.
+  ///
+  /// English uses 🇬🇧 rather than 🇺🇸: these label the *print* a card came
+  /// from, and English prints are the international release, which the TCG
+  /// itself and the rest of the site treat as UK-flagged.
+  String get flag {
+    switch (this) {
+      case CardLanguage.id:
+        return '🇮🇩';
+      case CardLanguage.en:
+        return '🇬🇧';
+      case CardLanguage.jp:
+        return '🇯🇵';
+    }
+  }
 
   String get labelId {
     switch (this) {
@@ -75,6 +141,18 @@ extension CardLanguageX on CardLanguage {
         return 'Japan';
     }
   }
+
+  static CardLanguage fromRaw(String? raw) {
+    switch (raw) {
+      case 'en':
+        return CardLanguage.en;
+      case 'jp':
+        return CardLanguage.jp;
+      case 'id':
+      default:
+        return CardLanguage.id;
+    }
+  }
 }
 
 /// One entry of a card's weakness/resistance (`details.weakness` /
@@ -84,6 +162,15 @@ class TypeModifier {
 
   final PokemonType type;
   final String value;
+}
+
+/// `details.abilities[0]` — the web only ever renders the first ability
+/// (`mapParsedCardDetailRow` in `lib/data/client.ts` takes `abilities[0]`).
+class AbilityModel {
+  const AbilityModel({required this.name, this.description});
+
+  final String name;
+  final String? description;
 }
 
 /// One entry of `details.attacks[]`.
@@ -108,24 +195,117 @@ class CardDetails {
     this.pokemonTypes = const [],
     this.evolutionStage,
     this.evolvesFrom,
+    this.ability,
+    this.effect,
     this.attacks = const [],
     this.weakness,
     this.resistance,
     this.retreatCost,
     this.trainerSubtype,
     this.energyType,
+    this.pokedexNumber,
+    this.pokedexHeight,
+    this.pokedexWeight,
   });
 
   final int? hp;
   final List<PokemonType> pokemonTypes;
   final EvolutionStage? evolutionStage;
   final String? evolvesFrom;
+
+  /// Pokemon ability (`details.abilities[0]`).
+  final AbilityModel? ability;
+
+  /// Rules text for Trainer/Energy cards (`details.effect`).
+  final String? effect;
   final List<AttackModel> attacks;
   final TypeModifier? weakness;
   final TypeModifier? resistance;
   final int? retreatCost;
   final TrainerSubtype? trainerSubtype;
   final PokemonType? energyType;
+
+  /// `details.pokedex.{number,height,weight}` — species stats shown in the
+  /// card detail page's "Pokédex" section.
+  final int? pokedexNumber;
+  final String? pokedexHeight;
+  final String? pokedexWeight;
+
+  /// Decodes the `cards.details` jsonb column. Unrecognized/missing keys
+  /// fall back to their defaults rather than throwing — a malformed field
+  /// shouldn't blow up the whole card row.
+  factory CardDetails.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const CardDetails();
+    final cardType = json['card_type'] as String?;
+    final weaknessJson = json['weakness'] as Map<String, dynamic>?;
+    final resistanceJson = json['resistance'] as Map<String, dynamic>?;
+    final attacksJson = json['attacks'] as List<dynamic>?;
+    final pokedexJson = json['pokedex'] as Map<String, dynamic>?;
+    final abilitiesJson = (json['abilities'] as List<dynamic>?)
+        ?.whereType<Map<String, dynamic>>()
+        .toList();
+    final abilityJson = (abilitiesJson == null || abilitiesJson.isEmpty)
+        ? null
+        : abilitiesJson.first;
+    final abilityName = abilityJson?['name'] as String?;
+
+    return CardDetails(
+      hp: json['hp'] as int?,
+      pokemonTypes: pokemonTypesFromRaw(cardType),
+      evolutionStage: EvolutionStageX.fromRaw(
+        json['evolution_stage'] as String?,
+      ),
+      evolvesFrom: json['evolves_from'] as String?,
+      ability: abilityName == null || abilityName.isEmpty
+          ? null
+          : AbilityModel(
+              name: abilityName,
+              description: abilityJson?['description'] as String?,
+            ),
+      effect: json['effect'] as String?,
+      attacks: attacksJson == null
+          ? const []
+          : attacksJson
+                .whereType<Map<String, dynamic>>()
+                .map(
+                  (a) => AttackModel(
+                    name: a['name'] as String? ?? '',
+                    cost: pokemonTypesFromRaw(
+                      (a['energy_cost'] as List<dynamic>?)
+                          ?.whereType<String>()
+                          .join('/'),
+                    ),
+                    damage: a['damage'] as String? ?? '',
+                    effect: a['description'] as String?,
+                  ),
+                )
+                .toList(),
+      weakness: weaknessJson == null
+          ? null
+          : pokemonTypeFromRaw(weaknessJson['type'] as String?) == null
+          ? null
+          : TypeModifier(
+              type: pokemonTypeFromRaw(weaknessJson['type'] as String?)!,
+              value: weaknessJson['modifier'] as String? ?? '',
+            ),
+      resistance: resistanceJson == null
+          ? null
+          : pokemonTypeFromRaw(resistanceJson['type'] as String?) == null
+          ? null
+          : TypeModifier(
+              type: pokemonTypeFromRaw(resistanceJson['type'] as String?)!,
+              value: resistanceJson['modifier'] as String? ?? '',
+            ),
+      retreatCost: json['retreat_cost'] as int?,
+      trainerSubtype: TrainerSubtypeX.fromRaw(
+        json['trainer_subtype'] as String?,
+      ),
+      energyType: pokemonTypeFromRaw(cardType),
+      pokedexNumber: pokedexJson?['number'] as int?,
+      pokedexHeight: pokedexJson?['height'] as String?,
+      pokedexWeight: pokedexJson?['weight'] as String?,
+    );
+  }
 }
 
 /// A single Pokemon TCG card, mirroring `public.cards` in
@@ -145,7 +325,10 @@ class CardModel {
     this.variant = 'normal',
     this.details = const CardDetails(),
     this.marketPrice,
+    this.price7dAgo,
+    this.priceSource,
     this.owned = 0,
+    this.imageUrl,
   });
 
   final int id;
@@ -161,12 +344,40 @@ class CardModel {
   final String variant;
   final CardDetails details;
   final int? marketPrice;
+
+  /// What [marketPrice] was a week ago, from the same price cache row.
+  /// Null when the cache has no comparison to make — a card priced for the
+  /// first time this week, or one priced off the order book.
+  final int? price7dAgo;
+
+  /// Which side of the book [marketPrice] came from.
+  final CardPriceSource? priceSource;
+
   final int owned;
+
+  /// CDN-resolved `cards.image_url` (see `proxyImageUrl`). Null for dummy
+  /// (non-catalog) data, in which case UI falls back to a placeholder.
+  final String? imageUrl;
 
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
 
-  CardModel copyWith({int? owned}) => CardModel(
+  /// How far the market price has moved in the last week, as a percentage,
+  /// or null when there is nothing to say.
+  ///
+  /// Mirrors web's `pricePct` in `components/card/card-item.tsx`: only a
+  /// confirmed price — one built from actual sales — is compared. An ask or
+  /// a bid is one person's number, so a week-on-week move in it would be a
+  /// trend line drawn through a single listing.
+  double? get priceChangePct {
+    final now = marketPrice;
+    final then = price7dAgo;
+    if (priceSource != CardPriceSource.confirmed) return null;
+    if (now == null || then == null || then <= 0) return null;
+    return (now - then) / then * 100;
+  }
+
+  CardModel copyWith({int? owned, CardMarketPrice? price}) => CardModel(
     id: id,
     category: category,
     nameId: nameId,
@@ -179,7 +390,35 @@ class CardModel {
     language: language,
     variant: variant,
     details: details,
-    marketPrice: marketPrice,
+    marketPrice: price?.price ?? marketPrice,
+    price7dAgo: price?.price7dAgo ?? price7dAgo,
+    priceSource: price?.source ?? priceSource,
     owned: owned ?? this.owned,
+    imageUrl: imageUrl,
   );
+
+  /// Maps a `cards` row (optionally with an embedded `expansions` join) as
+  /// returned by Supabase, mirroring `mapCardRow` in
+  /// `pokepedia-web/lib/data/client.ts`.
+  factory CardModel.fromRow(Map<String, dynamic> row) {
+    final expansionCode = row['expansion_code'] as String? ?? '';
+    final rarityRaw = row['rarity'] as String?;
+    return CardModel(
+      id: row['id'] as int,
+      category: CardCategoryX.fromRaw(row['category'] as String?),
+      nameId: row['name_id'] as String? ?? '',
+      expansionCode: expansionCode,
+      packSlug: expansionCode.toLowerCase(),
+      collectorNumber: row['collector_number'] as String? ?? '',
+      rarity: (rarityRaw == null || rarityRaw.isEmpty)
+          ? 'Tanpa tanda'
+          : rarityRaw,
+      regulationMark: row['regulation_mark'] as String?,
+      illustrator: row['illustrator'] as String?,
+      language: CardLanguageX.fromRaw(row['language'] as String?),
+      variant: row['variant'] as String? ?? 'normal',
+      details: CardDetails.fromJson(row['details'] as Map<String, dynamic>?),
+      imageUrl: proxyImageUrl(row['image_url'] as String?),
+    );
+  }
 }

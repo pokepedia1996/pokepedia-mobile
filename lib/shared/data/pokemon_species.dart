@@ -34,8 +34,18 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Thunder Shock', cost: [PokemonType.lightning], damage: '30'),
-        AttackModel(name: 'Agility', cost: [PokemonType.lightning, PokemonType.colorless], damage: '10', effect: 'Lempar koin, jika sisi kepala, hindari serangan lawan berikutnya.'),
+        AttackModel(
+          name: 'Thunder Shock',
+          cost: [PokemonType.lightning],
+          damage: '30',
+        ),
+        AttackModel(
+          name: 'Agility',
+          cost: [PokemonType.lightning, PokemonType.colorless],
+          damage: '10',
+          effect:
+              'Lempar koin, jika sisi kepala, hindari serangan lawan berikutnya.',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -47,7 +57,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Thunder Punch', cost: [PokemonType.lightning, PokemonType.colorless], damage: '70', effect: 'Lempar koin, jika sisi ekor, Raichu terkena 20 damage.'),
+        AttackModel(
+          name: 'Thunder Punch',
+          cost: [PokemonType.lightning, PokemonType.colorless],
+          damage: '70',
+          effect: 'Lempar koin, jika sisi ekor, Raichu terkena 20 damage.',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -70,7 +85,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 3,
       attacks: [
-        AttackModel(name: 'Fire Spin', cost: [PokemonType.fire, PokemonType.fire, PokemonType.colorless], damage: '100', effect: 'Buang 2 Energy yang terpasang.'),
+        AttackModel(
+          name: 'Fire Spin',
+          cost: [PokemonType.fire, PokemonType.fire, PokemonType.colorless],
+          damage: '100',
+          effect: 'Buang 2 Energy yang terpasang.',
+        ),
       ],
       weaknessType: PokemonType.water,
     ),
@@ -81,7 +101,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Vine Whip', cost: [PokemonType.grass, PokemonType.colorless], damage: '40'),
+        AttackModel(
+          name: 'Vine Whip',
+          cost: [PokemonType.grass, PokemonType.colorless],
+          damage: '40',
+        ),
       ],
       weaknessType: PokemonType.fire,
     ),
@@ -93,7 +117,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 3,
       attacks: [
-        AttackModel(name: 'Giant Bloom', cost: [PokemonType.grass, PokemonType.grass, PokemonType.colorless], damage: '110', effect: 'Pulihkan 30 damage dari Pokemon ini.'),
+        AttackModel(
+          name: 'Giant Bloom',
+          cost: [PokemonType.grass, PokemonType.grass, PokemonType.colorless],
+          damage: '110',
+          effect: 'Pulihkan 30 damage dari Pokemon ini.',
+        ),
       ],
       weaknessType: PokemonType.fire,
     ),
@@ -104,7 +133,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Bubble', cost: [PokemonType.water], damage: '20', effect: 'Lawan mungkin lumpuh (paralyzed).'),
+        AttackModel(
+          name: 'Bubble',
+          cost: [PokemonType.water],
+          damage: '20',
+          effect: 'Lawan mungkin lumpuh (paralyzed).',
+        ),
       ],
       weaknessType: PokemonType.lightning,
     ),
@@ -116,7 +150,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 3,
       attacks: [
-        AttackModel(name: 'Hydro Pump', cost: [PokemonType.water, PokemonType.water, PokemonType.colorless], damage: '90', effect: '+30 damage untuk setiap Water Energy tambahan.'),
+        AttackModel(
+          name: 'Hydro Pump',
+          cost: [PokemonType.water, PokemonType.water, PokemonType.colorless],
+          damage: '90',
+          effect: '+30 damage untuk setiap Water Energy tambahan.',
+        ),
       ],
       weaknessType: PokemonType.lightning,
     ),
@@ -127,7 +166,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Tackle', cost: [PokemonType.colorless], damage: '20'),
+        AttackModel(
+          name: 'Tackle',
+          cost: [PokemonType.colorless],
+          damage: '20',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -139,7 +182,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Moonlight Ribbon', cost: [PokemonType.fairy, PokemonType.colorless], damage: '60', effect: 'Pulihkan 30 damage dari Pokemon ini.'),
+        AttackModel(
+          name: 'Moonlight Ribbon',
+          cost: [PokemonType.fairy, PokemonType.colorless],
+          damage: '60',
+          effect: 'Pulihkan 30 damage dari Pokemon ini.',
+        ),
       ],
       weaknessType: PokemonType.metal,
     ),
@@ -151,7 +199,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Feint Attack', cost: [PokemonType.darkness, PokemonType.colorless], damage: '70', effect: 'Serangan ini mengabaikan efek pada Pokemon Bertahan.'),
+        AttackModel(
+          name: 'Feint Attack',
+          cost: [PokemonType.darkness, PokemonType.colorless],
+          damage: '70',
+          effect: 'Serangan ini mengabaikan efek pada Pokemon Bertahan.',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -163,7 +216,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Psybeam', cost: [PokemonType.psychic, PokemonType.colorless], damage: '50', effect: 'Lempar koin, jika sisi kepala, lawan bingung (confused).'),
+        AttackModel(
+          name: 'Psybeam',
+          cost: [PokemonType.psychic, PokemonType.colorless],
+          damage: '50',
+          effect: 'Lempar koin, jika sisi kepala, lawan bingung (confused).',
+        ),
       ],
       weaknessType: PokemonType.darkness,
     ),
@@ -174,7 +232,15 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 2,
       attacks: [
-        AttackModel(name: 'Psystrike', cost: [PokemonType.psychic, PokemonType.psychic, PokemonType.colorless], damage: '120'),
+        AttackModel(
+          name: 'Psystrike',
+          cost: [
+            PokemonType.psychic,
+            PokemonType.psychic,
+            PokemonType.colorless,
+          ],
+          damage: '120',
+        ),
       ],
       weaknessType: PokemonType.darkness,
     ),
@@ -186,7 +252,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Shadow Bind', cost: [PokemonType.psychic, PokemonType.colorless], damage: '60', effect: 'Pokemon Bertahan tidak bisa retreat di giliran berikutnya.'),
+        AttackModel(
+          name: 'Shadow Bind',
+          cost: [PokemonType.psychic, PokemonType.colorless],
+          damage: '60',
+          effect: 'Pokemon Bertahan tidak bisa retreat di giliran berikutnya.',
+        ),
       ],
       weaknessType: PokemonType.darkness,
     ),
@@ -197,7 +268,16 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 4,
       attacks: [
-        AttackModel(name: 'Body Slam', cost: [PokemonType.colorless, PokemonType.colorless, PokemonType.colorless], damage: '80', effect: 'Lempar koin, jika sisi kepala, lawan lumpuh (paralyzed).'),
+        AttackModel(
+          name: 'Body Slam',
+          cost: [
+            PokemonType.colorless,
+            PokemonType.colorless,
+            PokemonType.colorless,
+          ],
+          damage: '80',
+          effect: 'Lempar koin, jika sisi kepala, lawan lumpuh (paralyzed).',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -208,7 +288,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Aura Sphere', cost: [PokemonType.fighting, PokemonType.colorless], damage: '60'),
+        AttackModel(
+          name: 'Aura Sphere',
+          cost: [PokemonType.fighting, PokemonType.colorless],
+          damage: '60',
+        ),
       ],
       weaknessType: PokemonType.psychic,
     ),
@@ -220,7 +304,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Water Shuriken', cost: [PokemonType.water], damage: '30', effect: '+30 damage untuk setiap Water Energy tambahan.'),
+        AttackModel(
+          name: 'Water Shuriken',
+          cost: [PokemonType.water],
+          damage: '30',
+          effect: '+30 damage untuk setiap Water Energy tambahan.',
+        ),
       ],
       weaknessType: PokemonType.lightning,
     ),
@@ -231,7 +320,15 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 2,
       attacks: [
-        AttackModel(name: 'Dragon Break', cost: [PokemonType.lightning, PokemonType.fighting, PokemonType.colorless], damage: '130'),
+        AttackModel(
+          name: 'Dragon Break',
+          cost: [
+            PokemonType.lightning,
+            PokemonType.fighting,
+            PokemonType.colorless,
+          ],
+          damage: '130',
+        ),
       ],
       weaknessType: PokemonType.fairy,
     ),
@@ -243,7 +340,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 3,
       attacks: [
-        AttackModel(name: 'Dragon Tail', cost: [PokemonType.water, PokemonType.water, PokemonType.colorless], damage: '90'),
+        AttackModel(
+          name: 'Dragon Tail',
+          cost: [PokemonType.water, PokemonType.water, PokemonType.colorless],
+          damage: '90',
+        ),
       ],
       weaknessType: PokemonType.lightning,
     ),
@@ -255,7 +356,16 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 2,
       attacks: [
-        AttackModel(name: 'Hyper Beam', cost: [PokemonType.colorless, PokemonType.colorless, PokemonType.colorless, PokemonType.colorless], damage: '150'),
+        AttackModel(
+          name: 'Hyper Beam',
+          cost: [
+            PokemonType.colorless,
+            PokemonType.colorless,
+            PokemonType.colorless,
+            PokemonType.colorless,
+          ],
+          damage: '150',
+        ),
       ],
       weaknessType: PokemonType.fairy,
     ),
@@ -266,7 +376,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Feint Slash', cost: [PokemonType.darkness, PokemonType.colorless], damage: '60'),
+        AttackModel(
+          name: 'Feint Slash',
+          cost: [PokemonType.darkness, PokemonType.colorless],
+          damage: '60',
+        ),
       ],
       weaknessType: PokemonType.fighting,
     ),
@@ -278,7 +392,11 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage2,
       retreatCost: 2,
       attacks: [
-        AttackModel(name: 'Dragon Claw', cost: [PokemonType.dragon, PokemonType.colorless], damage: '100'),
+        AttackModel(
+          name: 'Dragon Claw',
+          cost: [PokemonType.dragon, PokemonType.colorless],
+          damage: '100',
+        ),
       ],
       weaknessType: PokemonType.fairy,
     ),
@@ -289,7 +407,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.basic,
       retreatCost: 3,
       attacks: [
-        AttackModel(name: 'Ice Beam', cost: [PokemonType.water, PokemonType.colorless], damage: '70', effect: 'Lempar koin, jika sisi kepala, lawan lumpuh (paralyzed).'),
+        AttackModel(
+          name: 'Ice Beam',
+          cost: [PokemonType.water, PokemonType.colorless],
+          damage: '70',
+          effect: 'Lempar koin, jika sisi kepala, lawan lumpuh (paralyzed).',
+        ),
       ],
       weaknessType: PokemonType.lightning,
     ),
@@ -301,7 +424,12 @@ class PokemonSpecies {
       evolutionStage: EvolutionStage.stage1,
       retreatCost: 1,
       attacks: [
-        AttackModel(name: 'Fire Blast', cost: [PokemonType.fire, PokemonType.fire, PokemonType.colorless], damage: '90', effect: 'Buang Energy Api dari Pokemon ini.'),
+        AttackModel(
+          name: 'Fire Blast',
+          cost: [PokemonType.fire, PokemonType.fire, PokemonType.colorless],
+          damage: '90',
+          effect: 'Buang Energy Api dari Pokemon ini.',
+        ),
       ],
       weaknessType: PokemonType.water,
     ),

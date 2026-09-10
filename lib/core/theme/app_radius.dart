@@ -1,4 +1,11 @@
 /// Corner radii ported from the `--radius-*` tokens in `globals.css`.
+///
+/// Careful: the names sit one step above web's. `globals.css` runs
+/// 4/8/10/12/16/20/24/32 from `xs`, this runs 8/10/12/16/20/24/32/40 — so
+/// web's `--radius-md` (10px, "buttons, inputs, icon-buttons, selects") is
+/// [sm] here, and its `--radius-lg` (12px, "cards, panels, modals") is [md].
+/// Reading a web class name across as the same name here makes every corner
+/// a step rounder than the site, which is how the buttons drifted.
 class AppRadius {
   AppRadius._();
 

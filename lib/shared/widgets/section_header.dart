@@ -27,10 +27,7 @@ class SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: AppTypography.h2(context.appColors.onSurface),
-              ),
+              Text(title, style: AppTypography.h2(context.appColors.onSurface)),
               if (subtitle != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),

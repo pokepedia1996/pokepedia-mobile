@@ -6,7 +6,7 @@ extension DeckCategoryX on DeckCategory {
   String get label {
     switch (this) {
       case DeckCategory.pokemon:
-        return 'Pokémon';
+        return 'Pokemon';
       case DeckCategory.trainer:
         return 'Trainer';
       case DeckCategory.energy:

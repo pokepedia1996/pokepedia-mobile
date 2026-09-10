@@ -1,66 +1,76 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_radius.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
+import '../../core/theme/condition_colors.dart';
 import '../models/card_condition.dart';
+import 'status_pill.dart';
 
 /// Ports `components/card/condition-badge.tsx` — a small pill showing the
 /// short condition code (NM/LP/MP/HP/PSA.../BGS.../CGC.../EGS...) over a
-/// card thumbnail. Colors bucket the 21 grading values from
-/// `listings_condition_check` into the 7 `--cond-*` tokens in
-/// `globals.css`.
+/// card thumbnail.
+///
+/// Monochrome by default: over a card thumbnail the pill sits on artwork of
+/// every colour, and black on white is the one pairing that reads over all of
+/// it. Away from artwork web tints it per grade
+/// (`CONDITION_BADGE_CLASSES`), which [colored] turns on.
 class ConditionBadge extends StatelessWidget {
-  const ConditionBadge({super.key, required this.condition});
+  const ConditionBadge({
+    super.key,
+    required this.condition,
+    this.dense = false,
+    this.full = false,
+    this.colored = false,
+  });
 
   final CardCondition condition;
 
-  static const _top10 = {
-    CardCondition.psa10,
-    CardCondition.bgsGd10,
-    CardCondition.cgc10,
-    CardCondition.egs10,
-  };
+  /// Spell the grade out — "Near Mint" rather than "NM".
+  ///
+  /// Opt-in because the short code is what belongs over a thumbnail, where
+  /// there is no room for the long form. The purchase panel has the room and
+  /// web spells it out there (`CONDITION_LABEL`, not `conditionShort`), so
+  /// that one caller asks for it.
+  final bool full;
 
-  static const _nine = {
-    CardCondition.psa9,
-    CardCondition.bgs9,
-    CardCondition.bgs95,
-    CardCondition.cgc9,
-    CardCondition.cgc95,
-    CardCondition.egs9,
-    CardCondition.egs95,
-  };
+  /// Tint the pill with the grade's own colour, as web does everywhere the
+  /// badge is not sitting on artwork.
+  ///
+  /// The tint comes from [conditionColorOf] through [statusPillColors] rather
+  /// than a table of literals: web writes 21 conditions x 6 Tailwind shades,
+  /// but those shades are one accent lightened and darkened, which is exactly
+  /// what that helper already derives — and it does so per theme, so the
+  /// badge stays legible on dark without a second table.
+  final bool colored;
 
-  Color _colorFor(BuildContext context) {
-    final s = context.appSemantic;
-    switch (condition) {
-      case CardCondition.nm:
-        return s.condNm;
-      case CardCondition.lp:
-        return s.condLp;
-      case CardCondition.mp:
-        return s.condMp;
-      case CardCondition.hp:
-        return s.condHp;
-      default:
-        if (_top10.contains(condition)) return s.condPsa10;
-        if (_nine.contains(condition)) return s.condPsa9;
-        return s.condPsaLow;
-    }
-  }
+  /// The tighter variant used inside table-like rows (the order book ladder
+  /// and listing rows), matching web's `text-[9px]` inline badges.
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
-    final color = _colorFor(context);
+    final scheme = colored
+        ? statusPillColors(context, conditionColorOf(context, condition))
+        : null;
+    final foreground = scheme?.foreground ?? Colors.black;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: dense
+          ? const EdgeInsets.symmetric(horizontal: 4, vertical: 2)
+          : const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: scheme?.background ?? Colors.white,
+        borderRadius: BorderRadius.circular(dense ? 4 : AppRadius.full),
+        border: Border.all(
+          color: scheme?.ring ?? Colors.black.withValues(alpha: 0.25),
+        ),
       ),
-      child: Text(condition.short, style: AppTypography.badge(color)),
+      child: Text(
+        full ? condition.label : condition.short,
+        style: dense
+            ? AppTypography.badge(foreground).copyWith(fontSize: 9)
+            : AppTypography.badge(foreground),
+      ),
     );
   }
 }

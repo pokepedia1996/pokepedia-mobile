@@ -128,9 +128,15 @@ class AppTheme {
           backgroundColor: colorScheme.primary,
           foregroundColor: colorScheme.onPrimary,
           minimumSize: const Size(64, 44),
+          // Web's `px-4`. Without this Flutter falls back to the Material 3
+          // default of 24, which is why every button read wider than its
+          // counterpart on the site.
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           textStyle: AppTypography.bodySmSemibold(colorScheme.onPrimary),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
+            // `rounded-md` on web — 10px, which this scale calls `sm`. See
+            // the note on AppRadius: the names sit one step above web's.
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           elevation: 0,
         ),
@@ -139,10 +145,11 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: foreground,
           minimumSize: const Size(64, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           side: BorderSide(color: border),
           textStyle: AppTypography.bodySmSemibold(foreground),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
         ),
       ),
@@ -184,8 +191,7 @@ extension BuildContextTheme on BuildContext {
   ColorScheme get appColors => Theme.of(this).colorScheme;
   AppSemanticColors get appSemantic =>
       Theme.of(this).extension<AppSemanticColors>()!;
-  Color get mutedForeground =>
-      Theme.of(this).brightness == Brightness.light
+  Color get mutedForeground => Theme.of(this).brightness == Brightness.light
       ? AppColors.black40
       : AppColors.black20;
   Color get borderColor => Theme.of(this).dividerColor;

@@ -1,25 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_model.dart';
-import '../../../shared/models/listing_model.dart';
-import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/listing_card.dart';
-import '../../../shared/widgets/type_icon.dart';
+import '../../../shared/widgets/image_lightbox.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/expansions_notifier.dart';
+import 'widgets/add_to_portfolio_panel.dart';
+import 'widgets/card_details_section.dart';
+import 'widgets/related_cards_section.dart';
+import 'widgets/card_listings_section.dart';
+import 'widgets/card_market_header.dart';
+import 'widgets/market_activity_section.dart';
+import 'widgets/order_book_widget.dart';
 
 /// Ports `app/expansions/[packSlug]/[cardId]/card-detail-page.tsx` +
-/// `components/card/card-detail.tsx` (buyer-relevant sections: artwork,
-/// Pokemon/Trainer/Energy details from `cards.details`, and the
-/// listing/offer tabs).
+/// `components/card/card-detail.tsx` in the shape the web renders below its
+/// `lg` breakpoint: breadcrumb, the pack/number header row, the artwork
+/// column (portfolio quantity, prev/next card), then `CardMobilePanels` —
+/// the price header over a Market / Histori Data tab pair — and finally the
+/// card's own info column.
+///
+/// Editing (the admin `editMode` field pencils, upload/attack/ability
+/// modals) has no mobile counterpart and is left out.
 class CardDetailPage extends ConsumerStatefulWidget {
-  const CardDetailPage({super.key, required this.packSlug, required this.cardId});
+  const CardDetailPage({
+    super.key,
+    required this.packSlug,
+    required this.cardId,
+  });
 
   final String packSlug;
   final int cardId;
@@ -28,331 +46,200 @@ class CardDetailPage extends ConsumerStatefulWidget {
   ConsumerState<CardDetailPage> createState() => _CardDetailPageState();
 }
 
-class _CardDetailPageState extends ConsumerState<CardDetailPage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  bool _wishlisted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _CardDetailPageState extends ConsumerState<CardDetailPage> {
   @override
   Widget build(BuildContext context) {
     final cardAsync = ref.watch(cardDetailProvider(widget.cardId));
-    final listingsAsync = ref.watch(cardListingsProvider(widget.cardId));
-    final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(
-        title: cardAsync.when(
-          data: (card) => Text(card?.name ?? 'Kartu'),
-          loading: () => const Text('Memuat...'),
-          error: (_, __) => const Text('Kartu'),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _wishlisted ? Icons.favorite : Icons.favorite_border,
-              color: _wishlisted ? colors.primary : null,
-            ),
-            onPressed: () => setState(() => _wishlisted = !_wishlisted),
-          ),
-        ],
-      ),
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(actions: [CartAppBarButton()]),
       body: cardAsync.when(
         data: (card) {
           if (card == null) {
             return const EmptyState(
-              icon: Icons.search_off,
+              icon: LucideIcons.searchX,
               title: 'Kartu tidak ditemukan',
             );
           }
-          return SafeArea(
-            top: false,
+
+          return AppBarOverlayBody(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(width: 130, child: CardArt(borderRadius: AppRadius.lg)),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(card.name, style: AppTypography.h2(colors.onSurface)),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${card.collectorNumber} · ${card.expansionCode}',
-                            style: AppTypography.bodySm(context.mutedForeground),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              if (card.rarity != null) _Chip(text: card.rarity!),
-                              _Chip(text: card.category.labelId),
-                              if (card.regulationMark != null)
-                                _Chip(text: 'Reg. ${card.regulationMark}'),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text('Harga pasar', style: AppTypography.caption(context.mutedForeground)),
-                          Text(
-                            card.marketPrice != null ? formatRupiah(card.marketPrice!) : 'Rp-',
-                            style: AppTypography.h3(colors.onSurface),
-                          ),
-                          if (card.owned > 0) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(Icons.check_circle, size: 14, color: context.appSemantic.success),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Dimiliki ×${card.owned}',
-                                  style: AppTypography.captionSemibold(context.appSemantic.success),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _CardDetailsSection(card: card),
-                const SizedBox(height: 20),
-                TabBar(
-                  controller: _tabController,
-                  labelColor: colors.primary,
-                  unselectedLabelColor: context.mutedForeground,
-                  indicatorColor: colors.primary,
-                  dividerColor: context.borderColor,
-                  tabs: const [
-                    Tab(text: 'Listing (WTS)'),
-                    Tab(text: 'Penawaran (WTB)'),
-                  ],
-                ),
+                _Breadcrumb(card: card),
                 const SizedBox(height: 12),
-                listingsAsync.when(
-                  data: (listings) {
-                    final asks = listings.where((l) => l.side == ListingSide.ask).toList();
-                    final bids = listings.where((l) => l.side == ListingSide.bid).toList();
-                    return AnimatedBuilder(
-                      animation: _tabController,
-                      builder: (context, _) {
-                        final list = _tabController.index == 0 ? asks : bids;
-                        if (list.isEmpty) {
-                          return const EmptyState(
-                            icon: Icons.inbox_outlined,
-                            title: 'Belum ada listing',
-                            description: 'Jadilah yang pertama menjual atau menawar kartu ini.',
-                          );
-                        }
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: list.length,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 0.6,
-                          ),
-                          itemBuilder: (context, i) => ListingCard(listing: list[i], onTap: () {}),
-                        );
-                      },
-                    );
-                  },
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator()),
+
+                // Artwork column — tap the art for the lightbox, then the
+                // portfolio quantity and the neighbouring cards.
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _Artwork(card: card),
+                        const SizedBox(height: 12),
+                        // Same heading the WTS listing page puts under its
+                        // artwork, so a card is named identically wherever
+                        // it's opened from.
+                      ],
+                    ),
                   ),
-                  error: (_, __) => const Text('Gagal memuat listing'),
                 ),
+                CardTitleLine(card: card),
+                const SizedBox(height: 14),
+
+                CardMarketHeader(card: card),
+                const SizedBox(height: 14),
+                // Adding a copy is a decision about the price above it, so
+                // the panel sits under the price rather than under the
+                // artwork where a bare stepper used to.
+                AddToPortfolioPanel(card: card),
+                const SizedBox(height: 16),
+                // No tabs: every market block is stacked, in the order a
+                // buyer works through them — what's on sale now, what it has
+                // actually sold for, how that has moved, and the book behind
+                // those prices.
+                CardListingsSection(cardId: card.id),
+                const SizedBox(height: 16),
+                SalesHistorySection(cardId: card.id),
+                const SizedBox(height: 16),
+                MarketActivitySection(cardId: card.id),
+                const SizedBox(height: 16),
+                OrderBookWidget(card: card),
+
+                const SizedBox(height: 20),
+                Divider(color: context.borderColor, height: 1),
+                const SizedBox(height: 16),
+                // The collapsible details card the WTS listing page uses,
+                // rather than the flat panel this page had: the same card
+                // shouldn't read two different ways.
+                CardDetailsHeader(card: card),
+                const SizedBox(height: 12),
+                CardDetailsSection(card: card),
+                // Web closes the page with this rail, below the info column.
+                RelatedCardsSection(card: card),
               ],
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const EmptyState(icon: Icons.error_outline, title: 'Gagal memuat kartu'),
+        loading: () => const PikachuLoader(),
+        error: (_, __) => const EmptyState(
+          icon: LucideIcons.circleAlert,
+          title: 'Gagal memuat kartu',
+        ),
       ),
     );
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.secondary,
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      child: Text(text, style: AppTypography.captionSemibold(colors.onSurface)),
-    );
-  }
-}
-
-/// Ports the Pokemon/Trainer/Energy fact panels from
-/// `components/card/card-detail.tsx`, sourced from `cards.details`.
-class _CardDetailsSection extends StatelessWidget {
-  const _CardDetailsSection({required this.card});
+/// "Ekspansi › Nama kartu › Nomor" above the artwork.
+///
+/// Ports `components/ui/breadcrumb.tsx` as the card page uses it: chevrons
+/// between, the trail muted and the card itself in plain foreground, and the
+/// whole thing scrolls sideways rather than wrapping — a long expansion name
+/// beside a long card name doesn't fit a phone, and a breadcrumb that wraps
+/// to two lines stops reading as one.
+class _Breadcrumb extends ConsumerWidget {
+  const _Breadcrumb({required this.card});
 
   final CardModel card;
 
   @override
-  Widget build(BuildContext context) {
-    switch (card.category) {
-      case CardCategory.pokemon:
-        return _PokemonDetails(card: card);
-      case CardCategory.trainer:
-        return _InfoCard(
-          title: 'Trainer',
-          child: Text(
-            card.details.trainerSubtype?.labelId ?? 'Trainer',
-            style: AppTypography.bodySm(context.appColors.onSurface),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    final muted = context.mutedForeground;
+    final pack = ref
+        .watch(
+          packForCardProvider((
+            slug: card.packSlug,
+            language: card.language.raw,
+          )),
+        )
+        .valueOrNull;
+    // The code until the pack's name arrives, rather than a blank segment.
+    final expansion = (pack?.name.isNotEmpty ?? false)
+        ? pack!.name
+        : card.expansionCode.toUpperCase();
+
+    Widget chevron() => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Icon(LucideIcons.chevronRight, size: 13, color: muted),
+    );
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // The one segment that goes anywhere: back to the expansion this
+          // card belongs to.
+          InkWell(
+            onTap: () => context.push(Routes.packDetail(card.packSlug)),
+            borderRadius: BorderRadius.circular(AppRadius.xs),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+              child: Text(expansion, style: AppTypography.caption(muted)),
+            ),
           ),
-        );
-      case CardCategory.energy:
-        final type = card.details.energyType;
-        return _InfoCard(
-          title: 'Energy',
-          child: Row(
-            children: [
-              if (type != null) ...[
-                TypeIcon(type: type, size: 22),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                type?.labelId ?? 'Energy',
-                style: AppTypography.bodySm(context.appColors.onSurface),
-              ),
-            ],
+          chevron(),
+          Text(card.name, style: AppTypography.caption(colors.onSurface)),
+          chevron(),
+          Text(
+            card.collectorNumber,
+            style: AppTypography.captionSemibold(colors.onSurface),
           ),
-        );
-    }
+        ],
+      ),
+    );
   }
 }
 
-class _PokemonDetails extends StatelessWidget {
-  const _PokemonDetails({required this.card});
+/// The card image with web's `OwnedBadge` corner marker, opening the
+/// lightbox on tap.
+class _Artwork extends ConsumerWidget {
+  const _Artwork({required this.card});
 
   final CardModel card;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final d = card.details;
-    return _InfoCard(
-      title: 'Info Pokémon',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (d.hp != null) ...[
-                Text('HP ${d.hp}', style: AppTypography.bodySemibold(colors.onSurface)),
-                const SizedBox(width: 10),
-              ],
-              for (final t in d.pokemonTypes) ...[
-                TypeIcon(type: t, size: 20),
-                const SizedBox(width: 4),
-              ],
-              const Spacer(),
-              if (d.evolutionStage != null)
-                _Chip(text: d.evolutionStage!.labelId),
-            ],
-          ),
-          if (d.evolvesFrom != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Berevolusi dari ${d.evolvesFrom}',
-              style: AppTypography.caption(context.mutedForeground),
-            ),
-          ],
-          if (d.attacks.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text('Serangan', style: AppTypography.captionSemibold(context.mutedForeground)),
-            const SizedBox(height: 8),
-            for (final attack in d.attacks) _AttackRow(attack: attack),
-          ],
-          if (d.weakness != null || d.retreatCost != null) ...[
-            const SizedBox(height: 12),
-            Divider(color: context.borderColor),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (d.weakness != null) ...[
-                  Text('Lemah: ', style: AppTypography.caption(context.mutedForeground)),
-                  TypeIcon(type: d.weakness!.type, size: 16),
-                  const SizedBox(width: 3),
-                  Text(d.weakness!.value, style: AppTypography.captionSemibold(colors.onSurface)),
-                  const SizedBox(width: 16),
-                ],
-                if (d.retreatCost != null) ...[
-                  Text('Mundur: ', style: AppTypography.caption(context.mutedForeground)),
-                  Text('${d.retreatCost}', style: AppTypography.captionSemibold(colors.onSurface)),
-                ],
-              ],
-            ),
-          ],
-        ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final owned = ref.watch(ownedQuantityProvider(card.id)).valueOrNull ?? 0;
+
+    return GestureDetector(
+      onTap: () => showImageLightbox(
+        context,
+        imageUrl: card.imageUrl,
+        heroTag: 'card-image-${card.id}',
       ),
-    );
-  }
-}
-
-class _AttackRow extends StatelessWidget {
-  const _AttackRow({required this.attack});
-
-  final AttackModel attack;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              for (final t in attack.cost) ...[
-                TypeIcon(type: t, size: 16),
-                const SizedBox(width: 2),
-              ],
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(attack.name, style: AppTypography.bodySmSemibold(colors.onSurface)),
-              ),
-              Text(attack.damage, style: AppTypography.bodySemibold(colors.onSurface)),
-            ],
+          Hero(
+            tag: 'card-image-${card.id}',
+            child: CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.lg),
           ),
-          if (attack.effect != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                attack.effect!,
-                style: AppTypography.caption(context.mutedForeground),
+          if (owned > 0)
+            Positioned(
+              left: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: context.appSemantic.success,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      LucideIcons.check,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 3),
+                    Text('$owned', style: AppTypography.badge(Colors.white)),
+                  ],
+                ),
               ),
             ),
         ],
@@ -361,29 +248,82 @@ class _AttackRow extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.title, required this.child});
+/// Ports the prev/next card links under the artwork — the neighbours by
+/// collector number within the same expansion.
+class _AdjacentCardsNav extends ConsumerWidget {
+  const _AdjacentCardsNav({required this.packSlug, required this.cardId});
 
-  final String title;
-  final Widget child;
+  final String packSlug;
+  final int cardId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cards = ref.watch(packCardsProvider(packSlug)).valueOrNull;
+    if (cards == null) return const SizedBox.shrink();
+    final index = cards.indexWhere((c) => c.id == cardId);
+    if (index < 0) return const SizedBox.shrink();
+
+    final previous = index > 0 ? cards[index - 1] : null;
+    final next = index < cards.length - 1 ? cards[index + 1] : null;
+    if (previous == null && next == null) return const SizedBox.shrink();
+
+    return Row(
+      children: [
+        Expanded(
+          child: previous == null
+              ? const SizedBox.shrink()
+              : _NavChip(card: previous, isNext: false),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: next == null
+              ? const SizedBox.shrink()
+              : _NavChip(card: next, isNext: true),
+        ),
+      ],
+    );
+  }
+}
+
+class _NavChip extends StatelessWidget {
+  const _NavChip({required this.card, required this.isNext});
+
+  final CardModel card;
+  final bool isNext;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
+    final label = Flexible(
+      child: Text(
+        card.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption(context.mutedForeground),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: AppTypography.captionSemibold(context.mutedForeground)),
-          const SizedBox(height: 10),
-          child,
-        ],
+    );
+    final chevron = Icon(
+      isNext ? LucideIcons.chevronRight : LucideIcons.chevronLeft,
+      size: 16,
+      color: context.mutedForeground,
+    );
+
+    return InkWell(
+      // Replaces rather than pushes: paging through an expansion shouldn't
+      // stack a route per card behind the back button.
+      onTap: () => context.replace(Routes.cardDetail(card.packSlug, card.id)),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.borderColor),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        child: Row(
+          mainAxisAlignment: isNext
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: isNext ? [label, chevron] : [chevron, label],
+        ),
       ),
     );
   }

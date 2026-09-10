@@ -6,11 +6,29 @@ class Routes {
   static const home = '/';
   static const expansions = '/expansions';
   static const portfolio = '/portfolio/collection';
+  static const decks = '/portfolio/deck';
+  static const inventory = '/portfolio/inventory';
   static const market = '/market';
   static const account = '/account';
 
   // Search (opened from AppTopBar, not a bottom-nav tab).
   static const search = '/advanced-search';
+
+  /// Advanced search opened on a query, carrying what was typed instead of
+  /// dropping it.
+  static String searchQuery(String query) =>
+      '/advanced-search?q=${Uri.encodeQueryComponent(query)}';
+
+  /// Everything matching one query — web's `/search?q=`, and where the search
+  /// bar's "Cari semua" row goes.
+  static String searchResults(String query) =>
+      '/search?q=${Uri.encodeQueryComponent(query)}';
+
+  /// Camera card scanner. Opened from [AppTopBar] alongside search, and
+  /// full-screen above the shell — it takes over the whole viewport (camera
+  /// preview plus its own controls), so the bottom nav would only be in the
+  /// way. Web serves the same feature at `/scan`.
+  static const scan = '/scan';
 
   // Auth.
   static const login = '/login';
@@ -24,13 +42,62 @@ class Routes {
   static const checkoutSuccess = '/cart/checkout/success';
   static const orders = '/orders';
   static const proposals = '/proposals';
+
+  /// Where the work is: proposals somebody sent you need answering, so they
+  /// outrank the ones you are waiting on. Web splits this feed by direction
+  /// (`?tab=diterima`); the app's page filters by what a proposal is waiting
+  /// on, and "perlu aksi" is exactly the received-and-pending ones.
+  static const proposalsReceived = '/proposals?filter=perlu_aksi';
+
+  /// Offers made on ask listings. Not a web route: web surfaces these in
+  /// the seller's offers list and inside chat, neither of which the app has.
+  static const offers = '/proposals/offers';
+
+  /// Everything happening on one card — web's `/proposals/card/[cardId]`.
+  static String cardProposals(int cardId) => '/proposals/card/$cardId';
+
+  /// Proposals this user sent and is waiting on — web's `?tab=dikirim`.
+  static const proposalsSent = '/proposals?filter=menunggu';
+
+  /// The user's own WTB bids. Where "N bid aktif" points. The page has no
+  /// bids-only filter — they are spread across the lifecycle ones — so this
+  /// opens the whole feed rather than a filter that would hide half of them.
+  static const proposalsBids = proposals;
   static const wallet = '/wallet';
   static const lists = '/portfolio/list';
+
+  // Seller.
+  static const seller = '/seller';
+  static const sellerProducts = '/seller/products';
+  static const sellerOrders = '/seller/orders';
+
+  /// The orders list opened on one tab — web's `?filter=` links, which the
+  /// dashboard's counters carry so a number opens the list it counted.
+  static String sellerOrdersFiltered(String filterKey) =>
+      '/seller/orders?filter=$filterKey';
+
+  /// Offers a buyer has made on one listing. Web keys this by
+  /// `listings.slug`, and so does the app.
+  static String sellerListingOffers(String listingSlug) =>
+      '/seller/products/offers/$listingSlug';
+
+  /// One order as its seller. Web calls the parameter `matchId`; the app
+  /// passes `orders.slug`, which is the same value that route resolves.
+  static String sellerOrderDetail(String orderSlug) =>
+      '/seller/orders/$orderSlug';
+
+  /// Web's "Toko" section and its three pages. `/seller/settings` is the
+  /// path web uses for the profile; kept as `/seller/store/profile` here so
+  /// the section reads as a hierarchy on a stack-based navigator.
+  static const sellerStore = '/seller/store';
+  static const sellerStoreProfile = '/seller/store/profile';
+  static const sellerCouriers = '/seller/store/couriers';
 
   // Social / account.
   static const chat = '/chat';
   static const notifications = '/notifications';
   static const settings = '/settings';
+  static const addresses = '/settings/addresses';
   static const users = '/users';
   static const accountFollowing = '/account/following';
 
@@ -42,6 +109,13 @@ class Routes {
   static String cardDetail(String packSlug, int cardId) =>
       '/expansions/$packSlug/$cardId';
   static String storeDetail(String handle) => '/market/$handle';
+  static String storeCardDetail(String handle, int cardId) =>
+      '/market/$handle/card/$cardId';
+
+  /// One WTB bid, by its listing slug. Top-level rather than under
+  /// `/market/:handle`: a bid belongs to a buyer, and a buyer who has never
+  /// sold anything has no storefront handle to hang it off.
+  static String bidListing(String slug) => '/bid/$slug';
   static String orderDetail(String slug) => '/orders/$slug';
 
   /// View an existing dispute's detail/timeline.
@@ -50,8 +124,12 @@ class Routes {
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
   static String chatThread(String slug) => '/chat/$slug';
+
+  /// A conversation with no room yet — the recipient rides along in
+  /// `extra` as a [ChatTarget], and the room is created on the first send.
+  static const chatNew = '/chat/new';
   static String userProfile(String username) => '/user/$username';
-  static String deckDetail(int id) => '/portfolio/deck/$id';
-  static String listDetail(int id) => '/portfolio/list/$id';
+  static String deckDetail(String id) => '/portfolio/deck/$id';
+  static String listDetail(String id) => '/portfolio/list/$id';
   static String terms(String slug) => '/terms/$slug';
 }

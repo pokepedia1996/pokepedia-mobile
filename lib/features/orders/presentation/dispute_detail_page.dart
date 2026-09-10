@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/dispute_model.dart';
 import '../usecase/orders_notifier.dart';
 
@@ -23,15 +26,15 @@ class DisputeDetailPage extends ConsumerWidget {
     final colors = context.appColors;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Detail Sengketa')),
-      body: SafeArea(
-        top: false,
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: async.when(
           data: (dispute) {
             if (dispute == null) {
               return const EmptyState(
-                icon: Icons.gavel_outlined,
-                title: 'Belum ada sengketa untuk pesanan ini',
+                icon: LucideIcons.gavel,
+                title: 'Belum ada komplain untuk pesanan ini',
               );
             }
             return ListView(
@@ -52,29 +55,45 @@ class DisputeDetailPage extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               dispute.reasonCategory.label,
-                              style: AppTypography.bodySemibold(colors.onSurface),
+                              style: AppTypography.bodySemibold(
+                                colors.onSurface,
+                              ),
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: colors.error.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(AppRadius.full),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
                             ),
                             child: Text(
                               dispute.currentStatus.label,
-                              style: AppTypography.captionSemibold(colors.error),
+                              style: AppTypography.captionSemibold(
+                                colors.error,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text(dispute.reason, style: AppTypography.bodySm(context.mutedForeground)),
+                      Text(
+                        dispute.reason,
+                        style: AppTypography.bodySm(context.mutedForeground),
+                      ),
                       if (dispute.responseDeadline != null) ...[
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            Icon(Icons.timer_outlined, size: 14, color: colors.error),
+                            Icon(
+                              LucideIcons.timer,
+                              size: 14,
+                              color: colors.error,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Batas respons: ${formatRelativeId(dispute.responseDeadline!)}',
@@ -97,8 +116,8 @@ class DisputeDetailPage extends ConsumerWidget {
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('Gagal memuat sengketa')),
+          loading: () => const PikachuLoader(),
+          error: (_, __) => const Center(child: Text('Gagal memuat komplain')),
         ),
       ),
     );
@@ -135,7 +154,10 @@ class _EventTile extends StatelessWidget {
             Container(
               width: 10,
               height: 10,
-              decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: colors.primary,
+                shape: BoxShape.circle,
+              ),
             ),
             if (!isLast)
               Container(width: 2, height: 44, color: context.borderColor),
@@ -148,7 +170,10 @@ class _EventTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(event.description, style: AppTypography.bodySm(colors.onSurface)),
+                Text(
+                  event.description,
+                  style: AppTypography.bodySm(colors.onSurface),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   '$_actorLabel · ${formatRelativeId(event.createdAt)}',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
+import 'transparent_app_bar.dart';
 
 /// Ports `components/auth/auth-card.tsx` — the centered card wrapper used
 /// by every auth screen.
@@ -24,8 +25,9 @@ class AuthCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent),
-      body: SafeArea(
+      extendBodyBehindAppBar: true,
+      appBar: const TransparentAppBar(),
+      body: AppBarOverlayBody(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),

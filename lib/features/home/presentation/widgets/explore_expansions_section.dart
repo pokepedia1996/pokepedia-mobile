@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../shared/widgets/pack_card.dart';
+import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/section_header.dart';
 import '../../usecase/home_notifier.dart';
 
@@ -21,7 +22,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
         children: [
           SectionHeader(
             title: 'Jelajahi Ekspansi',
-            subtitle: 'Koleksi lengkap set kartu Pokémon TCG',
+            subtitle: 'Koleksi lengkap set kartu Pokemon TCG',
             trailing: TextButton(
               onPressed: () => context.go(Routes.expansions),
               child: const Text('Lihat semua'),
@@ -30,7 +31,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
           const SizedBox(height: 12),
           async.when(
             data: (packs) => GridView.builder(
-              padding: EdgeInsets.fromLTRB(0, 0, 0, 12),
+              padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: packs.take(4).length,
@@ -38,7 +39,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 0.9,
+                childAspectRatio: 0.84,
               ),
               itemBuilder: (context, i) {
                 final pack = packs[i];
@@ -50,7 +51,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
             ),
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              child: PikachuLoader(size: 96),
             ),
             error: (_, __) => const SizedBox.shrink(),
           ),

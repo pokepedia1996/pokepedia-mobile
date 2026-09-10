@@ -1,3 +1,5 @@
+import '../../core/utils/image_url.dart';
+
 /// A Pokemon TCG expansion/set, mirroring `public.expansions` in
 /// `supabase/migrations/00000000000000_baseline.sql`.
 class PackModel {
@@ -11,6 +13,10 @@ class PackModel {
     this.productType = 'Expansion',
     this.language = 'id',
     this.collectedCount = 0,
+    this.sortOrder = 0,
+    this.image,
+    this.setSymbolUrl,
+    this.seriesImageUrl,
   });
 
   final String slug;
@@ -25,14 +31,70 @@ class PackModel {
   final String language;
   final int collectedCount;
 
+  /// `expansions.sort_order` — the tie-break the web's `sortPacks` falls
+  /// back to when two sets share a release date.
+  final int sortOrder;
+
+  /// CDN-resolved `expansions.pack_image_url` / `set_symbol_url`. Null for
+  /// dummy data, in which case UI falls back to a placeholder.
+  final String? image;
+  final String? setSymbolUrl;
+
+  /// `series.series_image_url` — the wordmark the expansions list shows
+  /// beside each series heading.
+  final String? seriesImageUrl;
+
   double get progress => cardCount > 0 ? collectedCount / cardCount : 0;
+
+  /// Normalizes a Supabase embed that may come back as a single object or
+  /// a 1-item array, depending on the join shape (`SeriesNestedFlexible`
+  /// in `pokepedia-web/lib/schemas/card-data.ts`).
+  /// Exposed for other repositories reading the same `series` embed.
+  static Map<String, dynamic>? flattenSeriesEmbed(dynamic raw) =>
+      _flattenEmbed(raw);
+
+  static Map<String, dynamic>? _flattenEmbed(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is List)
+      return raw.isEmpty ? null : raw.first as Map<String, dynamic>;
+    return raw as Map<String, dynamic>;
+  }
+
+  /// Maps an `expansions` row (with an embedded `series` join) as returned
+  /// by Supabase, mirroring `mapExpansionToPack` in
+  /// `pokepedia-web/lib/data/client.ts`.
+  factory PackModel.fromRow(Map<String, dynamic> row) {
+    final code = row['code'] as String? ?? '';
+    final seriesData = _flattenEmbed(row['series']);
+    return PackModel(
+      slug: code.toLowerCase(),
+      name: row['name_id'] as String? ?? '',
+      mark: code,
+      series: seriesData?['name_id'] as String? ?? 'Lainnya',
+      releaseDate: row['released_at'] as String? ?? '',
+      cardCount: row['total_cards'] as int? ?? 0,
+      productType: row['product_type'] as String? ?? 'Expansion',
+      language: row['language'] as String? ?? 'id',
+      sortOrder: (row['sort_order'] as num?)?.toInt() ?? 0,
+      image: proxyImageUrl(row['pack_image_url'] as String?),
+      setSymbolUrl: proxyImageUrl(row['set_symbol_url'] as String?),
+      seriesImageUrl: proxyImageUrl(seriesData?['series_image_url'] as String?),
+    );
+  }
 }
 
 class SeriesGroup {
-  const SeriesGroup({required this.series, required this.packs});
+  const SeriesGroup({
+    required this.series,
+    required this.packs,
+    this.seriesImageUrl,
+  });
 
   final String series;
   final List<PackModel> packs;
+
+  /// Shown in place of the series name where present, like the web list.
+  final String? seriesImageUrl;
 
   int get totalPacks => packs.length;
   int get totalCards => packs.fold(0, (sum, p) => sum + p.cardCount);
