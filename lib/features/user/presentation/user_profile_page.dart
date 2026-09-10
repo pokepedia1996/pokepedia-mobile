@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -396,19 +397,24 @@ class _ProfileStats extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final counts = stats;
-    // Without the RPC, "how many does this person follow" is unknowable for
-    // anyone but yourself — `shop_follows` is select-own.
-    final followers = counts?.followers ?? shopFollowers;
-    final following =
-        counts?.following ??
-        (isOwner ? ref.watch(followingCountProvider) : null);
+    // Both always drawn, zero included: a pair that appears only once
+    // somebody has followed reads as a page still loading, and these
+    // numbers are what the section is for.
+    //
+    // Zero doubles as "not knowable here" — without
+    // `get_profile_follow_stats` deployed, a client cannot count another
+    // person's following at all (`shop_follows` is select-own), and a
+    // profile with no shop has no follower count to read.
+    final followers = counts?.followers ?? shopFollowers ?? 0;
+    final int following =
+        counts?.following ?? (isOwner ? ref.watch(followingCountProvider) : 0);
 
     return Wrap(
       spacing: 16,
       runSpacing: 4,
       children: [
-        if (followers != null) _Stat(label: 'Pengikut', value: followers),
-        if (following != null) _Stat(label: 'Mengikuti', value: following),
+        _Stat(label: 'Pengikut', value: followers),
+        _Stat(label: 'Mengikuti', value: following),
         if (profile.contributionCount > 0)
           _Stat(label: 'Kontribusi', value: profile.contributionCount),
       ],
@@ -479,21 +485,27 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     final following =
         ref.watch(isFollowingShopProvider(widget.shopUserId)).valueOrNull ??
         false;
+    // The storefront's pair, down to the icons: filled to invite the
+    // follow, outlined once it's done. The two pages show the same button
+    // about the same shop, so they shouldn't disagree about which state is
+    // the loud one.
     final icon = _busy
         ? const SizedBox(
-            width: 16,
-            height: 16,
+            width: 14,
+            height: 14,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        : Icon(following ? LucideIcons.check : LucideIcons.userPlus, size: 16);
+        : Icon(following ? LucideIcons.check : LucideIcons.plus, size: 15);
 
     return following
-        ? ElevatedButton.icon(
+        ? OutlinedButton.icon(
             onPressed: _busy ? null : () => _toggle(following),
             icon: icon,
-            label: const Text('Mengikuti'),
+            // "Diikuti" rather than "Mengikuti": the stat beside it already
+            // uses that word, for a different fact about a different person.
+            label: const Text('Diikuti'),
           )
-        : OutlinedButton.icon(
+        : ElevatedButton.icon(
             onPressed: _busy ? null : () => _toggle(following),
             icon: icon,
             label: const Text('Ikuti'),
@@ -570,7 +582,11 @@ class _SocialLinks extends StatelessWidget {
           ),
         if (_isSafeHandle(profile.socialInstagram))
           _SocialIcon(
-            icon: LucideIcons.camera,
+            // A plain camera stood here, which reads as a photo button
+            // rather than as Instagram. The icon set has no brand marks —
+            // lucide dropped them upstream — so this one is bundled, the
+            // same way the language flags are.
+            asset: 'assets/images/social/instagram.svg',
             tooltip: 'Instagram',
             onTap: () =>
                 _open('https://instagram.com/${profile.socialInstagram}'),
@@ -594,23 +610,42 @@ class _SocialLinks extends StatelessWidget {
 
 class _SocialIcon extends StatelessWidget {
   const _SocialIcon({
-    required this.icon,
     required this.tooltip,
     required this.onTap,
-  });
+    this.icon,
+    this.asset,
+  }) : assert(
+         icon != null || asset != null,
+         'a social button needs something to draw',
+       );
 
-  final IconData icon;
+  /// One of the icon set's glyphs, where it has the brand.
+  final IconData? icon;
+
+  /// A bundled mark, where it doesn't — drawn in the same colour and size as
+  /// the glyphs beside it, so the row still reads as one set.
+  final String? asset;
+
   final String tooltip;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colour = context.mutedForeground;
     return Tooltip(
       message: tooltip,
       child: IconButton(
         onPressed: onTap,
         visualDensity: VisualDensity.compact,
-        icon: Icon(icon, size: 18, color: context.mutedForeground),
+        icon: asset != null
+            ? SvgPicture.asset(
+                asset!,
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(colour, BlendMode.srcIn),
+                semanticsLabel: tooltip,
+              )
+            : Icon(icon, size: 18, color: colour),
       ),
     );
   }

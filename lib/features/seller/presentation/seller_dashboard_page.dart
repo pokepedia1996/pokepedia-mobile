@@ -284,30 +284,78 @@ class _KpiStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: context.borderColor),
       ),
-      child: Column(
+      child: Column(children: _rows(context)),
+    );
+  }
+
+  /// Only what actually needs doing, with a divider between what's left.
+  ///
+  /// A counter at zero is not news: three of them are three lines of nothing
+  /// at the top of the dashboard, and they bury the one line that does need
+  /// attention on the days there is one. The tones drop their zero branches
+  /// with them — a row only exists now when its count is above zero.
+  List<Widget> _rows(BuildContext context) {
+    final cells = <Widget>[
+      if (kpi.toShip > 0)
+        _KpiCell(
+          label: 'Perlu dikirim',
+          count: kpi.toShip,
+          icon: LucideIcons.package,
+          tone: _KpiTone.warning,
+          tab: SellerOrderTab.urgent,
+        ),
+      if (kpi.inTransit > 0)
+        _KpiCell(
+          label: 'Sedang dikirim',
+          count: kpi.inTransit,
+          icon: LucideIcons.truck,
+          tone: _KpiTone.neutral,
+          tab: SellerOrderTab.inTransit,
+        ),
+      if (kpi.disputesOpen > 0)
+        _KpiCell(
+          label: 'Komplain terbuka',
+          count: kpi.disputesOpen,
+          icon: LucideIcons.shieldAlert,
+          tone: _KpiTone.danger,
+          tab: SellerOrderTab.disputed,
+        ),
+    ];
+
+    // An empty bordered box would read as something failing to load, so the
+    // quiet day says so in words.
+    if (cells.isEmpty) return const [_KpiAllClear()];
+
+    return [
+      for (var i = 0; i < cells.length; i++) ...[
+        if (i > 0) Divider(height: 1, color: context.borderColor),
+        cells[i],
+      ],
+    ];
+  }
+}
+
+/// What "Penting hari ini" says when nothing is.
+class _KpiAllClear extends StatelessWidget {
+  const _KpiAllClear();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Row(
         children: [
-          _KpiCell(
-            label: 'Perlu dikirim',
-            count: kpi.toShip,
-            icon: LucideIcons.package,
-            tone: kpi.toShip > 0 ? _KpiTone.warning : _KpiTone.neutral,
-            tab: SellerOrderTab.urgent,
+          Icon(
+            LucideIcons.circleCheck,
+            size: 18,
+            color: context.appSemantic.success,
           ),
-          Divider(height: 1, color: context.borderColor),
-          _KpiCell(
-            label: 'Sedang dikirim',
-            count: kpi.inTransit,
-            icon: LucideIcons.truck,
-            tone: _KpiTone.neutral,
-            tab: SellerOrderTab.inTransit,
-          ),
-          Divider(height: 1, color: context.borderColor),
-          _KpiCell(
-            label: 'Komplain terbuka',
-            count: kpi.disputesOpen,
-            icon: LucideIcons.shieldAlert,
-            tone: kpi.disputesOpen > 0 ? _KpiTone.danger : _KpiTone.neutral,
-            tab: SellerOrderTab.disputed,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Tidak ada yang perlu ditangani hari ini',
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
           ),
         ],
       ),
@@ -703,17 +751,9 @@ class _SellerTools extends StatelessWidget {
                 description: 'Profil toko, kurir, dan chat pembeli',
                 onTap: () => context.push(Routes.sellerStore),
               ),
-              Divider(height: 1, color: context.borderColor),
-              _ToolRow(
-                icon: LucideIcons.shieldAlert,
-                label: 'Komplain',
-                description: 'Pesanan yang sedang dikomplain pembeli',
-                onTap: () => context.push(
-                  Routes.sellerOrdersFiltered(
-                    SellerOrderTab.disputed.filterKey,
-                  ),
-                ),
-              ),
+              // No "Komplain" row: "Penting hari ini" already carries open
+              // disputes, with the count on it and the same destination, so
+              // a second entry here was the same link stated twice.
             ],
           ),
         ),

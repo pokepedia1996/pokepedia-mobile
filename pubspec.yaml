@@ -101,6 +101,7 @@ flutter:
     - assets/images/
     - assets/images/elements/
     - assets/images/flags/
+    - assets/images/social/
     - assets/animation/
     - assets/data/
     - assets/tutorials/

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -394,7 +395,27 @@ class _PackHeader extends StatelessWidget {
                 : _PackImageFallback(mark: pack.mark),
           ),
           const SizedBox(height: 16),
-          Text(pack.name, style: AppTypography.h1(colors.onSurface)),
+          // The two bulk actions used to be a full-width pair of buttons
+          // under the meta line — two sentences of shouting for something
+          // done once, if ever. They live behind the title's menu now, which
+          // is also where web keeps them: beside the name, not under it.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  pack.name,
+                  style: AppTypography.h1(colors.onSurface),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _BulkMenu(
+                busy: bulkLoading,
+                onAddAll: onAddAll,
+                onRemoveAll: onRemoveAll,
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             [
@@ -404,49 +425,93 @@ class _PackHeader extends StatelessWidget {
             ].join(' · '),
             style: AppTypography.caption(context.mutedForeground),
           ),
-          const SizedBox(height: 12),
-          // Web sits these to the right of the title as a `flex shrink-0
-          // gap-2` pair; there's no room for that beside an h1 on a phone,
-          // so they take a full-width row of their own under the meta line.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: bulkLoading ? null : onRemoveAll,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colors.error,
-                    side: BorderSide(
-                      color: colors.error.withValues(alpha: 0.5),
-                    ),
-                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
-                  ),
-                  child: const Text(
-                    'Hapus Semua dari Koleksi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: bulkLoading ? null : onAddAll,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.appSemantic.success,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
-                  ),
-                  child: const Text(
-                    'Tambah Semua ke Koleksi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// The title row's "⋮" — everything that acts on the whole expansion.
+class _BulkMenu extends StatelessWidget {
+  const _BulkMenu({
+    required this.busy,
+    required this.onAddAll,
+    required this.onRemoveAll,
+  });
+
+  /// A bulk write is running: the menu still opens, but its entries are
+  /// inert rather than queuing a second pass over the same expansion.
+  final bool busy;
+
+  /// Null disables the entry, matching the web's `disabled` expressions —
+  /// nothing to remove when nothing is owned, and so on.
+  final VoidCallback? onAddAll;
+  final VoidCallback? onRemoveAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Aksi ekspansi',
+      padding: EdgeInsets.zero,
+      // Level with the title's first line rather than centred against a name
+      // that may wrap to two.
+      position: PopupMenuPosition.under,
+      icon: Icon(
+        LucideIcons.ellipsisVertical,
+        size: 20,
+        color: context.mutedForeground,
+      ),
+      onSelected: (value) => switch (value) {
+        'add' => onAddAll?.call(),
+        'remove' => onRemoveAll?.call(),
+        _ => null,
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'add',
+          enabled: !busy && onAddAll != null,
+          child: _BulkMenuItem(
+            icon: LucideIcons.plus,
+            label: 'Tambah semua',
+            color: context.appSemantic.success,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'remove',
+          enabled: !busy && onRemoveAll != null,
+          child: _BulkMenuItem(
+            icon: LucideIcons.minus,
+            label: 'Hapus semua',
+            color: colors.error,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One line of [_BulkMenu] — the sign, then what it does.
+class _BulkMenuItem extends StatelessWidget {
+  const _BulkMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(label, style: AppTypography.bodySm(context.appColors.onSurface)),
+      ],
     );
   }
 }

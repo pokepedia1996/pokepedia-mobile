@@ -28,6 +28,7 @@ import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import 'widgets/report_listing_sheet.dart';
 import '../../../shared/widgets/seller_avatar.dart';
+import '../../../shared/widgets/wishlist_heart.dart';
 import '../../../shared/widgets/remote_image.dart';
 import '../../expansions/presentation/widgets/market_activity_section.dart';
 import 'widgets/more_from_seller_section.dart';
@@ -978,6 +979,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
           _SellerStrip(
             store: store,
             listing: active,
+            isOwnListing: widget.isOwnListing,
             positivePct: widget.positivePct,
             feedbackScore: widget.feedbackScore,
             following: widget.following,
@@ -1108,6 +1110,7 @@ class _SellerStrip extends StatelessWidget {
   const _SellerStrip({
     required this.store,
     required this.listing,
+    required this.isOwnListing,
     required this.positivePct,
     required this.feedbackScore,
     required this.following,
@@ -1118,6 +1121,12 @@ class _SellerStrip extends StatelessWidget {
 
   final StoreModel store;
   final ListingModel listing;
+
+  /// The viewer is the seller. Contacting and following are both about
+  /// reaching someone else, so neither is drawn — `follow_shop` refuses a
+  /// self-follow and the chat has nobody to open a room with.
+  final bool isOwnListing;
+
   final double? positivePct;
   final int feedbackScore;
   final bool following;
@@ -1213,43 +1222,45 @@ class _SellerStrip extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onContact,
-                  icon: const Icon(LucideIcons.messageCircle, size: 15),
-                  label: const Text('Hubungi'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    minimumSize: const Size(0, 36),
-                    textStyle: const TextStyle(fontSize: 12),
+              if (!isOwnListing) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onContact,
+                    icon: const Icon(LucideIcons.messageCircle, size: 15),
+                    label: const Text('Hubungi'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      minimumSize: const Size(0, 36),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: following
-                    ? ElevatedButton.icon(
-                        onPressed: onToggleFollow,
-                        icon: const Icon(LucideIcons.check, size: 15),
-                        label: const Text('Mengikuti'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          minimumSize: const Size(0, 36),
-                          textStyle: const TextStyle(fontSize: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: following
+                      ? ElevatedButton.icon(
+                          onPressed: onToggleFollow,
+                          icon: const Icon(LucideIcons.check, size: 15),
+                          label: const Text('Mengikuti'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            minimumSize: const Size(0, 36),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: onToggleFollow,
+                          icon: const Icon(LucideIcons.userPlus, size: 15),
+                          label: const Text('Ikuti'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            minimumSize: const Size(0, 36),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
                         ),
-                      )
-                    : OutlinedButton.icon(
-                        onPressed: onToggleFollow,
-                        icon: const Icon(LucideIcons.userPlus, size: 15),
-                        label: const Text('Ikuti'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          minimumSize: const Size(0, 36),
-                          textStyle: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 8),
+                ),
+                const SizedBox(width: 8),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onShare,
@@ -1289,7 +1300,7 @@ class _WishlistButton extends StatelessWidget {
             height: 15,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        : Icon(wishlisted ? LucideIcons.heart : LucideIcons.heart, size: 15);
+        : WishlistHeart(active: wishlisted, size: 15);
     final label = Text(wishlisted ? 'Tersimpan' : 'Wishlist');
     return wishlisted
         ? ElevatedButton.icon(

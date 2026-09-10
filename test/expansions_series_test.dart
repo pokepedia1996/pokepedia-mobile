@@ -37,7 +37,7 @@ Future<void> _pump(WidgetTester tester, int packCount) async {
 }
 
 void main() {
-  testWidgets('a long series shows six and offers the rest', (tester) async {
+  testWidgets('a long series shows four and offers the rest', (tester) async {
     // Wide, and at dpr 1: `flutter_test`'s fallback font measures far larger
     // than a real one, and a phone-width grid overflows PackCard's column
     // before any of this test's assertions get a chance to run.
@@ -48,11 +48,11 @@ void main() {
     await _pump(tester, 14);
 
     // Counted rather than named: the page sorts newest-first, so *which*
-    // six show depends on the sort, but how many is the behaviour here.
-    expect(find.textContaining('Ekspansi '), findsNWidgets(6));
+    // four show depends on the sort, but how many is the behaviour here.
+    expect(find.textContaining('Ekspansi '), findsNWidgets(4));
     // The count rides on the button — "Lihat semua" alone doesn't say
     // whether it hides two expansions or twenty.
-    expect(find.text('Lihat semua (8 lagi)'), findsOneWidget);
+    expect(find.text('Lihat semua (10 lagi)'), findsOneWidget);
   });
 
   testWidgets('tapping it reveals the rest, and folds back', (tester) async {
@@ -61,7 +61,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await _pump(tester, 14);
-    await tester.tap(find.text('Lihat semua (8 lagi)'));
+    await tester.tap(find.text('Lihat semua (10 lagi)'));
     await tester.pump();
 
     expect(find.textContaining('Ekspansi '), findsNWidgets(14));
@@ -70,7 +70,7 @@ void main() {
     // And it folds back.
     await tester.tap(find.text('Tampilkan lebih sedikit'));
     await tester.pump();
-    expect(find.textContaining('Ekspansi '), findsNWidgets(6));
+    expect(find.textContaining('Ekspansi '), findsNWidgets(4));
   });
 
   testWidgets('a short series gets no CTA at all', (tester) async {
@@ -81,6 +81,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
+    // Exactly the cap: nothing is hidden, so nothing offers to unhide it.
     await _pump(tester, 4);
 
     expect(find.textContaining('Ekspansi '), findsNWidgets(4));

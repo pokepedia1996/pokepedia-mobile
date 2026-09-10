@@ -425,6 +425,7 @@ class ChatRoom {
     this.roomType = 'direct',
     this.otherUserId,
     this.otherUsername,
+    this.otherStoreSlug,
     this.otherAvatarUrl,
   });
 
@@ -440,6 +441,11 @@ class ChatRoom {
   /// Their handle, shown after the shop name the way web's `secondaryName`
   /// is. Null when [title] is already the handle.
   final String? otherUsername;
+
+  /// What their storefront is addressed by — the shop slug, or the handle
+  /// where they have no shop of their own. Null for a dispute room and for
+  /// an account with neither.
+  final String? otherStoreSlug;
 
   final String? otherAvatarUrl;
 

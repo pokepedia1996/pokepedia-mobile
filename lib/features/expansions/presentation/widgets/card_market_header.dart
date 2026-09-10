@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -9,6 +8,7 @@ import '../../../../core/providers/card_ownership_controller.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/wishlist_heart.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
@@ -272,11 +272,7 @@ class _WishlistButtonState extends ConsumerState<WishlistButton> {
                 child: CircularProgressIndicator(strokeWidth: 2, color: color),
               )
             else
-              Icon(
-                wishlisted ? LucideIcons.heart : LucideIcons.heart,
-                size: 14,
-                color: color,
-              ),
+              WishlistHeart(active: wishlisted, size: 14, color: color),
           ],
         ),
       ),
