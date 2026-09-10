@@ -21,10 +21,13 @@ import '../../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
 import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../usecase/expansions_notifier.dart';
 
-/// How long a burst of taps on the stepper is allowed to settle before it is
-/// written. A stepper is tapped, not submitted, so five taps up should cost
-/// one write rather than five.
-const _writeDelay = Duration(milliseconds: 700);
+/// How long the green tick sits on the button after a write lands, before
+/// the stepper goes back to normal.
+const _doneDelay = Duration(milliseconds: 900);
+
+/// Which of the two buttons a tap came from — what says where the working
+/// and finished states are drawn.
+enum _Step { minus, plus }
 
 /// "Menambah ke: Utama · Total: Rp0" — the panel that owns adding this card
 /// to a portfolio, in place of the bare counter that used to sit under the
@@ -56,12 +59,26 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   /// than carrying the previous shelf's count over.
   PortfolioTarget? _seededFor;
 
-  Timer? _timer;
-  bool _saving = false;
+  /// A write has landed and the provider hasn't caught up yet.
+  ///
+  /// Between the two, the provider is still reporting the count from *before*
+  /// the write — re-seeding from it there would snap the number back to what
+  /// the user just changed it from, and then forward again a frame later.
+  /// Cleared the moment the server agrees with what was written.
+  bool _awaitingRefresh = false;
+
+  /// The button a write is running from. Non-null locks both of them: a
+  /// second tap would measure its delta from a [_saved] the server hasn't
+  /// confirmed yet.
+  _Step? _busy;
+
+  /// The button showing the tick. Cleared by [_doneTimer].
+  _Step? _done;
+  Timer? _doneTimer;
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _doneTimer?.cancel();
     super.dispose();
   }
 
@@ -79,26 +96,42 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     return 0;
   }
 
-  void _bump(int next, PortfolioTarget target) {
-    // Asked for up front rather than after the debounce: counting up and
-    // then being bounced to the login page reads as the taps being thrown
-    // away, which is exactly what would have happened.
+  /// A tap on one of the signs: the count moves, both buttons lock, and the
+  /// write goes out immediately.
+  ///
+  /// No debounce. A stepper that waits before writing has to look idle while
+  /// it does, and the wait is exactly when the reader wonders whether the tap
+  /// registered — so the button that was pressed takes the working state on
+  /// the same frame, and a burst of taps costs a write each rather than
+  /// costing the feedback.
+  void _bump(_Step step, PortfolioTarget target) {
+    if (_busy != null) return;
+    // Asked for up front: counting up and then being bounced to the login
+    // page reads as the tap being thrown away, which is what would happen.
     if (ref.read(authProvider).valueOrNull == null) {
       context.push(Routes.login);
       return;
     }
-    setState(() => _qty = next);
-    _timer?.cancel();
-    _timer = Timer(_writeDelay, () => _write(target));
+
+    final current = _qty ?? 0;
+    final next = step == _Step.plus ? current + 1 : current - 1;
+    if (next < 0 || next > 99) return;
+
+    _doneTimer?.cancel();
+    setState(() {
+      _qty = next;
+      _busy = step;
+      _done = null;
+    });
+    _write(target, step);
   }
 
-  Future<void> _write(PortfolioTarget target) async {
+  Future<void> _write(PortfolioTarget target, _Step step) async {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     final wanted = _qty;
-    if (wanted == null || wanted == _saved) return;
+    if (wanted == null) return;
 
-    setState(() => _saving = true);
     final controller = ref.read(cardOwnershipControllerProvider);
     // A list holds its own copies at its own quantity, so it is set rather
     // than nudged; the collection only offers a delta.
@@ -116,18 +149,30 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     if (!mounted) return;
 
     setState(() {
-      _saving = false;
-      if (error == null) _saved = wanted;
+      _busy = null;
+      if (error == null) {
+        _saved = wanted;
+        _awaitingRefresh = true;
+        // The tick lands on the button that was pressed, where the reader
+        // is already looking.
+        _done = step;
+      } else {
+        // Back to what the server actually holds, rather than leaving a
+        // number on screen that nothing stands behind.
+        _qty = _saved;
+      }
     });
 
     if (error != null) {
-      // Back to what the server actually holds, rather than leaving a
-      // number on screen that nothing stands behind.
-      setState(() => _qty = _saved);
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(SnackBar(content: Text(error), persist: false));
+      return;
     }
+
+    _doneTimer = Timer(_doneDelay, () {
+      if (mounted) setState(() => _done = null);
+    });
   }
 
   @override
@@ -143,15 +188,17 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     // Seed from the server once per target, and re-seed whenever it moves
     // underneath us — an add from the scanner, or the same card edited on
     // the collection page.
-    final writePending = _saving || (_timer?.isActive ?? false);
     if (server != null) {
-      // While a write is on its way the local number is the truthful one:
-      // the provider still holds the count from before it.
       final switchedShelf = _seededFor != target;
-      if (switchedShelf || (!writePending && server != _saved)) {
+      if (server == _saved) _awaitingRefresh = false;
+      // While a write is on its way — or its refetch hasn't landed — the
+      // local number is the truthful one.
+      final pending = _busy != null || _awaitingRefresh;
+      if (switchedShelf || (!pending && server != _saved)) {
         _seededFor = target;
         _saved = server;
         _qty = server;
+        _awaitingRefresh = false;
       }
     }
 
@@ -173,6 +220,7 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Flexible(
                   child: _TargetButton(
@@ -180,7 +228,7 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
                     onTap: () => showPortfolioPicker(context, ref),
                   ),
                 ),
-                const SizedBox(width: 8),
+
                 Text(
                   'Total: ${price == null ? 'Rp–' : formatRupiah(total)}',
                   style: AppTypography.bodySmSemibold(colors.onSurface),
@@ -202,23 +250,229 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (server == null)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  QuantitySelector(
-                    value: qty,
-                    onChanged: (value) => _bump(value, target),
-                  ),
+                // The stepper keeps its shape while the count is still
+                // arriving — a control that appears late moves everything
+                // beside it.
+                _PortfolioStepper(
+                  value: qty,
+                  ready: server != null,
+                  busy: _busy,
+                  done: _done,
+                  onStep: (step) => _bump(step, target),
+                ),
                 const SizedBox(width: 8),
                 _PriceColumn(price: price),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The stepper this panel owns, rather than the shared [QuantitySelector].
+///
+/// The difference is where the write shows: each sign carries its own state,
+/// so the button that was pressed is the one that reports back. A spinner
+/// beside the control said "something is happening somewhere"; this says
+/// "this tap, here".
+class _PortfolioStepper extends StatelessWidget {
+  const _PortfolioStepper({
+    required this.value,
+    required this.ready,
+    required this.busy,
+    required this.done,
+    required this.onStep,
+  });
+
+  final int value;
+
+  /// False until the server's count lands — the signs are inert, but the
+  /// control is still drawn so nothing shifts when it arrives.
+  final bool ready;
+
+  final _Step? busy;
+  final _Step? done;
+  final ValueChanged<_Step> onStep;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    // Both signs go dead the moment either is pressed: the next delta is
+    // measured from a count the server hasn't confirmed yet.
+    final locked = !ready || busy != null;
+
+    _Phase phaseOf(_Step step) {
+      if (busy == step) return _Phase.working;
+      if (done == step) return _Phase.done;
+      return _Phase.idle;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _StepButton(
+          icon: LucideIcons.minus,
+          phase: phaseOf(_Step.minus),
+          onTap: locked || value <= 0 ? null : () => onStep(_Step.minus),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 48,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            border: Border.all(color: context.borderColor),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 160),
+            // The count slides rather than blinks, so a run of taps reads as
+            // one number moving.
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: Text(
+              ready ? '$value' : '–',
+              key: ValueKey(ready ? value : null),
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        _StepButton(
+          icon: LucideIcons.plus,
+          phase: phaseOf(_Step.plus),
+          onTap: locked || value >= 99 ? null : () => onStep(_Step.plus),
+        ),
+      ],
+    );
+  }
+}
+
+/// What one sign is doing.
+enum _Phase { idle, working, done }
+
+/// One sign of the stepper, and the three states it can be in.
+class _StepButton extends StatefulWidget {
+  const _StepButton({
+    required this.icon,
+    required this.phase,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final _Phase phase;
+  final VoidCallback? onTap;
+
+  @override
+  State<_StepButton> createState() => _StepButtonState();
+}
+
+class _StepButtonState extends State<_StepButton>
+    with SingleTickerProviderStateMixin {
+  /// The working state's breath. Not a spinner: a spinner is a thing to
+  /// watch, and this is a wait measured in a couple of hundred milliseconds
+  /// — the button glowing in the colour it is about to confirm in reads as
+  /// the same gesture continuing.
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 620),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(_StepButton old) {
+    super.didUpdateWidget(old);
+    if (old.phase != widget.phase) _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (widget.phase == _Phase.working) {
+      _pulse.repeat(reverse: true);
+    } else {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final success = context.appSemantic.success;
+    final radius = BorderRadius.circular(AppRadius.md);
+    final working = widget.phase == _Phase.working;
+    final done = widget.phase == _Phase.done;
+    // A bound reached, or the other button holding the lock.
+    final dimmed = widget.onTap == null && !working && !done;
+
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: radius,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          final fill = done
+              ? success
+              : working
+              // Deepening and easing back, in the colour the tick lands in.
+              ? Color.lerp(
+                  success.withValues(alpha: 0.20),
+                  success.withValues(alpha: 0.62),
+                  Curves.easeInOut.transform(_pulse.value),
+                )!
+              : colors.secondary;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: fill,
+              border: Border.all(
+                color: working || done ? success : context.borderColor,
+              ),
+              borderRadius: radius,
+            ),
+            child: Opacity(opacity: dimmed ? 0.3 : 1, child: child),
+          );
+        },
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (child, animation) => ScaleTransition(
+            scale: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutBack,
+            ),
+            child: FadeTransition(opacity: animation, child: child),
+          ),
+          child: done
+              ? const Icon(
+                  LucideIcons.check,
+                  key: ValueKey('done'),
+                  size: 16,
+                  color: Colors.white,
+                )
+              : Icon(
+                  widget.icon,
+                  key: const ValueKey('sign'),
+                  size: 14,
+                  color: working ? Colors.white : context.mutedForeground,
+                ),
+        ),
       ),
     );
   }

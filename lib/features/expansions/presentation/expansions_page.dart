@@ -37,8 +37,10 @@ class ExpansionsPage extends ConsumerStatefulWidget {
 ///
 /// A long series runs to twenty-odd packs, and stacking every one of them
 /// turns the page into a scroll with no shape — the series after it are
-/// effectively unreachable.
-const _packsPerSeries = 6;
+/// effectively unreachable. Four rather than six: two rows of the two-up
+/// grid, so a series takes a predictable bite of the screen and the next
+/// one is always in reach.
+const _packsPerSeries = 4;
 
 class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
   PackSortOption _sortBy = PackSortOption.newest;

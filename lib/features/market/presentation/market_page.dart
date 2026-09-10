@@ -19,6 +19,7 @@ import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/condition_grade_picker.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
+import '../../../shared/widgets/wishlist_heart.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/store_card.dart';
 import '../usecase/market_notifier.dart';
@@ -1138,7 +1139,7 @@ class _WishlistToggle extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.heart, size: 16, color: foreground),
+            WishlistHeart(active: active, size: 16, color: foreground),
             const SizedBox(width: 6),
             Text(
               'Hanya wishlist',
@@ -1253,7 +1254,14 @@ class _ListingGrid extends ConsumerWidget {
         );
       },
       loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat listing')),
+      error: (_, __) => EmptyState(
+        icon: LucideIcons.circleAlert,
+        title: 'Gagal memuat listing',
+        action: OutlinedButton(
+          onPressed: () => ref.invalidate(marketListingsProvider),
+          child: const Text('Coba lagi'),
+        ),
+      ),
     );
   }
 }

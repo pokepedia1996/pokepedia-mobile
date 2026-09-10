@@ -150,14 +150,16 @@ void main() {
     expect(find.text('40'), findsOneWidget, reason: 'the RPC wins');
     expect(find.text('7'), findsOneWidget);
     expect(find.text('Mengikuti'), findsOneWidget);
+    expect(find.text('Pengikut'), findsOneWidget);
   });
 
   testWidgets('a visitor can follow a shop', (tester) async {
     await _pump(tester, viewer: _visitor, shop: _shop());
 
-    expect(find.text('Ikuti'), findsOneWidget);
-    // Not your own count to see.
-    expect(find.text('Mengikuti'), findsNothing);
+    expect(find.widgetWithText(ElevatedButton, 'Ikuti'), findsOneWidget);
+    // The count isn't knowable for someone else without the RPC, but the
+    // stat is still drawn — at zero.
+    expect(find.text('Mengikuti'), findsOneWidget);
   });
 
   testWidgets('an already-followed shop offers to stop', (tester) async {
@@ -168,8 +170,17 @@ void main() {
       alreadyFollowing: true,
     );
 
-    expect(find.text('Mengikuti'), findsOneWidget);
+    // "Diikuti" on the button, so it can't be mistaken for the "Mengikuti"
+    // stat beside it — outlined once followed, filled before, the way the
+    // storefront draws the same pair.
+    expect(find.text('Diikuti'), findsOneWidget);
     expect(find.text('Ikuti'), findsNothing);
+    expect(find.byType(OutlinedButton), findsWidgets);
+    expect(
+      find.widgetWithText(ElevatedButton, 'Diikuti'),
+      findsNothing,
+      reason: 'the followed state is the quiet one',
+    );
   });
 
   testWidgets('a profile with no shop has nothing to follow', (tester) async {
@@ -178,7 +189,10 @@ void main() {
     await _pump(tester, viewer: _visitor, shop: null);
 
     expect(find.text('Ikuti'), findsNothing);
-    expect(find.text('Pengikut'), findsNothing);
+    // The pair still shows, at zero — a profile that hides them reads as one
+    // still loading.
+    expect(find.text('Pengikut'), findsOneWidget);
+    expect(find.text('Mengikuti'), findsOneWidget);
   });
 
   testWidgets('the owner gets one switch, for visibility', (tester) async {

@@ -238,10 +238,27 @@ class _CardListingsSectionState extends ConsumerState<CardListingsSection> {
         loading: () => const _ListingsPlaceholder(),
         error: (_, __) => Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Gagal memuat listing',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodySm(context.mutedForeground),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                LucideIcons.circleAlert,
+                size: 28,
+                color: context.mutedForeground,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Gagal memuat listing',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySm(context.mutedForeground),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () =>
+                    ref.invalidate(cardListingsProvider(widget.cardId)),
+                child: const Text('Coba lagi'),
+              ),
+            ],
           ),
         ),
       ),

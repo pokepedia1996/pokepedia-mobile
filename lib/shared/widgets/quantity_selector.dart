@@ -27,6 +27,7 @@ class QuantitySelector extends StatelessWidget {
     this.min = 0,
     this.max = 99,
     this.size = QuantitySelectorSize.md,
+    this.enabled = true,
   });
 
   final int value;
@@ -34,6 +35,11 @@ class QuantitySelector extends StatelessWidget {
   final int min;
   final int max;
   final QuantitySelectorSize size;
+
+  /// Whether the steppers accept taps. False is for a caller with a write in
+  /// flight: both signs dim the same way a bound that has been reached does,
+  /// so the control keeps its shape and the count stays readable.
+  final bool enabled;
 
   bool get _isSmall => size == QuantitySelectorSize.sm;
 
@@ -55,7 +61,7 @@ class QuantitySelector extends StatelessWidget {
           icon: LucideIcons.minus,
           size: _boxSize,
           iconSize: _iconSize,
-          onTap: value > min ? () => onChanged(value - 1) : null,
+          onTap: enabled && value > min ? () => onChanged(value - 1) : null,
         ),
         SizedBox(width: _gap),
         Container(
@@ -79,7 +85,7 @@ class QuantitySelector extends StatelessWidget {
           icon: LucideIcons.plus,
           size: _boxSize,
           iconSize: _iconSize,
-          onTap: value < max ? () => onChanged(value + 1) : null,
+          onTap: enabled && value < max ? () => onChanged(value + 1) : null,
         ),
       ],
     );

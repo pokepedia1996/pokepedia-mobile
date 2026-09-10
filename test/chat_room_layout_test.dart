@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
@@ -34,6 +35,7 @@ const _room = ChatRoom(
   title: 'Toko User1',
   otherUserId: 'them',
   otherUsername: 'user1',
+  otherStoreSlug: 'toko-user1',
 );
 
 class _FakeAuth extends AuthNotifier {
@@ -50,7 +52,11 @@ class _FakeThread extends ChatThreadNotifier {
   Future<ChatThreadState> build(ChatThreadArg arg) async => value;
 }
 
+/// Where a tap on the header landed, if anywhere.
+String? _openedRoute;
+
 Future<void> _pump(WidgetTester tester, ChatThreadState state) async {
+  _openedRoute = null;
   tester.view.physicalSize = const Size(1170, 2400);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -61,9 +67,24 @@ Future<void> _pump(WidgetTester tester, ChatThreadState state) async {
         authProvider.overrideWith(_FakeAuth.new),
         chatThreadProvider.overrideWith(() => _FakeThread(state)),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         theme: AppTheme.light,
-        home: const ChatThreadPage(slug: 'room-a'),
+        routerConfig: GoRouter(
+          initialLocation: '/chat/room-a',
+          routes: [
+            GoRoute(
+              path: '/chat/:slug',
+              builder: (_, __) => const ChatThreadPage(slug: 'room-a'),
+            ),
+            GoRoute(
+              path: '/market/:handle',
+              builder: (_, routeState) {
+                _openedRoute = routeState.uri.path;
+                return const Text('storefront');
+              },
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -123,6 +144,38 @@ void main() {
     expect(find.text('15.51'), findsOneWidget);
     expect(find.text('15.53'), findsOneWidget);
     expect(find.text('15.43'), findsOneWidget);
+  });
+
+  testWidgets('tapping who you are talking to opens their shop', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const ChatThreadState(title: 'Toko User1', room: _room, messages: []),
+    );
+
+    await tester.tap(find.text('Toko User1'));
+    await tester.pumpAndSettle();
+
+    expect(_openedRoute, '/market/toko-user1');
+  });
+
+  testWidgets('a counterparty with no shop is not a link', (tester) async {
+    const shopless = ChatRoom(
+      id: 2,
+      slug: 'room-b',
+      title: 'user2',
+      otherUserId: 'them',
+    );
+    await _pump(
+      tester,
+      const ChatThreadState(title: 'user2', room: shopless, messages: []),
+    );
+
+    await tester.tap(find.text('user2'));
+    await tester.pumpAndSettle();
+
+    expect(_openedRoute, isNull);
   });
 
   testWidgets('only your own messages carry ticks', (tester) async {

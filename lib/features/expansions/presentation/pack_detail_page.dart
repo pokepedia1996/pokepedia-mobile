@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -11,9 +12,11 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_market_price.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -159,7 +162,21 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      // The nav floats over the grid, the same way it does on the tab roots.
+      extendBody: true,
+      appBar: const TransparentAppBar(actions: [CartAppBarButton()]),
+      // Kept rather than hidden: browsing a set is still browsing, so the
+      // tabs stay reachable without walking back to the expansions list.
+      //
+      // The page is pushed on the root navigator, above [AppShell], so there
+      // is no `StatefulNavigationShell` here to call `goBranch` on — `go` to
+      // the tab's own path switches the branch and drops this page, which is
+      // what tapping a tab means anyway. The pill also doesn't shrink on
+      // scroll here; that animation is driven by the shell's listener.
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.expansions),
+        onTap: (index) => context.go(AppBottomNav.tabPaths[index]),
+      ),
       body: AppBarOverlayBody(
         child: cardsAsync.when(
           data: (cards) {
@@ -276,7 +293,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   )
                 else if (_viewMode == CardViewMode.grid)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      // Clears the floating pill, which now covers the foot
+                      // of the grid.
+                      AppBottomNav.reservedSpace(context) + 12,
+                    ),
                     sliver: SliverGrid(
                       gridDelegate: cardGridDelegate(context),
                       delegate: SliverChildBuilderDelegate((context, i) {
@@ -292,7 +316,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                   )
                 else
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      // Clears the floating pill, which now covers the foot
+                      // of the grid.
+                      AppBottomNav.reservedSpace(context) + 12,
+                    ),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate((context, i) {
                         final card = visible[i];
@@ -364,7 +395,27 @@ class _PackHeader extends StatelessWidget {
                 : _PackImageFallback(mark: pack.mark),
           ),
           const SizedBox(height: 16),
-          Text(pack.name, style: AppTypography.h1(colors.onSurface)),
+          // The two bulk actions used to be a full-width pair of buttons
+          // under the meta line — two sentences of shouting for something
+          // done once, if ever. They live behind the title's menu now, which
+          // is also where web keeps them: beside the name, not under it.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  pack.name,
+                  style: AppTypography.h1(colors.onSurface),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _BulkMenu(
+                busy: bulkLoading,
+                onAddAll: onAddAll,
+                onRemoveAll: onRemoveAll,
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             [
@@ -374,49 +425,93 @@ class _PackHeader extends StatelessWidget {
             ].join(' · '),
             style: AppTypography.caption(context.mutedForeground),
           ),
-          const SizedBox(height: 12),
-          // Web sits these to the right of the title as a `flex shrink-0
-          // gap-2` pair; there's no room for that beside an h1 on a phone,
-          // so they take a full-width row of their own under the meta line.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: bulkLoading ? null : onRemoveAll,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colors.error,
-                    side: BorderSide(
-                      color: colors.error.withValues(alpha: 0.5),
-                    ),
-                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
-                  ),
-                  child: const Text(
-                    'Hapus Semua dari Koleksi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: bulkLoading ? null : onAddAll,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.appSemantic.success,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.fromLTRB(2, 2, 2, 2),
-                  ),
-                  child: const Text(
-                    'Tambah Semua ke Koleksi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// The title row's "⋮" — everything that acts on the whole expansion.
+class _BulkMenu extends StatelessWidget {
+  const _BulkMenu({
+    required this.busy,
+    required this.onAddAll,
+    required this.onRemoveAll,
+  });
+
+  /// A bulk write is running: the menu still opens, but its entries are
+  /// inert rather than queuing a second pass over the same expansion.
+  final bool busy;
+
+  /// Null disables the entry, matching the web's `disabled` expressions —
+  /// nothing to remove when nothing is owned, and so on.
+  final VoidCallback? onAddAll;
+  final VoidCallback? onRemoveAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Aksi ekspansi',
+      padding: EdgeInsets.zero,
+      // Level with the title's first line rather than centred against a name
+      // that may wrap to two.
+      position: PopupMenuPosition.under,
+      icon: Icon(
+        LucideIcons.ellipsisVertical,
+        size: 20,
+        color: context.mutedForeground,
+      ),
+      onSelected: (value) => switch (value) {
+        'add' => onAddAll?.call(),
+        'remove' => onRemoveAll?.call(),
+        _ => null,
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'add',
+          enabled: !busy && onAddAll != null,
+          child: _BulkMenuItem(
+            icon: LucideIcons.plus,
+            label: 'Tambah semua',
+            color: context.appSemantic.success,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'remove',
+          enabled: !busy && onRemoveAll != null,
+          child: _BulkMenuItem(
+            icon: LucideIcons.minus,
+            label: 'Hapus semua',
+            color: colors.error,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One line of [_BulkMenu] — the sign, then what it does.
+class _BulkMenuItem extends StatelessWidget {
+  const _BulkMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(label, style: AppTypography.bodySm(context.appColors.onSurface)),
+      ],
     );
   }
 }

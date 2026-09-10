@@ -298,6 +298,12 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                 SliverToBoxAdapter(child: _Header(store: store)),
                 SliverToBoxAdapter(
                   child: _Actions(
+                    // Following yourself is refused by `follow_shop`, and
+                    // `ensure_direct_room` has nobody to open a room with —
+                    // so on your own storefront neither button is offered.
+                    isOwnStore:
+                        store.userId != null &&
+                        store.userId == ref.watch(authProvider).valueOrNull?.id,
                     following: _following,
                     busy: _followBusy,
                     onToggleFollow: () => _toggleFollow(store),
@@ -353,10 +359,16 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                     },
                     loading: () =>
                         const SliverToBoxAdapter(child: PikachuLoader()),
-                    error: (_, __) => const SliverToBoxAdapter(
+                    error: (_, __) => SliverToBoxAdapter(
                       child: EmptyState(
                         icon: LucideIcons.circleAlert,
                         title: 'Gagal memuat listing',
+                        action: OutlinedButton(
+                          onPressed: () => ref.invalidate(
+                            storeListingsProvider(widget.handle),
+                          ),
+                          child: const Text('Coba lagi'),
+                        ),
                       ),
                     ),
                   ),
@@ -545,12 +557,18 @@ class _Stats extends StatelessWidget {
 /// Ports `storefront-action-buttons.tsx`.
 class _Actions extends StatelessWidget {
   const _Actions({
+    required this.isOwnStore,
     required this.following,
     required this.busy,
     required this.onToggleFollow,
     required this.onContact,
     required this.onShare,
   });
+
+  /// The viewer is the seller. Follow and Chat are both about reaching
+  /// someone else, so they aren't drawn — sharing your own shop is the one
+  /// action that still means something.
+  final bool isOwnStore;
 
   final bool following;
   final bool busy;
@@ -560,6 +578,25 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isOwnStore) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        child: SizedBox(
+          width: double.infinity,
+          // Full width and labelled, rather than the bare icon left behind
+          // when the two buttons beside it go.
+          child: OutlinedButton.icon(
+            onPressed: onShare,
+            icon: const Icon(LucideIcons.share, size: 16),
+            label: const Text('Bagikan toko'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(38),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Row(

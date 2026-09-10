@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
@@ -203,6 +205,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
           username: state?.room?.otherUsername,
           avatarUrl: state?.room?.otherAvatarUrl,
           userId: state?.room?.otherUserId,
+          storeSlug: state?.room?.otherStoreSlug,
         ),
       ),
       body: async.when(
@@ -370,6 +373,7 @@ class _ThreadTitle extends StatelessWidget {
     this.username,
     this.avatarUrl,
     this.userId,
+    this.storeSlug,
   });
 
   final String name;
@@ -380,10 +384,15 @@ class _ThreadTitle extends StatelessWidget {
   /// agree.
   final String? userId;
 
+  /// Where the name goes when tapped. Null for a dispute room, and for an
+  /// account with no storefront to open.
+  final String? storeSlug;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    return Row(
+    final slug = storeSlug;
+    final row = Row(
       children: [
         _PartyAvatar(name: name, userId: userId, imageUrl: avatarUrl, size: 28),
         const SizedBox(width: 10),
@@ -407,6 +416,16 @@ class _ThreadTitle extends StatelessWidget {
           ),
         ],
       ],
+    );
+
+    if (slug == null || slug.isEmpty) return row;
+
+    // Who you're talking to is a link to their shop — the question a buyer
+    // asks mid-conversation is "what else do they have", and the answer was
+    // three screens away.
+    return InkWell(
+      onTap: () => context.push(Routes.storeDetail(slug)),
+      child: row,
     );
   }
 }

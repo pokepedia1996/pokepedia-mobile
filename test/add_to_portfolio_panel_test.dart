@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +40,10 @@ class _FakeAuth extends AuthNotifier {
 class _FakeOwnership implements CardOwnershipController {
   final adjustments = <int>[];
 
+  /// Held open by the test that needs to look at the panel mid-write, so the
+  /// write can be finished on cue rather than resolving in the same tick.
+  Completer<String?>? gate;
+
   @override
   Future<String?> adjustQuantity({
     required String userId,
@@ -46,7 +52,7 @@ class _FakeOwnership implements CardOwnershipController {
     String? listId,
   }) async {
     adjustments.add(delta);
-    return null;
+    return gate?.future ?? Future.value(null);
   }
 
   @override
@@ -108,23 +114,97 @@ void main() {
     expect(find.text('Total: Rp250.000'), findsOneWidget);
   });
 
-  testWidgets('a burst of taps costs one write, for the net change', (
-    tester,
-  ) async {
+  testWidgets('a tap writes straight away, one copy at a time', (tester) async {
+    // No debounce: a stepper that waits before writing has to look idle
+    // while it waits, and that wait is exactly when the reader wonders
+    // whether the tap registered.
     final ownership = await _pump(tester, owned: 0);
 
     await tester.tap(find.byIcon(LucideIcons.plus));
     await tester.pump();
+    expect(ownership.adjustments, [1]);
+
+    // Past the tick, which holds the button for a beat after the write.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byIcon(LucideIcons.plus));
     await tester.pump();
+    expect(ownership.adjustments, [1, 1]);
+  });
+
+  testWidgets('the pressed button reports back, in green, with a tick', (
+    tester,
+  ) async {
+    final ownership = await _pump(tester, owned: 0);
+    ownership.gate = Completer<String?>();
+
     await tester.tap(find.byIcon(LucideIcons.plus));
     await tester.pump();
 
-    // Nothing yet — the taps are still settling.
-    expect(ownership.adjustments, isEmpty);
+    // Working: no spinner anywhere, and the sign is still its own button
+    // rather than being replaced by one.
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byIcon(LucideIcons.check), findsNothing);
 
+    ownership.gate!.complete(null);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Landed: the tick sits on the button that was pressed.
+    expect(find.byIcon(LucideIcons.check), findsOneWidget);
+
+    // And it goes away on its own.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(LucideIcons.check), findsNothing);
+  });
+
+  testWidgets('the stepper is locked while the write is in flight', (
+    tester,
+  ) async {
+    final ownership = await _pump(tester, owned: 0);
+    ownership.gate = Completer<String?>();
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
     await tester.pump(const Duration(seconds: 1));
-    expect(ownership.adjustments, [3]);
+
+    // The write is away and hasn't come back: the count stays on screen and
+    // further taps are dropped, both signs having gone dead.
+    expect(ownership.adjustments, [1]);
+    expect(find.text('1'), findsOneWidget);
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump(const Duration(seconds: 1));
+    expect(ownership.adjustments, [1]);
+    expect(find.text('1'), findsOneWidget);
+
+    // Once it lands the stepper is live again, counting from what the server
+    // confirmed rather than from the tap that was refused.
+    ownership.gate!.complete(null);
+    await tester.pump();
+    // Past the tick, which holds the button for a beat after the write.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump(const Duration(seconds: 1));
+    expect(ownership.adjustments, [1, 1]);
+  });
+
+  testWidgets('the count holds until the refetch catches up', (tester) async {
+    // Between a write landing and the provider re-resolving, the provider is
+    // still reporting the count from before it. Re-seeding from that snapped
+    // the number back to what the user had just changed it from.
+    await _pump(tester, owned: 1);
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Total: Rp250.000'), findsOneWidget);
   });
 
   testWidgets('the week\'s move is shown against the price', (tester) async {

@@ -9,9 +9,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pack_header_row.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/expansions_notifier.dart';
@@ -53,7 +53,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      appBar: const TransparentAppBar(actions: [CartAppBarButton()]),
       body: cardAsync.when(
         data: (card) {
           if (card == null) {
@@ -67,8 +67,8 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                // PackHeaderRow(pack: pack, card: card),
-                // const SizedBox(height: 12),
+                _Breadcrumb(card: card),
+                const SizedBox(height: 12),
 
                 // Artwork column — tap the art for the lightbox, then the
                 // portfolio quantity and the neighbouring cards.
@@ -129,6 +129,67 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat kartu',
         ),
+      ),
+    );
+  }
+}
+
+/// "Ekspansi › Nama kartu › Nomor" above the artwork.
+///
+/// Ports `components/ui/breadcrumb.tsx` as the card page uses it: chevrons
+/// between, the trail muted and the card itself in plain foreground, and the
+/// whole thing scrolls sideways rather than wrapping — a long expansion name
+/// beside a long card name doesn't fit a phone, and a breadcrumb that wraps
+/// to two lines stops reading as one.
+class _Breadcrumb extends ConsumerWidget {
+  const _Breadcrumb({required this.card});
+
+  final CardModel card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    final muted = context.mutedForeground;
+    final pack = ref
+        .watch(
+          packForCardProvider((
+            slug: card.packSlug,
+            language: card.language.raw,
+          )),
+        )
+        .valueOrNull;
+    // The code until the pack's name arrives, rather than a blank segment.
+    final expansion = (pack?.name.isNotEmpty ?? false)
+        ? pack!.name
+        : card.expansionCode.toUpperCase();
+
+    Widget chevron() => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Icon(LucideIcons.chevronRight, size: 13, color: muted),
+    );
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // The one segment that goes anywhere: back to the expansion this
+          // card belongs to.
+          InkWell(
+            onTap: () => context.push(Routes.packDetail(card.packSlug)),
+            borderRadius: BorderRadius.circular(AppRadius.xs),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+              child: Text(expansion, style: AppTypography.caption(muted)),
+            ),
+          ),
+          chevron(),
+          Text(card.name, style: AppTypography.caption(colors.onSurface)),
+          chevron(),
+          Text(
+            card.collectorNumber,
+            style: AppTypography.captionSemibold(colors.onSurface),
+          ),
+        ],
       ),
     );
   }

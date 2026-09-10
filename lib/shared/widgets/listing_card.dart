@@ -18,6 +18,7 @@ import 'card_language_badge.dart';
 import 'condition_badge.dart';
 import 'reputation_star.dart';
 import 'seller_avatar.dart';
+import 'wishlist_heart.dart';
 
 /// Ports `features/market/ui/storefront-listing-card.tsx` — a marketplace
 /// listing tile with a wishlist badge, condition, language/variant, price,
@@ -457,8 +458,8 @@ class _WishlistBadge extends StatelessWidget {
                   color: wishlisted ? Colors.white : context.mutedForeground,
                 ),
               )
-            : Icon(
-                wishlisted ? LucideIcons.heart : LucideIcons.heart,
+            : WishlistHeart(
+                active: wishlisted,
                 size: 16,
                 color: wishlisted ? Colors.white : context.mutedForeground,
               ),

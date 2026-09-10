@@ -20,6 +20,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../core/providers/card_ownership_controller.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
+import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'widgets/portfolio_picker_sheet.dart';
@@ -720,7 +721,7 @@ class _SearchRow extends ConsumerWidget {
           IconButton(
             // Filled while the wishlist is what's on screen, so the heart
             // reads as a switch rather than a link.
-            icon: Icon(showWishlist ? LucideIcons.heart : LucideIcons.heart),
+            icon: WishlistHeart(active: showWishlist, size: 24),
             color: context.appColors.primary,
             tooltip: showWishlist ? 'Kembali ke koleksi' : 'Wishlist',
             onPressed: () =>

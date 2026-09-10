@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../shared/widgets/app_bottom_nav.dart';
 import '../shared/widgets/app_top_bar.dart';
-import 'router/routes.dart';
 
 /// Wraps the six buyer tab branches with the floating bottom nav, mirroring
 /// `MobileBottomNav` + the `<main>` shell in `app/layout.tsx`.
@@ -22,14 +21,9 @@ class AppShell extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
   final GoRouterState state;
 
-  static const _tabRootPaths = {
-    Routes.home,
-    Routes.expansions,
-    Routes.search,
-    Routes.portfolio,
-    Routes.market,
-    Routes.account,
-  };
+  /// The nav's own list, so the paths the pill navigates to and the ones the
+  /// shell treats as tab roots can't drift apart.
+  static final _tabRootPaths = AppBottomNav.tabPaths.toSet();
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();

@@ -157,6 +157,7 @@ class ChatRepository {
       roomType: roomType,
       otherUserId: otherId,
       otherUsername: other?.username,
+      otherStoreSlug: other?.storeSlug,
       otherAvatarUrl: other?.avatarUrl,
     );
   }
@@ -167,10 +168,12 @@ class ChatRepository {
   /// Via `get_store_identities` rather than reading `seller_profiles`: that
   /// table is self-select only, so a direct read would come back empty for
   /// everyone but yourself.
-  Future<({String name, String? username, String? avatarUrl})> _identity(
-    String userId,
-  ) async {
+  Future<
+    ({String name, String? username, String? storeSlug, String? avatarUrl})
+  >
+  _identity(String userId) async {
     String? storeName;
+    String? storeSlug;
     String? logoUrl;
     try {
       final identities =
@@ -184,6 +187,7 @@ class ChatRepository {
       if (identities.isNotEmpty) {
         final row = identities.first as Map<String, dynamic>;
         storeName = row['store_name'] as String?;
+        storeSlug = row['store_slug'] as String?;
         logoUrl = row['store_logo_url'] as String?;
       }
     } on PostgrestException {
@@ -204,6 +208,12 @@ class ChatRepository {
       // `resolveChatParty`'s `secondaryName`: the handle behind the shop
       // name, and nothing when the shop name *is* the handle.
       username: storeName != null && storeName.isNotEmpty ? username : null,
+      // What the storefront is addressed by. The shop's own slug where
+      // there is one, the handle otherwise — `get_seller_storefront_by_slug`
+      // falls through to the username lookup, so either opens the page.
+      storeSlug: (storeSlug != null && storeSlug.isNotEmpty)
+          ? storeSlug
+          : username,
       // Avatar before logo, the order `resolveChatParty` resolves `photoUrl`.
       avatarUrl: profile?['avatar_url'] as String? ?? logoUrl,
     );
