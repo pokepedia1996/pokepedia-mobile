@@ -20,6 +20,7 @@ import '../repository/chat_repository.dart';
 import '../repository/models/chat_models.dart';
 import '../usecase/chat_notifier.dart';
 import 'widgets/chat_party_colors.dart';
+import 'widgets/chat_context_banner.dart';
 import 'widgets/chat_event_cards.dart';
 
 /// Ports `components/chat/chat-room.tsx`, backed by `chat_messages` with a
@@ -29,10 +30,26 @@ import 'widgets/chat_event_cards.dart';
 /// conversation with a [target] that has no room yet — rooms are created
 /// lazily by `ensure_direct_room` on the first message.
 class ChatThreadPage extends ConsumerStatefulWidget {
-  const ChatThreadPage({super.key, this.slug, this.target, this.titleHint});
+  const ChatThreadPage({
+    super.key,
+    this.slug,
+    this.target,
+    this.titleHint,
+    this.listingId,
+    this.seedContext,
+  });
 
   final String? slug;
   final ChatTarget? target;
+
+  /// The listing this was opened about, when the room already existed — a
+  /// new conversation carries it on its [target] instead.
+  final int? listingId;
+
+  /// The card to pin, handed over by the page that opened this. Drawn while
+  /// the thread's own lookup is still in flight, and if that lookup comes
+  /// back with nothing.
+  final ChatListingContext? seedContext;
 
   /// The name the caller already knows, shown until the room resolves.
   final String? titleHint;
@@ -49,10 +66,14 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   /// so it can be swapped or dropped before it goes.
   File? _pendingImage;
 
+  /// The card the opening page handed over, for either entry shape.
+  ChatListingContext? get _seed =>
+      widget.seedContext ?? widget.target?.listingContext;
+
   late final ChatThreadArg _arg = (
     slug: widget.slug,
     otherUserId: widget.target?.otherUserId,
-    listingId: widget.target?.listingId,
+    listingId: widget.listingId ?? widget.target?.listingId,
     title: widget.target?.title ?? widget.titleHint ?? 'Percakapan',
   );
 
@@ -231,6 +252,11 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
           final latestOfferMessageId = _latestOfferMessageIds(state.messages);
           return Column(
             children: [
+              // What this conversation is about, pinned under the header the
+              // way web pins it — including in a thread with nothing in it
+              // yet, which is exactly when it is most wanted.
+              if (state.pinnedListing ?? _seed case final listing?)
+                ChatContextBanner(listing: listing),
               Expanded(
                 child: state.messages.isEmpty
                     ? EmptyState(
@@ -542,6 +568,7 @@ class _Bubble extends StatelessWidget {
     // about the conversation, not speech in it — each gets the card web draws
     // for it.
     if (message.isEvent) {
+      // The card places itself on its sender's side.
       return ChatEventCard(
         message: message,
         viewerId: viewerId,

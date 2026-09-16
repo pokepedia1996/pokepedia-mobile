@@ -29,14 +29,13 @@ Future<void> showPortfolioPicker(BuildContext context, WidgetRef ref) async {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
     ),
-    // A Consumer so the rows react while the sheet is open: starring a
-    // default and deleting a list both change what should be drawn here.
+    // A Consumer so the rows react while the sheet is open: creating and
+    // deleting a list both change what should be drawn here.
     builder: (sheetContext) => Consumer(
       builder: (sheetContext, sheetRef, _) {
         final colors = context.appColors;
         final rows = sheetRef.watch(portfolioTargetsProvider);
         final current = sheetRef.watch(selectedPortfolioProvider);
-        final defaultId = sheetRef.watch(defaultPortfolioIdProvider);
 
         return SafeArea(
           child: Column(
@@ -70,14 +69,8 @@ Future<void> showPortfolioPicker(BuildContext context, WidgetRef ref) async {
                 _TargetRow(
                   target: target,
                   selected: target == current,
-                  isDefault: target.listId == defaultId,
                   onSelect: () =>
                       Navigator.of(sheetContext).pop(_PickedTarget(target)),
-                  // Starring doesn't close the sheet — it's a setting, not
-                  // a choice of what to look at now.
-                  onStar: () => sheetRef
-                      .read(defaultPortfolioIdProvider.notifier)
-                      .set(target.listId),
                   onEdit: target.isPrimary
                       ? null
                       : () => Navigator.of(
@@ -180,11 +173,6 @@ Future<void> _deleteList(
       if (error != null) {
         if (context.mounted) _toast(context, error);
         return;
-      }
-      // A starred list that no longer exists would leave Beranda pointing
-      // at nothing on next launch.
-      if (ref.read(defaultPortfolioIdProvider) == list.id) {
-        await ref.read(defaultPortfolioIdProvider.notifier).set(null);
       }
       ref.invalidate(listsProvider);
       if (context.mounted) _toast(context, 'List dihapus');
@@ -291,18 +279,14 @@ class _TargetRow extends StatelessWidget {
   const _TargetRow({
     required this.target,
     required this.selected,
-    required this.isDefault,
     required this.onSelect,
-    required this.onStar,
     required this.onEdit,
     required this.onDelete,
   });
 
   final PortfolioTarget target;
   final bool selected;
-  final bool isDefault;
   final VoidCallback onSelect;
-  final VoidCallback onStar;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -329,14 +313,6 @@ class _TargetRow extends StatelessWidget {
                     ? AppTypography.bodySmSemibold(colors.onSurface)
                     : AppTypography.bodySm(colors.onSurface),
               ),
-            ),
-            _RowAction(
-              icon: isDefault ? LucideIcons.star : LucideIcons.star,
-              color: isDefault ? const Color(0xFFE0A83A) : null,
-              tooltip: isDefault
-                  ? 'Portofolio default'
-                  : 'Jadikan portofolio default',
-              onPressed: onStar,
             ),
             if (onEdit != null)
               _RowAction(

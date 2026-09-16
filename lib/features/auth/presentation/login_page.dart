@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/auth_errors.dart';
 import '../../../shared/widgets/auth_card.dart';
+import '../../../shared/widgets/auth_error_alert.dart';
 import 'widgets/google_sign_in_button.dart';
 
 /// Ports `app/login/page.tsx`, including its two-step shape: the email is
@@ -160,7 +161,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_generalError != null) ...[
-            _ErrorAlert(message: _generalError!),
+            AuthErrorAlert(message: _generalError!),
             const SizedBox(height: 16),
           ],
           // A cross-fade rather than a swap, so the card doesn't jump as the
@@ -410,35 +411,6 @@ class _PasswordStep extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Ports `components/ui/error-alert.tsx`.
-class _ErrorAlert extends StatelessWidget {
-  const _ErrorAlert({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.error.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: colors.error.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.circleAlert, size: 16, color: colors.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(message, style: AppTypography.bodySm(colors.error)),
-          ),
-        ],
-      ),
     );
   }
 }

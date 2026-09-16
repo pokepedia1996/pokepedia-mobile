@@ -47,6 +47,7 @@ class BidListingPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(bidListingProvider(slug));
+    final signedIn = ref.watch(authProvider).valueOrNull != null;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -54,16 +55,42 @@ class BidListingPage extends ConsumerWidget {
       body: async.when(
         data: (data) {
           if (data == null) {
-            return EmptyState(
-              icon: LucideIcons.handCoins,
-              title: 'Bid tidak lagi tersedia',
-              description:
-                  'Pembeli mungkin sudah membatalkan atau memenuhi permintaan '
-                  'kartu ini.',
-              action: OutlinedButton(
-                onPressed: () => context.push(Routes.market),
-                child: const Text('Lihat market'),
-              ),
+            // Nothing came back — but for a guest that says nothing about
+            // the bid. The tile that led here is drawn from a SECURITY
+            // DEFINER RPC that anon may call, while this page reads
+            // `listings` directly, and both of its SELECT policies require
+            // `auth.uid()`. So a signed-out reader always gets an empty
+            // result, and telling them the buyer cancelled would be a plain
+            // lie. Only someone who could have seen the row is told it's
+            // gone.
+            // Centred rather than left at the top of the body: with no card
+            // and no panel under it there is nothing to sit above, so a
+            // message pinned to the app bar reads as a page that failed to
+            // finish drawing.
+            return Center(
+              child: !signedIn
+                  ? EmptyState(
+                      icon: LucideIcons.logIn,
+                      title: 'Masuk untuk melihat bid ini',
+                      description:
+                          'Detail permintaan kartu hanya bisa dibuka setelah '
+                          'kamu masuk ke akun pokepedia.',
+                      action: ElevatedButton(
+                        onPressed: () => context.push(Routes.login),
+                        child: const Text('Masuk'),
+                      ),
+                    )
+                  : EmptyState(
+                      icon: LucideIcons.handCoins,
+                      title: 'Bid tidak lagi tersedia',
+                      description:
+                          'Pembeli mungkin sudah membatalkan atau memenuhi '
+                          'permintaan kartu ini.',
+                      action: OutlinedButton(
+                        onPressed: () => context.push(Routes.market),
+                        child: const Text('Lihat market'),
+                      ),
+                    ),
             );
           }
 
@@ -132,10 +159,12 @@ class BidListingPage extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const PikachuLoader(),
-        error: (_, __) => const EmptyState(
-          icon: LucideIcons.circleAlert,
-          title: 'Gagal memuat bid',
+        loading: () => const Center(child: PikachuLoader()),
+        error: (_, __) => const Center(
+          child: EmptyState(
+            icon: LucideIcons.circleAlert,
+            title: 'Gagal memuat bid',
+          ),
         ),
       ),
     );

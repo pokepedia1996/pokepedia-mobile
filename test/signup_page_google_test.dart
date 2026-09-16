@@ -21,13 +21,12 @@ class _FakeAuth extends AuthNotifier {
   @override
   Future<AppUser?> build() async => null;
 
+  String? signUpEmail;
+
   @override
-  Future<SignUpResult> signUp(
-    String username,
-    String email,
-    String password,
-  ) async {
+  Future<SignUpResult> signUp(String email, String password) async {
     signUpCalls++;
+    signUpEmail = email;
     return const SignUpResult(SignUpOutcome.needsEmailConfirmation);
   }
 

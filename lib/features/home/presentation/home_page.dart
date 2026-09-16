@@ -8,6 +8,8 @@ import '../usecase/portfolio_value_notifier.dart';
 import 'widgets/home_loading_gate.dart';
 import 'widgets/marketplace_feed_section.dart';
 import 'widgets/portfolio_value_section.dart';
+import 'widgets/home_ad_slot.dart';
+import 'widgets/home_tasks_section.dart';
 import 'widgets/top_holdings_section.dart';
 
 /// The buyer home tab, built around what the collection is worth: the
@@ -47,6 +49,10 @@ class HomePage extends ConsumerWidget {
                     children: const [
                       PortfolioValueSection(),
                       TopHoldingsSection(),
+                      // What needs answering, then whatever is being
+                      // announced, then the market — jobs before browsing.
+                      HomeTasksSection(),
+                      HomeAdSlot(),
                       MarketplaceFeedSection(),
                     ],
                   ),

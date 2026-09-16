@@ -27,7 +27,7 @@ enum PortfolioRange {
 
 /// Which set of cards the header is valuing.
 ///
-/// "Portofolio Utama" is the whole collection (`user_cards`); the rest are
+/// "Portofolio Utama" is the primary collection; the rest are
 /// the user's saved lists, which is what the app already has that answers to
 /// "portofolio yang dimau".
 class PortfolioTarget {

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
@@ -113,10 +114,17 @@ typedef BidListingData = ({
 /// The card comes from [cardDetailProvider] rather than from the bid row:
 /// the listing carries only enough of a card to draw a tile, and this page
 /// shows the card's own detail sections underneath.
+///
+/// Re-reads when the session changes. Both SELECT policies on `listings`
+/// require `auth.uid()`, so a guest's fetch comes back empty no matter which
+/// bid it is — and the page turns that into a sign-in prompt. Without this
+/// watch the empty result would stay cached, and signing in from that prompt
+/// would land back on it.
 final bidListingProvider = FutureProvider.family<BidListingData?, String>((
   ref,
   slug,
 ) async {
+  ref.watch(authProvider);
   final repo = ref.read(marketRepositoryProvider);
   final listing = await repo.fetchBidListing(slug);
   if (listing == null) return null;

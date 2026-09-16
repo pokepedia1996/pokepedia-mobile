@@ -182,7 +182,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
           data: (cards) {
             final pack = packAsync.valueOrNull;
 
-            // `fetchCardsForPack` doesn't join `user_cards`, so every
+            // `fetchCardsForPack` doesn't join the collection, so every
             // `CardModel.owned` here is 0; the real quantities arrive
             // separately, exactly as the web's `useUserCardQuantities` does
             // it. Stamping them onto the models is what lights up the owned
@@ -244,7 +244,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       // Owning every card only closes the button off when
                       // the main collection is the only place they could go;
                       // with a list to file them into there's still work to
-                      // do, whatever `user_cards` already holds.
+                      // do, whatever the collection already holds.
                       onAddAll: _bulkLoading
                           ? null
                           : user == null

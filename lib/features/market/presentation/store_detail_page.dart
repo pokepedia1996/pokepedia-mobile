@@ -14,6 +14,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../../shared/widgets/condition_grade_picker.dart';
+import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -273,6 +274,9 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
             count: _activeFilters,
             onPressed: _tab.isListing ? _openFilters : null,
           ),
+          // Last, as on every other page that carries it — a storefront is
+          // where a basket fills up, so the way to it belongs in reach.
+          const CartAppBarButton(),
           const SizedBox(width: 4),
         ],
       ),
@@ -528,27 +532,43 @@ class _Stats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 14,
-      runSpacing: 6,
+    // Two deliberate lines instead of one Wrap of six icon-and-label chips.
+    // That wrapped wherever it happened to run out — the city stranded at
+    // the end of one line, "Bergabung" alone on the next — and the icons on
+    // the counts were noise around figures that already carry their unit.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Stat(
-          icon: LucideIcons.shoppingBag,
-          label: '${store.activeListingCount} listing',
+        // The numbers, which are what a shop gets compared on.
+        Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _Count(value: store.activeListingCount, label: 'listing'),
+            const _Dot(),
+            _Count(value: store.itemsSoldCount, label: 'terjual'),
+            const _Dot(),
+            _Count(value: store.followersCount, label: 'pengikut'),
+          ],
         ),
-        _Stat(icon: LucideIcons.tag, label: '${store.itemsSoldCount} terjual'),
-        _Stat(
-          icon: LucideIcons.users,
-          label: '${store.followersCount} pengikut',
+        const SizedBox(height: 5),
+        // Then what it is: where, since when, and whether it's rated.
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            if (store.cityName.isNotEmpty)
+              _Stat(icon: LucideIcons.mapPin, label: store.cityName),
+            if (store.memberSince != null)
+              _Stat(
+                icon: LucideIcons.calendar,
+                label: formatJoinedId(store.memberSince!),
+              ),
+            if (store.topRated)
+              _Stat(icon: LucideIcons.star, label: 'Top Rated'),
+          ],
         ),
-        if (store.cityName.isNotEmpty)
-          _Stat(icon: LucideIcons.mapPin, label: store.cityName),
-        if (store.memberSince != null)
-          _Stat(
-            icon: LucideIcons.calendar,
-            label: formatJoinedId(store.memberSince!),
-          ),
-        if (store.topRated) _Stat(icon: LucideIcons.star, label: 'Top Rated'),
       ],
     );
   }
@@ -822,6 +842,44 @@ class _AboutRow extends StatelessWidget {
   }
 }
 
+/// "1.696 listing" — the figure in the foreground, its unit muted beside it.
+class _Count extends StatelessWidget {
+  const _Count({required this.value, required this.label});
+
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          formatCountId(value),
+          style: AppTypography.captionSemibold(context.appColors.onSurface),
+        ),
+        const SizedBox(width: 3),
+        Text(label, style: AppTypography.caption(context.mutedForeground)),
+      ],
+    );
+  }
+}
+
+/// The separator between the counts, so the line reads as one set of them.
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '·',
+      style: AppTypography.caption(
+        context.mutedForeground.withValues(alpha: 0.6),
+      ),
+    );
+  }
+}
+
 class _Stat extends StatelessWidget {
   const _Stat({required this.icon, required this.label});
 
@@ -833,7 +891,7 @@ class _Stat extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: context.mutedForeground),
+        Icon(icon, size: 13, color: context.mutedForeground),
         const SizedBox(width: 4),
         Text(label, style: AppTypography.caption(context.mutedForeground)),
       ],

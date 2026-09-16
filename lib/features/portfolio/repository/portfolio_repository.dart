@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/deck_model.dart';
 import '../../../shared/utils/card_pricing.dart';
+import '../../../shared/utils/primary_collection.dart';
 import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
 import 'models/wantlist_model.dart';
@@ -17,16 +18,23 @@ const _deckSelect =
 const _cardColumns =
     'id, name_id, expansion_code, collector_number, rarity, category, image_url, illustrator, regulation_mark, language, variant, details';
 
-/// Mirrors the `lists` columns `features/list/api/lists.ts` selects.
+/// Mirrors the `collections` columns the web's collection API selects.
+/// `slug` replaces the old `share_code`: sharing is a public URL now, and the
+/// slug is minted by `trg_set_collection_slug` rather than by the client.
 const _listColumns =
-    'id, name, description, share_code, created_at, updated_at, list_cards(count)';
+    'id, name, description, slug, is_public, created_at, updated_at, collection_cards(count)';
 
-/// `MAX_NAME_LEN` / `MAX_DESC_LEN` from that same module.
+/// `collections_name_len` / `collections_description_len` — the CHECK
+/// constraints the table enforces, mirrored here so the sheet can say so
+/// before the round trip.
 const listNameMaxLength = 100;
 const listDescriptionMaxLength = 500;
 
-/// Ports `generateShareCode` — nine characters from an alphabet with the
-/// ambiguous glyphs (I, l, O, 0, 1) left out, hyphenated in the middle.
+/// Nine characters from an alphabet with the ambiguous glyphs (I, l, O, 0, 1)
+/// left out, hyphenated in the middle.
+///
+/// Decks only, now that collections share by slug — `decks.share_code` is
+/// untouched by the collections unification.
 String generateShareCode() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   final random = Random.secure();
@@ -40,19 +48,23 @@ String generateShareCode() {
 
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
-/// `fetchUserDecks` / `lib/products/wishlist.ts` / `features/list/api/lists.ts`
-/// on the web.
+/// `fetchUserDecks` / `lib/products/wishlist.ts` / the web's collection API.
 class PortfolioRepository {
   PortfolioRepository(this._client);
 
   final SupabaseClient _client;
 
-  /// Owned cards (`user_cards.quantity > 0`), joined with their `cards` row.
+  /// Owned cards — the primary collection's rows, joined with `cards`.
+  ///
+  /// This is what `user_cards` became: the same pile, now one collection
+  /// among several, distinguished by `collections.is_primary`.
   Future<List<CardModel>> fetchCollection(String userId) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return const [];
     final rows = await _client
-        .from('user_cards')
+        .from('collection_cards')
         .select('quantity, cards!inner($_cardColumns)')
-        .eq('user_id', userId)
+        .eq('collection_id', collectionId)
         .gt('quantity', 0);
     final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
@@ -107,7 +119,7 @@ class PortfolioRepository {
               'user_id': userId,
               'name': name,
               'description': description,
-              'share_code': _generateShareCode(),
+              'share_code': generateShareCode(),
             })
             .select(_deckSelect)
             .single();
@@ -173,19 +185,6 @@ class PortfolioRepository {
     } on PostgrestException catch (e) {
       return (deck: null, error: e.message);
     }
-  }
-
-  static const _shareCodeChars =
-      'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-
-  String _generateShareCode() {
-    final rand = Random.secure();
-    final buffer = StringBuffer();
-    for (var i = 0; i < 9; i++) {
-      if (i == 4) buffer.write('-');
-      buffer.write(_shareCodeChars[rand.nextInt(_shareCodeChars.length)]);
-    }
-    return buffer.toString();
   }
 
   Future<List<DeckCardEntry>> fetchDeckCards(String deckId) async {
@@ -340,11 +339,18 @@ class PortfolioRepository {
     required int recordId,
     required int quantity,
     required int unitPrice,
+    String? notes,
   }) async {
     try {
       await _client
           .from('user_inventory')
-          .update({'quantity': quantity, 'unit_price': unitPrice})
+          .update({
+            'quantity': quantity,
+            'unit_price': unitPrice,
+            // Only when the caller is editing it: the draft table writes a
+            // note per row, the add sheet doesn't touch one.
+            if (notes != null) 'notes': notes.isEmpty ? null : notes,
+          })
           .eq('id', recordId)
           .eq('user_id', userId)
           .eq('is_draft', true);
@@ -372,8 +378,8 @@ class PortfolioRepository {
   }
 
   /// Ports `confirmDraftRecord` — flips a draft to confirmed. Doesn't touch
-  /// `user_cards` itself (mirrors the web, which separately calls
-  /// `upsertUserCard` afterward); callers should follow up with
+  /// the collection itself (mirrors the web, which separately calls
+  /// `upsertCollectionCard` afterward); callers should follow up with
   /// `ExpansionsRepository.upsertUserCard`.
   Future<String?> confirmDraftRecord({
     required String userId,
@@ -422,8 +428,8 @@ class PortfolioRepository {
 
   /// Ports `removeInventoryRecords` (`bulk_remove_inventory` RPC) —
   /// removes up to [items].delQty of each record, deleting the row if it
-  /// hits zero. The RPC already decrements `user_cards` and logs the
-  /// activity row server-side, so no follow-up call is needed.
+  /// hits zero. The RPC already decrements the primary collection and logs
+  /// the activity row server-side, so no follow-up call is needed.
   Future<String?> bulkRemoveInventory(
     String userId,
     List<({int recordId, int delQty})> items,
@@ -469,27 +475,34 @@ class PortfolioRepository {
         .toList();
   }
 
-  /// Ports `fetchUserLists` — the user's lists, most recently touched first,
-  /// with their card counts from the embedded `list_cards(count)`.
+  /// The user's own collections, most recently touched first, with their
+  /// card counts from the embedded `collection_cards(count)`.
   ///
-  /// `lists` and `list_cards` are own-row under RLS ("Users can manage own
-  /// lists"), so this and every mutation below run on the user's own session
-  /// without a server route.
+  /// `is_primary` is excluded: that row is the main collection, drawn by the
+  /// Koleksi tab through [fetchCollection], and showing it here would list it
+  /// twice under two different names.
+  ///
+  /// `collections` and `collection_cards` are own-row under RLS ("Users can
+  /// manage own collections"), so this and the reads below run on the user's
+  /// own session without a server route. The writes go through the RPCs
+  /// instead — see [addCopiesToList].
   Future<List<WantlistModel>> fetchLists(String userId) async {
     final rows = await _client
-        .from('lists')
+        .from('collections')
         .select(_listColumns)
         .eq('user_id', userId)
+        .eq('is_primary', false)
         .order('updated_at', ascending: false);
     return rows.map(WantlistModel.fromRow).toList();
   }
 
-  /// Ports `fetchListCards`, in list order (`created_at` ascending).
+  /// A collection's cards, in the order they were filed (`created_at`
+  /// ascending) — the same order `get_public_collection_cards` returns.
   Future<List<CardModel>> fetchListCards(String listId) async {
     final rows = await _client
-        .from('list_cards')
+        .from('collection_cards')
         .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
-        .eq('list_id', listId)
+        .eq('collection_id', listId)
         .order('created_at', ascending: true);
     final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
@@ -514,9 +527,9 @@ class PortfolioRepository {
     if (cardIds.isEmpty) return (count: 0, error: null);
     try {
       final existing = await _client
-          .from('list_cards')
+          .from('collection_cards')
           .select('card_id')
-          .eq('list_id', listId)
+          .eq('collection_id', listId)
           .inFilter('card_id', cardIds);
       final held = {
         for (final row in existing) (row['card_id'] as num).toInt(),
@@ -524,10 +537,22 @@ class PortfolioRepository {
       final fresh = cardIds.where((id) => !held.contains(id)).toList();
       if (fresh.isEmpty) return (count: 0, error: null);
 
-      await _client.from('list_cards').insert([
-        for (final cardId in fresh)
-          {'list_id': listId, 'card_id': cardId, 'quantity': 1},
-      ]);
+      // Chunked at the RPC's own ceiling — it raises past 500 ids rather
+      // than truncating, and a large pack can clear that on its own.
+      for (var start = 0; start < fresh.length; start += _bulkCardLimit) {
+        final end = start + _bulkCardLimit;
+        await _client.rpc(
+          'bulk_upsert_collection_cards',
+          params: {
+            'p_collection_id': listId,
+            'p_card_ids': fresh.sublist(
+              start,
+              end > fresh.length ? fresh.length : end,
+            ),
+            'p_delta': 1,
+          },
+        );
+      }
       return (count: fresh.length, error: null);
     } on PostgrestException catch (e) {
       return (count: 0, error: e.message);
@@ -537,92 +562,114 @@ class PortfolioRepository {
   /// Stores copies of cards in a list, adding to whatever quantity is
   /// already there.
   ///
-  /// A list holds its own cards rather than pointing at the main collection,
-  /// so this is how many copies live on that shelf. `list_cards` is unique on
-  /// `(list_id, card_id)`, and Postgrest's upsert overwrites a value instead
-  /// of incrementing it, so the current quantities are read first and the
-  /// sums written back.
+  /// Each collection holds its own cards, so this is how many copies live on
+  /// that shelf.
+  ///
+  /// One `upsert_collection_card` call per card, rather than a table upsert:
+  /// the RPC adds the delta server-side (`quantity = quantity + p_delta`), so
+  /// the read-then-write race the old `list_cards` path had is gone, and when
+  /// the target is the primary collection it also mirrors the change into
+  /// `user_inventory` — which a direct table write silently skips.
   Future<String?> addCopiesToList({
     required String listId,
     required Map<int, int> quantityByCardId,
   }) async {
     if (quantityByCardId.isEmpty) return null;
-    final cardIds = quantityByCardId.keys.toList();
     try {
-      final existing = await _client
-          .from('list_cards')
-          .select('card_id, quantity')
-          .eq('list_id', listId)
-          .inFilter('card_id', cardIds);
-      final held = {
-        for (final row in existing)
-          (row['card_id'] as num).toInt():
-              (row['quantity'] as num?)?.toInt() ?? 0,
-      };
-
-      await _client.from('list_cards').upsert([
-        for (final entry in quantityByCardId.entries)
-          {
-            'list_id': listId,
-            'card_id': entry.key,
-            'quantity': (held[entry.key] ?? 0) + entry.value,
+      for (final entry in quantityByCardId.entries) {
+        if (entry.value == 0) continue;
+        await _client.rpc(
+          'upsert_collection_card',
+          params: {
+            'p_collection_id': listId,
+            'p_card_id': entry.key,
+            'p_delta': entry.value,
           },
-      ], onConflict: 'list_id,card_id');
+        );
+      }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return _collectionError(e);
     }
   }
 
-  /// Sets how many copies of a card the list holds, dropping the row when
-  /// that reaches zero — the list equivalent of editing a quantity in the
-  /// collection grid.
+  /// Sets how many copies of a card the collection holds, dropping the row
+  /// when that reaches zero.
+  ///
+  /// `upsert_collection_card` only speaks deltas, so the current quantity is
+  /// read first and the difference sent. Going through the RPC rather than
+  /// writing the absolute value straight to the table is what keeps the
+  /// primary collection's inventory drawdown firing on a decrease; the read
+  /// is the price of that.
   Future<String?> setListCardQuantity({
     required String listId,
     required int cardId,
     required int quantity,
   }) async {
     try {
-      if (quantity < 1) {
-        await _client
-            .from('list_cards')
-            .delete()
-            .eq('list_id', listId)
-            .eq('card_id', cardId);
-        return null;
-      }
-      await _client.from('list_cards').upsert({
-        'list_id': listId,
-        'card_id': cardId,
-        'quantity': quantity,
-      }, onConflict: 'list_id,card_id');
+      final row = await _client
+          .from('collection_cards')
+          .select('quantity')
+          .eq('collection_id', listId)
+          .eq('card_id', cardId)
+          .maybeSingle();
+      final current = (row?['quantity'] as num?)?.toInt() ?? 0;
+      final target = quantity < 1 ? 0 : quantity;
+      final delta = target - current;
+      if (delta == 0) return null;
+
+      await _client.rpc(
+        'upsert_collection_card',
+        params: {
+          'p_collection_id': listId,
+          'p_card_id': cardId,
+          'p_delta': delta,
+        },
+      );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return _collectionError(e);
     }
   }
 
-  /// Removes cards from a list. The cards themselves and the user's
-  /// ownership of them are untouched.
+  /// Removes cards from a collection outright.
+  ///
+  /// For a non-primary collection the cards themselves and the user's
+  /// ownership of them are untouched. On the *primary* collection
+  /// `bulk_remove_collection_cards` also clears the matching `user_inventory`
+  /// rows and logs an `out` activity row for each, so a caller acting on it
+  /// has to revalidate inventory too.
   Future<String?> removeCardsFromList({
     required String listId,
     required List<int> cardIds,
   }) async {
     if (cardIds.isEmpty) return null;
     try {
-      await _client
-          .from('list_cards')
-          .delete()
-          .eq('list_id', listId)
-          .inFilter('card_id', cardIds);
+      for (var start = 0; start < cardIds.length; start += _bulkCardLimit) {
+        final end = start + _bulkCardLimit;
+        await _client.rpc(
+          'bulk_remove_collection_cards',
+          params: {
+            'p_collection_id': listId,
+            'p_card_ids': cardIds.sublist(
+              start,
+              end > cardIds.length ? cardIds.length : end,
+            ),
+          },
+        );
+      }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return _collectionError(e);
     }
   }
 
-  /// Ports `createList`. The share code is generated client-side there too,
-  /// with the same retry when one collides.
+  /// Creates a collection.
+  ///
+  /// No share code and no retry loop any more: `collections` has no such
+  /// column, and its `slug` — the handle the public URL uses — is minted by
+  /// `trg_set_collection_slug`, which resolves its own collisions per user
+  /// under an advisory lock. The client sends a name and nothing else.
   Future<({WantlistModel? list, String? error})> createList({
     required String userId,
     required String name,
@@ -637,29 +684,25 @@ class PortfolioRepository {
       return (list: null, error: 'Deskripsi terlalu panjang');
     }
 
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        final row = await _client
-            .from('lists')
-            .insert({
-              'user_id': userId,
-              'name': trimmed,
-              'description': description.trim(),
-              'share_code': generateShareCode(),
-            })
-            .select(_listColumns)
-            .single();
-        return (list: WantlistModel.fromRow(row), error: null);
-      } on PostgrestException catch (e) {
-        // 23505 is a share-code collision; anything else is real.
-        if (e.code == '23505' && attempt < 2) continue;
-        return (list: null, error: e.message);
-      }
+    try {
+      final row = await _client
+          .from('collections')
+          .insert({
+            'user_id': userId,
+            'name': trimmed,
+            'description': description.trim(),
+          })
+          .select(_listColumns)
+          .single();
+      return (list: WantlistModel.fromRow(row), error: null);
+    } on PostgrestException catch (e) {
+      return (list: null, error: _collectionError(e));
     }
-    return (list: null, error: 'Gagal membuat kode berbagi yang unik');
   }
 
-  /// Ports `updateList`.
+  /// Renames a collection. A rename re-points its public URL by design —
+  /// `trg_set_collection_slug` fires on `UPDATE OF name` and the old slug
+  /// stops resolving.
   Future<String?> updateList({
     required String listId,
     required String userId,
@@ -674,57 +717,78 @@ class PortfolioRepository {
     }
     try {
       await _client
-          .from('lists')
+          .from('collections')
           .update({'name': trimmed, 'description': description.trim()})
           .eq('id', listId)
           .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return _collectionError(e);
     }
   }
 
-  /// Ports `deleteList`. The list's cards go with it on the cascade.
+  /// Deletes a collection; its cards go with it on the cascade.
+  ///
+  /// The primary collection cannot be deleted —
+  /// `trg_prevent_primary_collection_delete` raises rather than letting an
+  /// account end up with nowhere to put what it owns.
   Future<String?> deleteList({
     required String listId,
     required String userId,
   }) async {
     try {
       await _client
-          .from('lists')
+          .from('collections')
           .delete()
           .eq('id', listId)
           .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return _collectionError(e);
     }
   }
 
-  /// Ports `duplicateList` — the `duplicate_list` RPC copies the row and its
-  /// cards server-side and hands back the new id.
+  /// `duplicate_collection` copies the row and its cards server-side and
+  /// hands back the new id. The copy is never primary, so it lands in the
+  /// lists screen alongside the others.
   Future<({WantlistModel? list, String? error})> duplicateList(
     String sourceListId,
   ) async {
     try {
       final newId = await _client.rpc(
-        'duplicate_list',
-        params: {'p_source_list_id': sourceListId},
+        'duplicate_collection',
+        params: {'p_source_collection_id': sourceListId},
       );
       if (newId is! String || newId.isEmpty) {
         return (list: null, error: 'Respons tidak dikenali dari server');
       }
       final row = await _client
-          .from('lists')
+          .from('collections')
           .select(_listColumns)
           .eq('id', newId)
           .maybeSingle();
       if (row == null) {
-        return (list: null, error: 'List dibuat tapi gagal dimuat');
+        return (list: null, error: 'Koleksi dibuat tapi gagal dimuat');
       }
       return (list: WantlistModel.fromRow(row), error: null);
     } on PostgrestException catch (e) {
-      return (list: null, error: e.message);
+      return (list: null, error: _collectionError(e));
     }
   }
+
+  /// The ceiling `bulk_upsert_collection_cards` enforces — it raises past
+  /// this rather than truncating, so callers chunk instead of guarding.
+  static const _bulkCardLimit = 500;
+
+  /// Turns the collection functions' raised messages into something a user
+  /// can read. They come back as bare Postgres exception text, which is fine
+  /// in a server log and useless in a snackbar.
+  static String _collectionError(PostgrestException e) => switch (e.message) {
+    'Collection limit reached' => 'Jumlah koleksi sudah mencapai batas',
+    'primary_collection_undeletable' => 'Koleksi utama tidak bisa dihapus',
+    'is_primary_immutable' => 'Koleksi utama tidak bisa diubah',
+    'unauthorized' => 'Kamu tidak punya akses ke koleksi ini',
+    'delta_out_of_range' => 'Jumlah kartu di luar batas',
+    _ => e.message,
+  };
 }

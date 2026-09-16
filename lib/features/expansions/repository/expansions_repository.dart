@@ -4,6 +4,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
+import '../../../shared/utils/primary_collection.dart';
 import 'models/market_models.dart';
 
 /// Mirrors `EXPANSION_COLUMNS` in `pokepedia-web/lib/data/client.ts`.
@@ -17,8 +18,8 @@ const _expansionColumns =
 const _cardColumns =
     'id, name_id, expansion_code, collector_number, rarity, category, image_url, illustrator, regulation_mark, language, variant, details';
 
-/// `bulk_upsert_user_cards` and `bulk_remove_user_cards` both raise past
-/// 500 ids in one call, matching the web's `BULK_CARD_LIMIT`.
+/// `bulk_upsert_collection_cards` raises past 500 ids in one call, matching
+/// the web's `BULK_CARD_LIMIT`.
 const _bulkChunkSize = 500;
 
 /// Data access for the Expansions feature, backed by Supabase. Mirrors
@@ -149,29 +150,43 @@ class ExpansionsRepository {
         .toList();
   }
 
-  /// Sums `user_cards.quantity` for a card across any variant rows.
-  /// Mirrors `fetchUserCardQuantities` in `lib/products/portfolio.ts`.
+  /// Sums the primary collection's quantity for a card across any variant
+  /// rows. "Owned" means the primary collection specifically — the other
+  /// collections are curation, not stock, which is the same line
+  /// `upsert_collection_card` draws when it decides whether to touch
+  /// inventory.
   Future<int> fetchOwnedQuantity(String userId, int cardId) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return 0;
     final rows = await _client
-        .from('user_cards')
+        .from('collection_cards')
         .select('quantity')
-        .eq('user_id', userId)
+        .eq('collection_id', collectionId)
         .eq('card_id', cardId);
     return rows.fold<int>(0, (sum, r) => sum + (r['quantity'] as int? ?? 0));
   }
 
-  /// Ports `upsertUserCard` (`lib/products/portfolio.ts`) — `delta` is added
-  /// to the user's existing quantity for this card via the same atomic
-  /// server-side RPC the web uses.
+  /// `delta` is added to the primary collection's existing quantity for this
+  /// card, via the same atomic RPC the web uses.
+  ///
+  /// On a decrease `upsert_collection_card` also draws `user_inventory` down
+  /// oldest-first and logs an `out` activity row per batch it takes, so a
+  /// caller passing a negative delta has to revalidate inventory as well.
   Future<String?> upsertUserCard({
     required String userId,
     required int cardId,
     required int delta,
   }) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return 'Koleksi utama tidak ditemukan';
     try {
       await _client.rpc(
-        'upsert_user_card_atomic',
-        params: {'p_user_id': userId, 'p_card_id': cardId, 'p_delta': delta},
+        'upsert_collection_card',
+        params: {
+          'p_collection_id': collectionId,
+          'p_card_id': cardId,
+          'p_delta': delta,
+        },
       );
       return null;
     } on PostgrestException catch (e) {
@@ -192,12 +207,15 @@ class ExpansionsRepository {
     final ids = _sanitizeCardIds(cardIds);
     if (ids.isEmpty) return const {};
 
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return const {};
+
     final quantities = <int, int>{};
     for (final batch in _batches(ids)) {
       final rows = await _client
-          .from('user_cards')
+          .from('collection_cards')
           .select('card_id, quantity')
-          .eq('user_id', userId)
+          .eq('collection_id', collectionId)
           .inFilter('card_id', batch)
           .gt('quantity', 0);
       for (final row in rows) {
@@ -208,42 +226,54 @@ class ExpansionsRepository {
     return quantities;
   }
 
-  /// Ports `bulkAddUserCards` — `p_delta` is applied to every listed card in
-  /// one atomic RPC call.
+  /// `p_delta` is applied to every listed card in one atomic RPC call,
+  /// against the user's primary collection.
   Future<({int count, String? error})> bulkUpsertUserCards({
     required String userId,
     required List<int> cardIds,
     required int delta,
-  }) {
+  }) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) {
+      return (count: 0, error: 'Koleksi utama tidak ditemukan');
+    }
     return _runBulk(
       cardIds,
       (batch) => _client.rpc(
-        'bulk_upsert_user_cards',
-        params: {'p_user_id': userId, 'p_card_ids': batch, 'p_delta': delta},
+        'bulk_upsert_collection_cards',
+        params: {
+          'p_collection_id': collectionId,
+          'p_card_ids': batch,
+          'p_delta': delta,
+        },
       ),
     );
   }
 
-  /// Ports `bulkRemoveUserCards`. Note the RPC does more than clear
-  /// `user_cards`: it also deletes the user's `user_inventory` rows for
-  /// these cards and logs an `out` activity row for each, so callers have
-  /// to revalidate inventory too.
+  /// Clears these cards out of the primary collection. Note the RPC does
+  /// more than that: because the target is primary it also deletes the
+  /// user's `user_inventory` rows for these cards and logs an `out` activity
+  /// row for each, so callers have to revalidate inventory too.
   Future<({int count, String? error})> bulkRemoveUserCards({
     required String userId,
     required List<int> cardIds,
-  }) {
+  }) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) {
+      return (count: 0, error: 'Koleksi utama tidak ditemukan');
+    }
     return _runBulk(
       cardIds,
       (batch) => _client.rpc(
-        'bulk_remove_user_cards',
-        params: {'p_user_id': userId, 'p_card_ids': batch},
+        'bulk_remove_collection_cards',
+        params: {'p_collection_id': collectionId, 'p_card_ids': batch},
       ),
     );
   }
 
-  /// Both bulk RPCs raise past 500 ids, which is why the web guards with
-  /// `BULK_CARD_LIMIT` and refuses the call outright. Batching instead means
-  /// an expansion larger than the limit still works.
+  /// `bulk_upsert_collection_cards` raises past 500 ids, which is why the web
+  /// guards with `BULK_CARD_LIMIT` and refuses the call outright. Batching
+  /// instead means an expansion larger than the limit still works.
   Future<({int count, String? error})> _runBulk(
     List<int> cardIds,
     Future<dynamic> Function(List<int> batch) call,
@@ -304,6 +334,22 @@ class ExpansionsRepository {
         .inFilter('user_id', userIds);
     final storesByUser = {for (final s in storeRows) s['user_id'] as String: s};
 
+    // A seller who never opened a storefront has no `seller_profiles` name or
+    // slug, and is named and linked by their username instead — the same join
+    // `get_recent_marketplace_listings` does for its own rows. Best effort:
+    // if `profiles` is unreadable the rows simply fall back to "Penjual",
+    // rather than the whole listings list failing.
+    var profilesByUser = <String, Map<String, dynamic>>{};
+    try {
+      final profileRows = await _client
+          .from('profiles')
+          .select('id, username, avatar_url')
+          .inFilter('id', userIds);
+      profilesByUser = {for (final p in profileRows) p['id'] as String: p};
+    } catch (_) {
+      // Swallowed — rows fall back to the storefront fields alone.
+    }
+
     // Reputation drives the seller's star on each row. It's a separate table
     // that a buyer may not be able to read under RLS, so a failure here just
     // leaves the score at 0 rather than dropping the whole listings list.
@@ -324,15 +370,18 @@ class ExpansionsRepository {
       final card = CardModel.fromRow(row['card'] as Map<String, dynamic>);
       final userId = row['user_id'] as String;
       final store = storesByUser[userId];
+      final profile = profilesByUser[userId];
       final reputation = reputationByUser[userId];
       return ListingModel.fromRow(
         row,
         card: card,
-        storeSlug: store?['store_slug'] as String? ?? '',
-        storeName: store?['store_name'] as String? ?? 'Toko',
+        storeSlug: store?['store_slug'] as String?,
+        storeName: store?['store_name'] as String?,
+        sellerUsername: profile?['username'] as String?,
         isVerified: store?['is_verified'] as bool? ?? false,
         cityName: store?['city_name'] as String? ?? '',
         storeLogoUrl: store?['store_logo_url'] as String?,
+        sellerAvatarUrl: profile?['avatar_url'] as String?,
         sellerFeedbackScore:
             ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
             ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),

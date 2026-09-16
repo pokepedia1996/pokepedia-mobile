@@ -25,7 +25,8 @@ const _minPickerQuery = 2;
 /// added, so the caller can refresh the collection.
 ///
 /// Ports the add-card modal from `app/portfolio/collection/page.tsx`: search
-/// the catalog, pick a quantity, and write straight to `user_cards`.
+/// the catalog, pick a quantity, and write straight to the primary
+/// collection.
 Future<bool?> showCollectionAddSheet(BuildContext context) {
   return showModalBottomSheet<bool>(
     context: context,

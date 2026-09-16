@@ -40,6 +40,12 @@ class Routes {
   static const cart = '/cart';
   static const checkout = '/cart/checkout';
   static const checkoutSuccess = '/cart/checkout/success';
+
+  /// The saldo thank-you screen, carrying what it needs to state the outcome.
+  /// Query params rather than `extra` so the destination survives the
+  /// `go(home)` + `push` that `goHomeThen` performs.
+  static String checkoutSuccessFor({required int cards, required int total}) =>
+      '$checkoutSuccess?cards=$cards&total=$total';
   static const orders = '/orders';
   static const proposals = '/proposals';
 
@@ -123,7 +129,14 @@ class Routes {
 
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
-  static String chatThread(String slug) => '/chat/$slug';
+
+  /// A room, optionally naming the listing it was opened about.
+  ///
+  /// The listing rides in the query rather than in `extra`: that slot
+  /// already carries the title hint here, and a query parameter survives a
+  /// deep link and a process restart, which `extra` does not.
+  static String chatThread(String slug, {int? listingId}) =>
+      listingId == null ? '/chat/$slug' : '/chat/$slug?listing=$listingId';
 
   /// A conversation with no room yet — the recipient rides along in
   /// `extra` as a [ChatTarget], and the room is created on the first send.

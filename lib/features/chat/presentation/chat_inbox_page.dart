@@ -73,7 +73,10 @@ class _ChatInboxPageState extends ConsumerState<ChatInboxPage> {
                 }
                 final more = ref.read(chatThreadsProvider.notifier).hasMore;
                 return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(chatThreadsProvider),
+                  onRefresh: () async {
+                    ref.invalidate(chatThreadsProvider);
+                    await ref.read(chatThreadsProvider.future);
+                  },
                   child: ListView.separated(
                     controller: _scroll,
                     // One past the rows for the spinner under the last one

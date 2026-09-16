@@ -1,4 +1,5 @@
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/image_url.dart';
 
 /// One conversation in the inbox — a row of `get_chat_room_summaries`.
 class ChatThread {
@@ -175,7 +176,10 @@ class ChatListingContext {
       cardId: cardId,
       priceIdr: (raw['price_idr'] as num?)?.toInt() ?? 0,
       cardName: raw['card_name'] as String?,
-      cardImage: raw['card_image'] as String?,
+      // Through the CDN proxy, like every other image in the app — the
+      // payload carries the catalog's own URL, which isn't fetchable
+      // directly, so these cards were drawing their placeholder.
+      cardImage: proxyImageUrl(raw['card_image'] as String?),
       packSlug: raw['pack_slug'] as String?,
       variantKey: raw['variant_key'] as String?,
       condition: raw['condition'] as String?,
@@ -214,7 +218,10 @@ class ChatOrderEvent {
       amountIdr: (raw['amount_idr'] as num?)?.toInt() ?? 0,
       quantity: (raw['quantity'] as num?)?.toInt() ?? 1,
       cardName: raw['card_name'] as String?,
-      cardImage: raw['card_image'] as String?,
+      // Through the CDN proxy, like every other image in the app — the
+      // payload carries the catalog's own URL, which isn't fetchable
+      // directly, so these cards were drawing their placeholder.
+      cardImage: proxyImageUrl(raw['card_image'] as String?),
     );
   }
 
@@ -267,7 +274,10 @@ class ChatOfferEvent {
       buyerId: raw['buyer_id'] as String? ?? '',
       sellerId: raw['seller_id'] as String? ?? '',
       cardName: raw['card_name'] as String?,
-      cardImage: raw['card_image'] as String?,
+      // Through the CDN proxy, like every other image in the app — the
+      // payload carries the catalog's own URL, which isn't fetchable
+      // directly, so these cards were drawing their placeholder.
+      cardImage: proxyImageUrl(raw['card_image'] as String?),
       message: raw['message'] as String?,
     );
   }
@@ -462,6 +472,7 @@ class ChatTarget {
     required this.otherUserId,
     required this.title,
     this.listingId,
+    this.listingContext,
   });
 
   final String otherUserId;
@@ -469,4 +480,12 @@ class ChatTarget {
 
   /// Attaches the listing card to the room when it is created.
   final int? listingId;
+
+  /// The card itself, handed over by the page that already has it.
+  ///
+  /// The thread can also fetch this (`chat_about_listing`), but the page
+  /// opening it is holding the listing in memory — passing it straight
+  /// through means the pinned card is on screen in the first frame, and
+  /// nothing about it depends on a round trip that can fail.
+  final ChatListingContext? listingContext;
 }

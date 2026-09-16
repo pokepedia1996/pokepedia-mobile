@@ -3,15 +3,21 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../market/usecase/market_notifier.dart';
 import '../repository/models/profile_models.dart';
+import '../repository/phone_otp_repository.dart';
 import '../repository/user_repository.dart';
 
 final userRepositoryProvider = Provider((ref) {
   return UserRepository(ref.read(supabaseClientProvider));
+});
+
+final phoneOtpRepositoryProvider = Provider((ref) {
+  return PhoneOtpRepository(ref.read(pokepediaApiProvider));
 });
 
 final usersSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -63,12 +69,49 @@ final userCollectionProvider = FutureProvider.family<List<CardModel>, String>((
   if (profile == null) return const [];
   final viewer = ref.watch(authProvider).valueOrNull;
   final isOwner = viewer?.id == profile.userId;
+  // No `canView` guard here any more: the owner path reads their own rows
+  // under RLS, and the visitor path goes through `get_public_collection_cards`,
+  // which decides visibility server-side and returns nothing when the
+  // collection is private.
   return ref
       .read(userRepositoryProvider)
       .fetchPublicCollection(
-        profile.userId,
-        canView: isOwner || profile.isCollectionPublic,
+        username,
+        userId: profile.userId,
+        isOwner: isOwner,
       );
+});
+
+/// Whether the profile's collection is visible to strangers.
+///
+/// The owner reads the flag off their own collection row so the switch shows
+/// the real state even while private; everyone else asks
+/// `get_public_collection`, which answers only for a public one.
+final collectionVisibilityProvider = FutureProvider.family<bool, String>((
+  ref,
+  username,
+) async {
+  final profile = await ref.watch(userProfileProvider(username).future);
+  if (profile == null) return false;
+  final viewer = ref.watch(authProvider).valueOrNull;
+  final repository = ref.read(userRepositoryProvider);
+  if (viewer?.id == profile.userId) {
+    final visibility = await repository.fetchCollectionVisibility(
+      profile.userId,
+    );
+    return visibility?.isPublic ?? false;
+  }
+  return repository.isCollectionPublic(username);
+});
+
+/// The signed-in user's own primary-collection privacy settings, for the
+/// two switches on the settings screen.
+final myCollectionVisibilityProvider = FutureProvider<CollectionVisibility?>((
+  ref,
+) async {
+  final viewer = ref.watch(authProvider).valueOrNull;
+  if (viewer == null) return null;
+  return ref.read(userRepositoryProvider).fetchCollectionVisibility(viewer.id);
 });
 
 final userContributionsProvider =

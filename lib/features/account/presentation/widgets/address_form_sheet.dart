@@ -7,6 +7,7 @@ import '../../../../shared/widgets/app_search_field.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/labeled_field.dart';
 import '../../repository/address_repository.dart';
 import '../../repository/models/address_model.dart';
 import '../../usecase/address_notifier.dart';
@@ -198,25 +199,33 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
               ],
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _label,
-              maxLength: 30,
-              decoration: const InputDecoration(
-                labelText: 'Label',
-                hintText: 'Rumah, Kantor, ...',
-                counterText: '',
+            LabeledField(
+              label: 'Label',
+              isRequired: true,
+              child: TextField(
+                controller: _label,
+                maxLength: 30,
+                decoration: const InputDecoration(
+                  hintText: 'Rumah, Kantor, ...',
+                  counterText: '',
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _contactName,
-              decoration: const InputDecoration(labelText: 'Nama penerima'),
+            LabeledField(
+              label: 'Nama penerima',
+              isRequired: true,
+              child: TextField(controller: _contactName),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _contactPhone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Nomor HP'),
+            LabeledField(
+              label: 'No. Telepon',
+              isRequired: true,
+              child: TextField(
+                controller: _contactPhone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(hintText: '08xxxxxxxxx'),
+              ),
             ),
             const SizedBox(height: 12),
             catalogAsync.when(
@@ -272,33 +281,33 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _postalCode,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(5),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Kode pos (opsional)',
+            LabeledField(
+              label: 'Kode pos (opsional)',
+              child: TextField(
+                controller: _postalCode,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(5),
+                ],
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _fullAddress,
-              maxLines: 3,
-              maxLength: 500,
-              decoration: const InputDecoration(
-                labelText: 'Alamat lengkap',
-                hintText: 'Nama jalan, nomor rumah, RT/RW, patokan',
+            LabeledField(
+              label: 'Alamat lengkap',
+              isRequired: true,
+              child: TextField(
+                controller: _fullAddress,
+                maxLines: 3,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  hintText: 'Nama jalan, nomor rumah, RT/RW, patokan',
+                ),
               ),
             ),
-            TextField(
-              controller: _notes,
-              maxLength: 200,
-              decoration: const InputDecoration(
-                labelText: 'Catatan kurir (opsional)',
-              ),
+            LabeledField(
+              label: 'Catatan kurir (opsional)',
+              child: TextField(controller: _notes, maxLength: 200),
             ),
             if (!_isEdit) ...[
               const SizedBox(height: 4),
@@ -362,32 +371,36 @@ class _AreaField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    return InkWell(
-      onTap: enabled
-          ? () async {
-              final picked = await showModalBottomSheet<AreaOption>(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Theme.of(context).cardColor,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.xl),
+    return LabeledField(
+      label: label,
+      isRequired: true,
+      child: InkWell(
+        onTap: enabled
+            ? () async {
+                final picked = await showModalBottomSheet<AreaOption>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Theme.of(context).cardColor,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(AppRadius.xl),
+                    ),
                   ),
-                ),
-                builder: (_) => _AreaPicker(title: label, options: options),
-              );
-              if (picked != null) onSelected(picked);
-            }
-          : null,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InputDecorator(
-        decoration: InputDecoration(labelText: label, enabled: enabled),
-        child: Text(
-          value?.name ?? 'Pilih $label',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.bodySm(
-            value == null ? context.mutedForeground : colors.onSurface,
+                  builder: (_) => _AreaPicker(title: label, options: options),
+                );
+                if (picked != null) onSelected(picked);
+              }
+            : null,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InputDecorator(
+          decoration: InputDecoration(enabled: enabled),
+          child: Text(
+            value?.name ?? 'Pilih $label',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.bodySm(
+              value == null ? context.mutedForeground : colors.onSurface,
+            ),
           ),
         ),
       ),

@@ -24,7 +24,7 @@ String portfolioDestinationLabel(PortfolioTarget target) =>
 /// asked before the write, not after.
 ///
 /// Every portfolio is a shelf of its own: picking a list puts the copies in
-/// that list and nowhere else, and the main collection (`user_cards`) is
+/// that collection and nowhere else, and the primary collection is
 /// written only when the main collection is what was picked. Nothing lands
 /// in Utama by default.
 ///

@@ -76,7 +76,17 @@ class CartNotifier extends Notifier<List<CartItem>> {
     // `cart_items` through the RPC instead, so it has to record the pairing
     // itself or the same-device self-trade guard has nothing to join on.
     // Deliberately not awaited: a fraud signal must not delay the add.
-    unawaited(ref.read(deviceFingerprintProvider).record());
+    //
+    // Resolving the provider is guarded too, not just the call it makes:
+    // `record()` swallows its own Postgrest failures, but building the
+    // fingerprint throws if the Supabase client isn't up, and that would
+    // abort the add before the optimistic badge ever moves — exactly what a
+    // best-effort fraud signal must never do.
+    try {
+      unawaited(ref.read(deviceFingerprintProvider).record());
+    } catch (_) {
+      // Best effort, as above.
+    }
 
     // `add_to_cart` upserts the quantity rather than accumulating, so adding
     // a listing that's already in the cart changes no count. Only a genuinely

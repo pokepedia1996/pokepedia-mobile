@@ -11,7 +11,6 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../core/providers/card_ownership_controller.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
@@ -273,74 +272,27 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
   }
 
   Widget _tile(CardModel card, {bool list = false}) {
-    final tile = list
+    if (!_editMode) {
+      void open() => context.push(Routes.cardDetail(card.packSlug, card.id));
+      return list
+          ? CardListItem(card: card, onTap: open)
+          : CardGridItem(card: card, onTap: open);
+    }
+
+    // Editing turns the tile into a checkbox — the tick and the tile's own
+    // border carry it, so the artwork stays legible underneath.
+    final selected = _selected.contains(card.id);
+    return list
         ? CardListItem(
             card: card,
-            onTap: () =>
-                context.push(Routes.cardDetail(card.packSlug, card.id)),
+            selected: selected,
+            onTap: () => _toggleSelected(card),
           )
         : CardGridItem(
             card: card,
-            onTap: () =>
-                context.push(Routes.cardDetail(card.packSlug, card.id)),
+            selected: selected,
+            onTap: () => _toggleSelected(card),
           );
-    if (!_editMode) return tile;
-
-    final selected = _selected.contains(card.id);
-    return GestureDetector(
-      onTap: () => _toggleSelected(card),
-      // The tile below is inert in edit mode, so the whole area has to be
-      // hit-testable here rather than deferring to a child.
-      behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          IgnorePointer(child: tile),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: selected
-                        ? context.appColors.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                  color: selected
-                      ? context.appColors.primary.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 6,
-            left: 6,
-            child: IgnorePointer(
-              child: Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? context.appColors.primary
-                      : Theme.of(context).cardColor.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.borderColor),
-                ),
-                child: selected
-                    ? Icon(
-                        LucideIcons.check,
-                        size: 15,
-                        color: context.appColors.onPrimary,
-                      )
-                    : null,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

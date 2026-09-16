@@ -9,6 +9,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/labeled_field.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/utils/image_crop.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -591,6 +592,118 @@ class _AboutSectionState extends ConsumerState<_AboutSection>
   }
 }
 
+/// Ports `seller-pickup-card.tsx` — the pickup editor as the settings page
+/// presents it, under its own heading and a nudge for a seller who has not
+/// set one yet.
+///
+/// Lives here rather than beside [AddressesPage] because [_PickupSection] is
+/// private to this file, and web wraps that very component the same way: the
+/// store profile shows the section bare, settings shows it inside this card.
+class SellerPickupCard extends ConsumerWidget {
+  const SellerPickupCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(storeProfileProvider);
+    final colors = context.appColors;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.secondary.withValues(alpha: 0.3),
+        border: Border.all(color: context.borderColor),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Alamat Pickup Toko',
+            style: AppTypography.bodySemibold(colors.onSurface),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Titik jemput kurir untuk semua listing yang kamu jual.',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+          const SizedBox(height: 14),
+          profileAsync.when(
+            data: (profile) {
+              if (profile == null) {
+                return const _PickupNotice(
+                  'Masuk sebagai penjual untuk mengatur alamat pickup.',
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!profile.hasPickupAddress) ...[
+                    const _PickupNotice(
+                      'Belum punya alamat pickup. Atur sekarang untuk mulai '
+                      'jualan dan terima pesanan.',
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  _PickupSection(profile: profile),
+                ],
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            error: (_, __) => const _PickupNotice(
+              'Gagal memuat alamat pickup. Coba lagi nanti.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Web's amber `Info` banner above the pickup form.
+class _PickupNotice extends StatelessWidget {
+  const _PickupNotice(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    // The palette has no dedicated warning colour; `gold` is its amber, and
+    // web's banner is amber too. Text stays on-surface rather than gold, as
+    // web uses a dark amber-900 for the copy and gold-on-gold would not read.
+    final warning = context.appSemantic.gold;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: warning.withValues(alpha: 0.12),
+        border: Border.all(color: warning.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.info, size: 16, color: warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.bodySm(context.appColors.onSurface),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Ports `seller-pickup-section.tsx` — the pickup address, with web's map
 /// picker alongside the area dropdowns.
 class _PickupSection extends ConsumerStatefulWidget {
@@ -834,20 +947,25 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
                     ),
                   ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _name,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama penerima',
-                    isDense: true,
+                LabeledField(
+                  label: 'Nama penerima',
+                  isRequired: true,
+                  child: TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(isDense: true),
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Nomor HP',
-                    isDense: true,
+                LabeledField(
+                  label: 'No. Telepon',
+                  isRequired: true,
+                  child: TextField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      hintText: '08xxxxxxxxx',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -889,30 +1007,33 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
           },
         ),
         const SizedBox(height: 10),
-        TextField(
-          controller: _postal,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Kode pos',
-            isDense: true,
+        LabeledField(
+          label: 'Kode pos',
+          child: TextField(
+            controller: _postal,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(isDense: true),
           ),
         ),
         const SizedBox(height: 10),
-        TextField(
-          controller: _address,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Alamat lengkap',
-            hintText: 'Nama jalan, nomor rumah, RT/RW',
-            isDense: true,
+        LabeledField(
+          label: 'Alamat lengkap',
+          isRequired: true,
+          child: TextField(
+            controller: _address,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Nama jalan, nomor rumah, RT/RW',
+              isDense: true,
+            ),
           ),
         ),
         const SizedBox(height: 10),
-        TextField(
-          controller: _notes,
-          decoration: const InputDecoration(
-            labelText: 'Catatan untuk kurir (opsional)',
-            isDense: true,
+        LabeledField(
+          label: 'Catatan untuk kurir (opsional)',
+          child: TextField(
+            controller: _notes,
+            decoration: const InputDecoration(isDense: true),
           ),
         ),
         const SizedBox(height: 12),
@@ -943,18 +1064,22 @@ class _AreaField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<AreaOption>(
-      initialValue: options.contains(value) ? value : null,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label, isDense: true),
-      items: [
-        for (final option in options)
-          DropdownMenuItem(
-            value: option,
-            child: Text(option.name, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: options.isEmpty ? null : onChanged,
+    return LabeledField(
+      label: label,
+      isRequired: true,
+      child: DropdownButtonFormField<AreaOption>(
+        initialValue: options.contains(value) ? value : null,
+        isExpanded: true,
+        decoration: const InputDecoration(isDense: true),
+        items: [
+          for (final option in options)
+            DropdownMenuItem(
+              value: option,
+              child: Text(option.name, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: options.isEmpty ? null : onChanged,
+      ),
     );
   }
 }

@@ -7,20 +7,36 @@ import '../../core/utils/formatters.dart';
 import '../models/card_model.dart';
 import 'card_art.dart';
 import 'card_price_note.dart';
+import 'selection_mark.dart';
 
 /// Ports the list-mode branch of `components/card/card-item.tsx` — a
 /// compact row (thumbnail, name/number, price and the quantity held) used
 /// when `ViewToggle` is set to list.
 class CardListItem extends StatelessWidget {
-  const CardListItem({super.key, required this.card, required this.onTap});
+  const CardListItem({
+    super.key,
+    required this.card,
+    required this.onTap,
+    this.footer,
+    this.selected,
+  });
 
   final CardModel card;
   final VoidCallback onTap;
+
+  /// An extra row under the price — where edit mode puts the quantity
+  /// stepper, the same as [CardGridItem.footer].
+  final Widget? footer;
+
+  /// Whether the row is ticked in a multi-select list, or null when the
+  /// list isn't selecting.
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final owned = card.owned > 0;
+    final selected = this.selected;
 
     return InkWell(
       onTap: onTap,
@@ -30,10 +46,19 @@ class CardListItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: context.borderColor),
+          border: Border.all(
+            color: selected == true ? colors.primary : context.borderColor,
+            width: selected == true ? 2 : 1,
+          ),
         ),
         child: Row(
           children: [
+            // A row has a leading edge to spare, so the tick takes it
+            // rather than covering the thumbnail.
+            if (selected != null) ...[
+              SelectionMark(selected: selected, size: 20),
+              const SizedBox(width: 10),
+            ],
             SizedBox(
               width: 48,
               child: CardArt(
@@ -85,6 +110,7 @@ class CardListItem extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (footer != null) ...[const SizedBox(height: 6), footer!],
                 ],
               ),
             ),

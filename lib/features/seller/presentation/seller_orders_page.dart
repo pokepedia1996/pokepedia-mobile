@@ -60,9 +60,13 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
     super.dispose();
   }
 
-  void _reload() {
+  /// Returns a future so `RefreshIndicator` holds its spinner until the list
+  /// has actually come back. Invalidating alone completes instantly, which
+  /// made a pull-to-refresh look like it had failed to do anything.
+  Future<void> _reload() async {
     ref.invalidate(sellerOrdersProvider);
     ref.invalidate(sellerPendingCheckoutsProvider);
+    await ref.read(sellerOrdersProvider.future);
   }
 
   /// Order number, card, buyer and tracking number — what web's box covers.

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers/theme_mode_provider.dart';
 import '../core/theme/app_theme.dart';
+import '../features/auth/presentation/onboarding_modal.dart';
 import '../features/notifications/usecase/notification_push_notifier.dart';
 import 'router/app_router.dart';
 
@@ -23,6 +24,10 @@ class PokepediaApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       routerConfig: appRouter,
+      // Above the router rather than on a route: a social sign-in lands
+      // wherever the user already was, and the username is owed either way.
+      builder: (context, child) =>
+          OnboardingGate(child: child ?? const SizedBox.shrink()),
     );
   }
 }

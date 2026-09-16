@@ -1,4 +1,5 @@
 import '../../core/utils/image_url.dart';
+import '../utils/seller_identity.dart';
 
 /// A seller storefront, mirroring `public.seller_profiles` in
 /// `supabase/migrations/00000000000000_baseline.sql`.
@@ -88,7 +89,10 @@ class StoreModel {
         row['store_slug'] as String?,
         row['handle'] as String?,
       ]),
-      storeName: row['store_name'] as String? ?? 'Toko',
+      storeName: resolveSellerName(
+        storeName: row['store_name'] as String?,
+        username: row['username'] as String?,
+      ),
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: (row['active_listing_count'] as num?)?.toInt() ?? 0,
       cityName: row['city_name'] as String? ?? '',
@@ -117,7 +121,10 @@ class StoreModel {
         row['store_slug'] as String?,
         row['username'] as String?,
       ]),
-      storeName: row['store_name'] as String? ?? 'Toko',
+      storeName: resolveSellerName(
+        storeName: row['store_name'] as String?,
+        username: row['username'] as String?,
+      ),
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: activeListingCount,
       cityName: row['city_name'] as String? ?? '',

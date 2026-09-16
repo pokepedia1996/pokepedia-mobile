@@ -9,9 +9,13 @@ import '../repository/models/order_rating.dart';
 import '../repository/models/pending_checkout.dart';
 import '../repository/models/seller_order.dart';
 import '../repository/orders_repository.dart';
+import '../../../core/network/pokepedia_api.dart';
 
 final ordersRepositoryProvider = Provider(
-  (ref) => OrdersRepository(ref.read(supabaseClientProvider)),
+  (ref) => OrdersRepository(
+    ref.read(supabaseClientProvider),
+    ref.read(pokepediaApiProvider),
+  ),
 );
 
 final ordersProvider = FutureProvider<List<OrderModel>>((ref) {

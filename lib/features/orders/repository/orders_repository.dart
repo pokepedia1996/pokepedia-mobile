@@ -7,6 +7,7 @@ import 'models/order_rating.dart';
 import 'models/order_ref.dart';
 import 'models/pending_checkout.dart';
 import 'models/seller_order_detail.dart';
+import '../../../core/network/pokepedia_api.dart';
 
 /// The card columns [OrderItemModel] needs, matching what
 /// `expansions_repository.dart` selects so both build the same [CardModel].
@@ -22,9 +23,10 @@ const _cardColumns =
 /// the order. Store names are the exception — `seller_profiles` is
 /// self-select only — so those come from `get_store_identities`.
 class OrdersRepository {
-  OrdersRepository(this._client);
+  OrdersRepository(this._client, this._api);
 
   final SupabaseClient _client;
+  final PokepediaApi _api;
 
   String? get _uid => _client.auth.currentUser?.id;
 
@@ -175,10 +177,139 @@ class OrdersRepository {
                 .limit(limit)
             as List;
 
-    return rows
+    final checkouts = rows
         .cast<Map<String, dynamic>>()
         .map(pendingCheckoutFromCart)
         .toList();
+
+    return _enrichPendingCheckouts(checkouts);
+  }
+
+  /// Drops an unpaid checkout and puts its stock back on sale.
+  ///
+  /// Goes through `/api/carts/<externalId>/cancel` rather than writing
+  /// `carts` directly: the route also expires the Xendit invoice, so a cart
+  /// cancelled here cannot be paid from a payment page the buyer still has
+  /// open on another device.
+  Future<String?> cancelPendingCheckout(String externalId) async {
+    try {
+      await _api.post('/api/carts/$externalId/cancel', const {});
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
+  /// Fills in what `cart_snapshot` has no room for.
+  ///
+  /// The snapshot stores `seller_id` and `ask_order_id` and nothing about the
+  /// card beyond its name — no image, no card id — so the header and the
+  /// thumbnail both have to be looked up. Web does the same two joins in
+  /// `buildCheckoutEnrichment`; the difference is that it reads
+  /// `seller_profiles` with a service client, which the app has no equivalent
+  /// of, so the storefront comes through `get_store_identities` instead.
+  ///
+  /// Best-effort throughout: a checkout that cannot be decorated still pays,
+  /// so a failed lookup leaves the plainer card rather than no card.
+  Future<List<PendingCheckout>> _enrichPendingCheckouts(
+    List<PendingCheckout> checkouts,
+  ) async {
+    if (checkouts.isEmpty) return checkouts;
+
+    final sellerIds = <String>{
+      for (final checkout in checkouts)
+        if (checkout.sellerId != null) checkout.sellerId!,
+    };
+    final askIds = <int>{
+      for (final checkout in checkouts)
+        for (final item in checkout.items)
+          if (item.askOrderId != null) item.askOrderId!,
+    };
+
+    Map<String, _SellerIdentity> sellers = const {};
+    var artByAskId = <int, Map<String, dynamic>>{};
+    try {
+      final results = await Future.wait([
+        _sellerIdentities(sellerIds),
+        _cardArtByAskId(askIds),
+      ]);
+      sellers = results[0] as Map<String, _SellerIdentity>;
+      artByAskId = results[1] as Map<int, Map<String, dynamic>>;
+    } catch (_) {
+      return checkouts;
+    }
+
+    return [
+      for (final checkout in checkouts)
+        _decorate(checkout, sellers[checkout.sellerId], artByAskId),
+    ];
+  }
+
+  PendingCheckout _decorate(
+    PendingCheckout checkout,
+    _SellerIdentity? seller,
+    Map<int, Map<String, dynamic>> artByAskId,
+  ) {
+    final decorated = checkout.withItems([
+      for (final item in checkout.items)
+        () {
+          final art = item.askOrderId == null
+              ? null
+              : artByAskId[item.askOrderId];
+          if (art == null) return item;
+          return item.withCard(
+            imageUrl: art['image_url'] as String?,
+            // The snapshot's name is what was shown at checkout; the catalog
+            // is what the card is called now. They agree except after a
+            // catalog correction, where the newer one is the honest label.
+            cardName: art['name_id'] as String?,
+            expansionCode: art['expansion_code'] as String?,
+            collectorNumber: art['collector_number'] as String?,
+          );
+        }(),
+    ]);
+
+    if (seller == null) return decorated;
+    return decorated.withSeller(
+      storeName: seller.storeName,
+      sellerUsername: seller.username,
+      sellerImageUrl: seller.logoUrl ?? seller.avatarUrl,
+    );
+  }
+
+  /// `listings.id` -> the card it sells, with the fields the card needs.
+  Future<Map<int, Map<String, dynamic>>> _cardArtByAskId(Set<int> askIds) async {
+    if (askIds.isEmpty) return const {};
+
+    final listings =
+        await _client
+                .from('listings')
+                .select('id, card_id')
+                .inFilter('id', askIds.toList())
+            as List;
+
+    final cardIdByAsk = <int, int>{
+      for (final row in listings.cast<Map<String, dynamic>>())
+        (row['id'] as num).toInt(): (row['card_id'] as num).toInt(),
+    };
+    if (cardIdByAsk.isEmpty) return const {};
+
+    final cards =
+        await _client
+                .from('cards')
+                .select('id, name_id, image_url, collector_number, expansion_code')
+                .inFilter('id', cardIdByAsk.values.toSet().toList())
+            as List;
+
+    final byCardId = <int, Map<String, dynamic>>{
+      for (final row in cards.cast<Map<String, dynamic>>())
+        (row['id'] as num).toInt(): row,
+    };
+
+    return {
+      for (final entry in cardIdByAsk.entries)
+        if (byCardId[entry.value] != null) entry.key: byCardId[entry.value]!,
+    };
   }
 
   /// Store logo and slug from `get_store_identities`, username and avatar
@@ -218,6 +349,7 @@ class OrdersRepository {
           avatarUrl: row['avatar_url'] as String?,
           logoUrl: stores[row['id']]?['store_logo_url'] as String?,
           slug: stores[row['id']]?['store_slug'] as String?,
+          storeName: stores[row['id']]?['store_name'] as String?,
         ),
     };
   }
@@ -546,10 +678,12 @@ class _SellerIdentity {
     this.avatarUrl,
     this.logoUrl,
     this.slug,
+    this.storeName,
   });
 
   final String? username;
   final String? avatarUrl;
   final String? logoUrl;
   final String? slug;
+  final String? storeName;
 }

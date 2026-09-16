@@ -41,162 +41,191 @@ class AccountPage extends ConsumerWidget {
         bottom: false,
         child: authAsync.isLoading
             ? const _AccountSkeleton()
-            : ListView(
-                padding: EdgeInsets.only(
-                  bottom: AppBottomNav.reservedSpace(context) + 12,
-                ),
-                children: [
-                  _IdentityHeader(user: user),
-                  if (!isGuest) const _QuickActions(),
-                  if (!isGuest)
-                    _Group(
-                      title: 'Portofolio',
-                      children: [
-                        // _Row(
-                        //   icon: LucideIcons.listChecks,
-                        //   label: 'List',
-                        //   onTap: () => context.push(Routes.lists),
-                        // ),
-                        _Row(
-                          icon: LucideIcons.layoutGrid,
-                          label: 'Deck',
-                          onTap: () => context.push(Routes.decks),
-                        ),
-                        _Row(
-                          icon: LucideIcons.package,
-                          label: 'Inventori',
-                          onTap: () => context.push(Routes.inventory),
-                        ),
-                      ],
-                    ),
-                  if (!isGuest)
-                    _Group(
-                      title: 'Aktivitas',
-                      children: [
-                        _Row(
-                          icon: LucideIcons.package,
-                          label: 'Pesanan',
-                          onTap: () => context.push(Routes.orders),
-                        ),
-                        // _Row(
-                        //   icon: LucideIcons.messageCircle,
-                        //   label: 'Pesan',
-                        //   badge: ref.watch(chatUnreadCountProvider),
-                        //   onTap: () => context.push(Routes.chat),
-                        // ),
-                        _Row(
-                          icon: LucideIcons.listChecks,
-                          label: 'Proposal WTB',
-                          onTap: () => context.push(Routes.proposals),
-                        ),
-                        _Row(
-                          icon: LucideIcons.users,
-                          label: 'Cari Pengguna',
-                          onTap: () => context.push(Routes.users),
-                        ),
-                        _Row(
-                          icon: LucideIcons.store,
-                          label: 'Dashboard Penjual',
-                          onTap: () => context.push(Routes.seller),
-                        ),
-                        if (user.username != null)
-                          _Row(
-                            icon: LucideIcons.shoppingBag,
-                            label: 'Lihat Toko',
-                            onTap: () => context.push(
-                              Routes.storeDetail(user.username!),
-                            ),
-                          ),
-                      ],
-                    )
-                  else
-                    _Group(
-                      children: [
-                        _Row(
-                          icon: LucideIcons.users,
-                          label: 'Cari Pengguna',
-                          onTap: () => context.push(Routes.users),
-                        ),
-                      ],
-                    ),
-                  _Group(
-                    title: 'Informasi',
-                    children: [
-                      _Row(
-                        icon: LucideIcons.bookOpen,
-                        label: 'Tutorial',
-                        onTap: () => context.push(Routes.tutorial),
-                      ),
-                      _Row(
-                        icon: LucideIcons.fileText,
-                        label: 'Syarat & Ketentuan',
-                        onTap: () =>
-                            context.push(Routes.terms('syarat-dan-ketentuan')),
-                      ),
-                      _Row(
-                        icon: LucideIcons.fileText,
-                        label: 'Kebijakan Privasi',
-                        onTap: () =>
-                            context.push(Routes.terms('kebijakan-privasi')),
-                      ),
-                      _Row(
-                        icon: LucideIcons.fileText,
-                        label: 'Panduan Kondisi Kartu',
-                        onTap: () =>
-                            context.push(Routes.terms('kondisi-kartu')),
-                      ),
-                    ],
+            : RefreshIndicator(
+                onRefresh: () => _refresh(ref),
+                child: ListView(
+                  // The signed-out page is shorter than the screen, and
+                  // without this there is nothing to pull on it.
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.only(
+                    bottom: AppBottomNav.reservedSpace(context) + 12,
                   ),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final mode = ref.watch(themeModeProvider);
-                      final hint = switch (mode) {
-                        ThemeMode.system => 'Otomatis',
-                        ThemeMode.dark => 'Gelap',
-                        ThemeMode.light => 'Terang',
-                      };
-                      final icon = switch (mode) {
-                        ThemeMode.system => LucideIcons.sunMoon,
-                        ThemeMode.dark => LucideIcons.moon,
-                        ThemeMode.light => LucideIcons.sun,
-                      };
-                      return _Group(
-                        title: 'Pengaturan',
+                  children: [
+                    _IdentityHeader(user: user),
+                    if (!isGuest) const _QuickActions(),
+                    if (!isGuest)
+                      _Group(
+                        title: 'Portofolio',
+                        children: [
+                          // _Row(
+                          //   icon: LucideIcons.listChecks,
+                          //   label: 'List',
+                          //   onTap: () => context.push(Routes.lists),
+                          // ),
+                          _Row(
+                            icon: LucideIcons.layoutGrid,
+                            label: 'Deck',
+                            onTap: () => context.push(Routes.decks),
+                          ),
+                          _Row(
+                            icon: LucideIcons.package,
+                            label: 'Inventori',
+                            onTap: () => context.push(Routes.inventory),
+                          ),
+                        ],
+                      ),
+                    if (!isGuest)
+                      _Group(
+                        title: 'Aktivitas',
                         children: [
                           _Row(
-                            icon: icon,
-                            label: 'Tampilan',
-                            hint: hint,
-                            onTap: () =>
-                                ref.read(themeModeProvider.notifier).cycle(),
+                            icon: LucideIcons.package,
+                            label: 'Pesanan',
+                            onTap: () => context.push(Routes.orders),
                           ),
-                          if (!isGuest)
+                          // _Row(
+                          //   icon: LucideIcons.messageCircle,
+                          //   label: 'Pesan',
+                          //   badge: ref.watch(chatUnreadCountProvider),
+                          //   onTap: () => context.push(Routes.chat),
+                          // ),
+                          _Row(
+                            icon: LucideIcons.listChecks,
+                            label: 'Proposal WTB',
+                            onTap: () => context.push(Routes.proposals),
+                          ),
+                          _Row(
+                            icon: LucideIcons.users,
+                            label: 'Cari Pengguna',
+                            onTap: () => context.push(Routes.users),
+                          ),
+                          _Row(
+                            icon: LucideIcons.store,
+                            label: 'Dashboard Penjual',
+                            onTap: () => context.push(Routes.seller),
+                          ),
+                          if (user.username != null)
                             _Row(
-                              icon: LucideIcons.settings,
-                              label: 'Pengaturan akun',
-                              onTap: () => context.push(Routes.settings),
-                            ),
-                          if (isGuest)
-                            _Row(
-                              icon: LucideIcons.user,
-                              label: 'Masuk / Daftar',
-                              onTap: () => context.push(Routes.login),
-                            )
-                          else
-                            _Row(
-                              icon: LucideIcons.logOut,
-                              label: 'Keluar',
-                              destructive: true,
-                              onTap: () => _confirmLogout(context, ref),
+                              icon: LucideIcons.shoppingBag,
+                              label: 'Lihat Toko',
+                              onTap: () => context.push(
+                                Routes.storeDetail(user.username!),
+                              ),
                             ),
                         ],
-                      );
-                    },
-                  ),
-                ],
+                      )
+                    else
+                      _Group(
+                        children: [
+                          _Row(
+                            icon: LucideIcons.users,
+                            label: 'Cari Pengguna',
+                            onTap: () => context.push(Routes.users),
+                          ),
+                        ],
+                      ),
+                    _Group(
+                      title: 'Informasi',
+                      children: [
+                        _Row(
+                          icon: LucideIcons.bookOpen,
+                          label: 'Tutorial',
+                          onTap: () => context.push(Routes.tutorial),
+                        ),
+                        _Row(
+                          icon: LucideIcons.fileText,
+                          label: 'Syarat & Ketentuan',
+                          onTap: () => context.push(
+                            Routes.terms('syarat-dan-ketentuan'),
+                          ),
+                        ),
+                        _Row(
+                          icon: LucideIcons.fileText,
+                          label: 'Kebijakan Privasi',
+                          onTap: () =>
+                              context.push(Routes.terms('kebijakan-privasi')),
+                        ),
+                        _Row(
+                          icon: LucideIcons.fileText,
+                          label: 'Panduan Kondisi Kartu',
+                          onTap: () =>
+                              context.push(Routes.terms('kondisi-kartu')),
+                        ),
+                      ],
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final mode = ref.watch(themeModeProvider);
+                        final hint = switch (mode) {
+                          ThemeMode.system => 'Otomatis',
+                          ThemeMode.dark => 'Gelap',
+                          ThemeMode.light => 'Terang',
+                        };
+                        final icon = switch (mode) {
+                          ThemeMode.system => LucideIcons.sunMoon,
+                          ThemeMode.dark => LucideIcons.moon,
+                          ThemeMode.light => LucideIcons.sun,
+                        };
+                        return _Group(
+                          title: 'Pengaturan',
+                          children: [
+                            _Row(
+                              icon: icon,
+                              label: 'Tampilan',
+                              hint: hint,
+                              onTap: () =>
+                                  ref.read(themeModeProvider.notifier).cycle(),
+                            ),
+                            if (!isGuest)
+                              _Row(
+                                icon: LucideIcons.settings,
+                                label: 'Pengaturan akun',
+                                onTap: () => context.push(Routes.settings),
+                              ),
+                            if (isGuest)
+                              _Row(
+                                icon: LucideIcons.user,
+                                label: 'Masuk / Daftar',
+                                onTap: () => context.push(Routes.login),
+                              )
+                            else
+                              _Row(
+                                icon: LucideIcons.logOut,
+                                label: 'Keluar',
+                                destructive: true,
+                                onTap: () => _confirmLogout(context, ref),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
       ),
     );
+  }
+
+  /// Refetches what this page actually reads from the network — the saldo
+  /// figure and the two unread counts. Everything else here is a static
+  /// link, and the session itself is left alone: invalidating [authProvider]
+  /// would take every provider watching it down with it and swap this page
+  /// for its skeleton mid-gesture.
+  Future<void> _refresh(WidgetRef ref) async {
+    ref.invalidate(walletBalanceProvider);
+    ref.invalidate(chatThreadsProvider);
+    try {
+      // Awaited so the spinner stays until the figures are back; snapping
+      // straight back reads as a refresh that did nothing.
+      await Future.wait<void>([
+        ref.read(walletBalanceProvider.future),
+        ref.read(chatThreadsProvider.future),
+        ref.read(notificationsProvider.notifier).refresh(),
+      ]);
+    } catch (_) {
+      // A failed refetch leaves the previous figures in place — better than
+      // an error banner over a page that is mostly navigation.
+    }
   }
 
   void _confirmLogout(BuildContext context, WidgetRef ref) {

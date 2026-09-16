@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
+import '../providers/supabase_provider.dart';
 
 /// Authenticated transport for the handful of pokepedia.id routes a mobile
 /// client legitimately needs.
@@ -661,5 +662,5 @@ class ApiAuthRefusedException extends ApiAuthException {
 }
 
 final pokepediaApiProvider = Provider(
-  (ref) => PokepediaApi(Supabase.instance.client),
+  (ref) => PokepediaApi(ref.watch(supabaseClientProvider)),
 );

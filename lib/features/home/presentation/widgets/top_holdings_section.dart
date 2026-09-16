@@ -14,9 +14,11 @@ import '../../usecase/portfolio_value_notifier.dart';
 
 /// "Nilai Tertinggi" — the selected portfolio's most valuable holdings.
 class TopHoldingsSection extends ConsumerWidget {
-  const TopHoldingsSection({super.key, this.limit = 3});
+  const TopHoldingsSection({super.key, this.limit = 2});
 
-  /// How many rows before "Lihat semua" takes over.
+  /// How many rows before "Lihat semua" takes over. Two: the snippet is a
+  /// glance at what the collection is worth, and the page has a marketplace
+  /// under it that people are scrolling for.
   final int limit;
 
   @override

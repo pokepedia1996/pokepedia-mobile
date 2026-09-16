@@ -57,13 +57,22 @@ class SelectionSheet extends StatelessWidget {
               elevation: 8,
               borderRadius: BorderRadius.circular(AppRadius.lg),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppRadius.lg),
                   border: Border.all(color: context.borderColor),
                 ),
                 child: Row(
                   children: [
+                    // Clearing the ticks is an X on the count, not a second
+                    // "Batal" — the header already has one, and that one
+                    // leaves Kelola entirely.
+                    IconButton(
+                      onPressed: onClear,
+                      icon: const Icon(LucideIcons.x, size: 18),
+                      tooltip: 'Bersihkan pilihan',
+                      visualDensity: VisualDensity.compact,
+                    ),
                     Expanded(
                       child: Text(
                         '$count kartu dipilih',
@@ -72,7 +81,7 @@ class SelectionSheet extends StatelessWidget {
                     ),
                     if (busy)
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        padding: EdgeInsets.symmetric(horizontal: 14),
                         child: SizedBox(
                           width: 16,
                           height: 16,
@@ -80,10 +89,6 @@ class SelectionSheet extends StatelessWidget {
                         ),
                       )
                     else ...[
-                      TextButton(
-                        onPressed: onClear,
-                        child: const Text('Batal'),
-                      ),
                       PopupMenuButton<BatchAction>(
                         icon: const Icon(LucideIcons.ellipsisVertical),
                         tooltip: 'Aksi',

@@ -34,7 +34,7 @@ class PaymentMethodPicker extends StatelessWidget {
   final int grandTotal;
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
-  final int walletBalance;
+  final int? walletBalance;
   final ValueChanged<PaymentPick> onPick;
 
   Future<void> _open(BuildContext context) async {
@@ -116,7 +116,7 @@ class PaymentMethodPicker extends StatelessWidget {
                   ),
                   Text(
                     walletSelected
-                        ? 'Saldo: ${formatRupiah(walletBalance)}'
+                        ? _saldoLabel(walletBalance)
                         : meta?.description ??
                               (grandTotal < qrisMaxIdr
                                   ? 'QRIS tersedia'
@@ -151,7 +151,7 @@ class _PaymentMethodSheet extends StatelessWidget {
   final int grandTotal;
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
-  final int walletBalance;
+  final int? walletBalance;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +163,12 @@ class _PaymentMethodSheet extends StatelessWidget {
     final va = paymentChannels
         .where((m) => m.group == PaymentChannelGroup.va)
         .toList();
-    final walletInsufficient = walletBalance < grandTotal;
+    // Three states, not two: an unknown balance disables the row the same
+    // way an insufficient one does, but must not accuse the buyer of being
+    // short when nobody has looked yet.
+    final balance = walletBalance;
+    final walletInsufficient = balance != null && balance < grandTotal;
+    final walletDisabled = balance == null || walletInsufficient;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
@@ -211,11 +216,11 @@ class _PaymentMethodSheet extends StatelessWidget {
                     caption: 'Bayar pakai saldo pokepedia.id',
                   ),
                   InkWell(
-                    onTap: walletInsufficient
+                    onTap: walletDisabled
                         ? null
                         : () => Navigator.of(context).pop(WalletPick()),
                     child: Opacity(
-                      opacity: walletInsufficient ? 0.5 : 1,
+                      opacity: walletDisabled ? 0.5 : 1,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
@@ -249,8 +254,7 @@ class _PaymentMethodSheet extends StatelessWidget {
                                   ),
                                   Text.rich(
                                     TextSpan(
-                                      text:
-                                          'Saldo: ${formatRupiah(walletBalance)}',
+                                      text: _saldoLabel(balance),
                                       style: AppTypography.caption(
                                         context.mutedForeground,
                                       ),
@@ -482,3 +486,9 @@ class _SelectedDot extends StatelessWidget {
     );
   }
 }
+
+/// The saldo caption. Null is "still loading", which is not the same claim as
+/// Rp0 — the buyer has no idea their balance is being fetched, and a zero
+/// they did not earn reads as a bug.
+String _saldoLabel(int? balance) =>
+    balance == null ? 'Memuat saldo...' : 'Saldo: ${formatRupiah(balance)}';

@@ -132,12 +132,12 @@ class CartRepository {
       final sellerId = row['user_id'] as String;
       final profile = profileById[sellerId];
       final store = storeById[sellerId];
-      final username = profile?['username'] as String? ?? 'Pengguna';
       listingById[row['id'] as int] = ListingModel.fromRow(
         row,
         card: card,
-        storeSlug: (store?['store_slug'] as String?) ?? username,
-        storeName: (store?['store_name'] as String?) ?? '@$username',
+        storeSlug: store?['store_slug'] as String?,
+        storeName: store?['store_name'] as String?,
+        sellerUsername: profile?['username'] as String?,
         isVerified: (store?['is_verified'] as bool?) ?? false,
         cityName: (store?['city_name'] as String?) ?? '',
         sellerAvatarUrl: profile?['avatar_url'] as String?,
@@ -195,9 +195,21 @@ class CartRepository {
   /// `apply_coupon` RPC the web's `/api/coupons/apply` wraps. This only
   /// validates and prices the discount — the coupon is actually redeemed
   /// server-side when the invoice is created.
+  /// [paymentChannel] is the Xendit channel code the buyer has picked. It is
+  /// required rather than optional, and not because the discount needs it:
+  /// `apply_coupon` is overloaded, and the 4-argument form differs from the
+  /// 5-argument one only by this parameter. Sending `p_gateway_fee` without
+  /// it matched both, and PostgREST refuses an ambiguous call —
+  /// "Could not choose the best candidate function between: ...". Naming the
+  /// channel picks the 5-argument overload outright, which is the same one
+  /// web's `/api/coupons/apply` reaches.
+  ///
+  /// The coupon button is gated on a channel being chosen, so there is always
+  /// one to send by the time this runs.
   Future<CouponResult> applyCoupon({
     required String code,
     required int itemsSubtotal,
+    required String? paymentChannel,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
@@ -210,11 +222,11 @@ class CartRepository {
           'p_code': code.trim().toUpperCase(),
           'p_user_id': userId,
           'p_items_subtotal': itemsSubtotal,
-          // The gateway fee depends on the payment channel, which is only
-          // chosen at the payment step — quote against zero so a
-          // fee-waiving coupon reads as "no discount yet" rather than a
-          // number that later changes.
-          'p_gateway_fee': 0,
+          // `p_gateway_fee` is deliberately not sent: the 5-argument overload
+          // defaults it, and the server derives the fee from the channel
+          // rather than trusting a number the client made up. Web omits it
+          // for the same reason.
+          'p_payment_channel': paymentChannel,
         },
       );
       return CouponResult.fromRpc(result as Map<String, dynamic>?);

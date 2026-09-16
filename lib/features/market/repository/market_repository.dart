@@ -364,15 +364,15 @@ class MarketRepository {
     return ListingModel.fromRow(
       row,
       card: CardModel.fromRow(cardRow),
-      storeSlug: store?['store_slug'] as String? ?? '',
+      // Both fall through to the username, so a buyer who never opened a
+      // storefront is named by their handle and still links to it.
+      storeSlug: store?['store_slug'] as String?,
+      storeName: storeName,
+      sellerUsername: username,
       // "Pembeli" only when the buyer has neither a shop nor a username —
       // a deleted or half-registered account, not the common case it used
       // to stand in for.
-      storeName: (storeName?.isNotEmpty ?? false)
-          ? storeName!
-          : (username?.isNotEmpty ?? false)
-          ? username!
-          : 'Pembeli',
+      nameFallback: 'Pembeli',
       isVerified: store?['is_verified'] as bool? ?? false,
       cityName: store?['city_name'] as String? ?? '',
       sellerAvatarUrl: profile?['avatar_url'] as String?,

@@ -10,6 +10,7 @@ import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/auth/presentation/signup_page.dart';
 import '../../features/cart/presentation/cart_page.dart';
 import '../../features/cart/presentation/checkout_page.dart';
+import '../../features/cart/presentation/checkout_thankyou_page.dart';
 import '../../features/chat/presentation/chat_inbox_page.dart';
 import '../../features/chat/presentation/chat_thread_page.dart';
 import '../../features/chat/repository/models/chat_models.dart';
@@ -223,10 +224,18 @@ final appRouter = GoRouter(
     GoRoute(path: Routes.cart, builder: (_, __) => const CartPage()),
     // Review, delivery address and promo code are native; the page itself
     // pushes the WebView for courier choice and payment, which need the
-    // Biteship and Xendit secrets plus `service_role` RPCs. The web app's
-    // own `/cart/checkout/success` redirect happens inside that WebView, so
-    // there's no separate native success route to register.
+    // Biteship and Xendit secrets plus `service_role` RPCs. A card payment's
+    // `/cart/checkout/success` redirect happens inside that WebView, which is
+    // why the route below is only ever reached by a saldo checkout — that one
+    // never opens a WebView at all.
     GoRoute(path: Routes.checkout, builder: (_, __) => const CheckoutPage()),
+    GoRoute(
+      path: Routes.checkoutSuccess,
+      builder: (_, state) => CheckoutThankYouPage(
+        cardCount: int.tryParse(state.uri.queryParameters['cards'] ?? '') ?? 0,
+        totalAmount: int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
+      ),
+    ),
     GoRoute(
       path: Routes.orders,
       builder: (_, __) => const OrdersPage(),
@@ -327,10 +336,20 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: ':slug',
-          builder: (_, state) => ChatThreadPage(
-            slug: state.pathParameters['slug']!,
-            titleHint: state.extra as String?,
-          ),
+          // `extra` is a bare title from most callers, and the full target
+          // from a listing — which carries the card to pin.
+          builder: (_, state) {
+            final extra = state.extra;
+            final target = extra is ChatTarget ? extra : null;
+            return ChatThreadPage(
+              slug: state.pathParameters['slug']!,
+              titleHint: target?.title ?? (extra is String ? extra : null),
+              seedContext: target?.listingContext,
+              listingId:
+                  target?.listingId ??
+                  int.tryParse(state.uri.queryParameters['listing'] ?? ''),
+            );
+          },
         ),
       ],
     ),

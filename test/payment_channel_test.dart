@@ -63,4 +63,92 @@ void main() {
       );
     });
   });
+
+  group('autoSelectPayment', () {
+    // The buyer is never asked to pick first; these are the defaults they
+    // land on, in the order the rule resolves them.
+
+    test('saldo wins whenever it covers the bill', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 250000,
+        walletBalance: 300000,
+      );
+      expect(pick.method, PaymentMethod.wallet);
+      expect(pick.channel, isNull);
+    });
+
+    test('exactly enough saldo still counts', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 250000,
+        walletBalance: 250000,
+      );
+      expect(pick.method, PaymentMethod.wallet);
+    });
+
+    test('a short balance falls to QRIS under the cap', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 250000,
+        walletBalance: 249999,
+      );
+      expect(pick.method, PaymentMethod.xendit);
+      expect(pick.channel, PaymentChannel.qris);
+    });
+
+    test('an empty wallet on a big bill lands on a VA bank', () {
+      final pick = autoSelectPayment(grandTotalIdr: 750000, walletBalance: 0);
+      expect(pick.method, PaymentMethod.xendit);
+      expect(pick.channel, PaymentChannel.bni);
+    });
+
+    test('the bank last paid with is preferred over the first in the list', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 750000,
+        walletBalance: 0,
+        lastPaidChannel: PaymentChannel.mandiri,
+      );
+      expect(pick.channel, PaymentChannel.mandiri);
+    });
+
+    test('a VA habit gives way to QRIS below the cap', () {
+      // The case the request names outright: last time was a VA bank, but
+      // this bill is small, so VA is not on offer at all.
+      final pick = autoSelectPayment(
+        grandTotalIdr: 599999,
+        walletBalance: 0,
+        lastPaidChannel: PaymentChannel.bni,
+      );
+      expect(pick.channel, PaymentChannel.qris);
+    });
+
+    test('a QRIS habit gives way to VA at the cap', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 600000,
+        walletBalance: 0,
+        lastPaidChannel: PaymentChannel.qris,
+      );
+      expect(pick.channel, PaymentChannel.bni);
+    });
+
+    test('saldo outranks a VA habit', () {
+      final pick = autoSelectPayment(
+        grandTotalIdr: 700000,
+        walletBalance: 700000,
+        lastPaidChannel: PaymentChannel.bri,
+      );
+      expect(pick.method, PaymentMethod.wallet);
+    });
+
+    test('a fee-waiver coupon keeps the buyer on the gateway', () {
+      // Saldo pays no gateway fee, so switching would void the coupon the
+      // buyer just applied.
+      final pick = autoSelectPayment(
+        grandTotalIdr: 700000,
+        walletBalance: 700000,
+        lastPaidChannel: PaymentChannel.bri,
+        holdsFeeWaiver: true,
+      );
+      expect(pick.method, PaymentMethod.xendit);
+      expect(pick.channel, PaymentChannel.bri);
+    });
+  });
 }

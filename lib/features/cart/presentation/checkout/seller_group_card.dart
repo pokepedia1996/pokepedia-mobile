@@ -11,7 +11,6 @@ import '../../repository/checkout_pricing.dart';
 import '../../repository/models/checkout_models.dart';
 import '../../repository/models/cart_item.dart';
 import 'courier_picker.dart';
-import 'package:logging/logging.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// One seller's items within the cart, plus their shipping/insurance
@@ -62,8 +61,6 @@ class SellerGroupCard extends StatelessWidget {
     final checkboxChecked =
         insuranceAvailable && (insuranceEnabled || mandatory);
     final checkboxDisabled = !insuranceAvailable || mandatory;
-    final log = Logger('NetworkService');
-    log.info(courierOptions);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(

@@ -13,16 +13,70 @@ import '../../core/theme/app_typography.dart';
 /// one small table, and inline bold / links / code. Supporting exactly that
 /// keeps the typography on [AppTypography] rather than a package's own
 /// theme, which is what makes it look like the rest of the app.
-class SimpleMarkdown extends StatelessWidget {
+class SimpleMarkdown extends StatefulWidget {
   const SimpleMarkdown({super.key, required this.data});
 
   final String data;
+
+  /// The anchor a heading answers to, by GitHub's rules — which is what these
+  /// documents were written against: lowercase, drop anything that is not a
+  /// letter, digit, space or hyphen, then spaces to hyphens.
+  ///
+  /// Runs of hyphens are deliberately left alone. "Integrity & Imperfection"
+  /// anchors as `integrity--imperfection` there, and collapsing them here
+  /// would stop that link resolving.
+  ///
+  /// Public because it is the contract between a document's table of contents
+  /// and this renderer: a test pins every bundled document's links against it.
+  static String headingSlug(String heading) => heading
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9 \-]'), '')
+      .replaceAll(' ', '-');
+
+  @override
+  State<SimpleMarkdown> createState() => _SimpleMarkdownState();
+}
+
+class _SimpleMarkdownState extends State<SimpleMarkdown> {
+  /// One key per heading slug, so a `[Label](#slug)` link in a document's own
+  /// table of contents can find the heading it names. Filled while rendering
+  /// and dropped when the document changes, since the next one's headings are
+  /// not these.
+  final _anchors = <String, GlobalKey>{};
+
+  @override
+  void didUpdateWidget(covariant SimpleMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) _anchors.clear();
+  }
+
+  GlobalKey _anchorFor(String heading) =>
+      _anchors.putIfAbsent(SimpleMarkdown.headingSlug(heading), GlobalKey.new);
+
+  /// Scrolls the heading a table-of-contents entry names into view.
+  ///
+  /// Silent when the slug matches no heading: the documents are edited by
+  /// hand, so a renamed heading leaves a link pointing at nothing, and
+  /// jumping somewhere arbitrary would be worse than staying put.
+  Future<void> _scrollToAnchor(String slug) async {
+    final target = _anchors[slug]?.currentContext;
+    if (target == null) return;
+    await Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+      // Leading edge of the viewport, which `AppBarOverlayBody`'s SafeArea has
+      // already cleared of the app bar, so the heading lands in view rather
+      // than under it.
+      alignment: 0,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: _blocks(context, data),
+      children: _blocks(context, widget.data),
     );
   }
 
@@ -69,6 +123,7 @@ class SimpleMarkdown extends StatelessWidget {
       } else if (trimmed.startsWith('# ')) {
         blocks.add(
           Padding(
+            key: _anchorFor(trimmed.substring(2)),
             padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 18, bottom: 8),
             child: Text(
               trimmed.substring(2),
@@ -79,6 +134,7 @@ class SimpleMarkdown extends StatelessWidget {
       } else if (trimmed.startsWith('#### ') || trimmed.startsWith('### ')) {
         blocks.add(
           Padding(
+            key: _anchorFor(trimmed.replaceFirst(RegExp(r'^#{3,4} '), '')),
             padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 14, bottom: 4),
             child: Text(
               trimmed.replaceFirst(RegExp(r'^#{3,4} '), ''),
@@ -89,6 +145,7 @@ class SimpleMarkdown extends StatelessWidget {
       } else if (trimmed.startsWith('## ')) {
         blocks.add(
           Padding(
+            key: _anchorFor(trimmed.substring(3)),
             padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 16, bottom: 6),
             child: Text(
               trimmed.substring(3),
@@ -143,14 +200,19 @@ class SimpleMarkdown extends StatelessWidget {
     return blocks;
   }
 
-  Widget _inline(BuildContext context, String text) => _InlineText(text: text);
+  Widget _inline(BuildContext context, String text) =>
+      _InlineText(text: text, onAnchor: _scrollToAnchor);
 }
 
 /// Bold, inline code and links inside one paragraph.
 class _InlineText extends StatelessWidget {
-  const _InlineText({required this.text});
+  const _InlineText({required this.text, this.onAnchor});
 
   final String text;
+
+  /// Handles `#heading` hrefs. Null where nothing is scrollable around the
+  /// text, in which case such a link simply does nothing.
+  final Future<void> Function(String slug)? onAnchor;
 
   static final _pattern = RegExp(
     r'\*\*(.+?)\*\*|`(.+?)`|\[([^\]]+)\]\(([^)]+)\)',
@@ -195,7 +257,7 @@ class _InlineText extends StatelessWidget {
               decoration: TextDecoration.underline,
               decorationColor: colors.primary,
             ),
-            recognizer: TapGestureRecognizer()..onTap = () => _open(href),
+            recognizer: TapGestureRecognizer()..onTap = () => _tap(href),
           ),
         );
       }
@@ -206,6 +268,17 @@ class _InlineText extends StatelessWidget {
     }
 
     return Text.rich(TextSpan(style: base, children: spans));
+  }
+
+  /// A `#heading` href is the document pointing at itself — the tables of
+  /// contents these documents open with — so it scrolls rather than leaving
+  /// the app. Everything else is a real destination.
+  void _tap(String href) {
+    if (href.startsWith('#')) {
+      onAnchor?.call(href.substring(1));
+      return;
+    }
+    _open(href);
   }
 
   /// Site-relative hrefs in the docs point at pokepedia.id pages that the app

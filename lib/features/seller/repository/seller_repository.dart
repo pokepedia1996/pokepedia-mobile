@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/providers/supabase_provider.dart';
 import 'models/seller_dashboard.dart';
 
 /// The seller's own store identity, for the "Lihat Toko" link.
@@ -100,5 +101,5 @@ class SellerRepository {
 }
 
 final sellerRepositoryProvider = Provider(
-  (ref) => SellerRepository(Supabase.instance.client),
+  (ref) => SellerRepository(ref.watch(supabaseClientProvider)),
 );

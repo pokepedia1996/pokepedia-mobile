@@ -1,11 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pokepedia_mobile/app/app.dart';
 import 'package:pokepedia_mobile/app/router/app_router.dart';
-import 'package:pokepedia_mobile/shared/data/dummy_catalog.dart';
+import 'package:pokepedia_mobile/shared/widgets/app_bottom_nav.dart';
+
+/// Catalog routes are exercised with literal slugs rather than rows from a
+/// catalog fixture: every page behind them loads from Supabase now, so no
+/// slug this test can name resolves to anything, and what's under test is
+/// that the route builds — not what it finds.
+const _packSlug = 'sv3';
+const _cardId = 1;
+const _storeHandle = 'toko';
+
+/// Likewise for the per-account server data behind the order routes, which
+/// this test reaches signed out.
+const _orderSlug = '00000000-0000-4000-8000-000000000000';
 
 void main() {
+  // `appRouter` listens to `Supabase.instance` and reads the session in its
+  // redirect, so it cannot be built until a client exists. Pointed at a
+  // local address that is never actually contacted: nothing here signs in,
+  // and the pages assert on building, not on what loads.
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(
+      url: 'http://localhost:54321',
+      publishableKey: 'test-publishable-key',
+    );
+  });
+
   testWidgets('every route in the app renders without throwing', (
     WidgetTester tester,
   ) async {
@@ -13,22 +40,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    final pack = DummyCatalog.packs.first;
-    final card = DummyCatalog.allCards.first;
-    final store = DummyCatalog.stores.first;
-    // Orders are per-account server data now, and this test runs signed out,
-    // so the order routes are exercised with a slug that resolves to nothing:
-    // what's under test here is that the route builds, not what it finds.
-    const orderSlug = '00000000-0000-4000-8000-000000000000';
+    const orderSlug = _orderSlug;
 
     final routes = <String>[
       '/expansions',
-      '/expansions/${pack.slug}',
-      '/expansions/${pack.slug}/${card.id}',
+      '/expansions/$_packSlug',
+      '/expansions/$_packSlug/$_cardId',
       '/advanced-search',
       '/portfolio/collection',
       '/market',
-      '/market/${store.handle}',
+      '/market/$_storeHandle',
       '/account',
       '/login',
       '/signup',
@@ -60,7 +81,16 @@ void main() {
     ];
 
     for (final route in routes) {
-      appRouter.push(route);
+      // A shell branch root is switched to, never pushed. Pushing one onto
+      // the root navigator builds it a second time while the shell's
+      // IndexedStack still holds it, and the two copies reserve the same
+      // GlobalKey — a crash the app never hits, because the bottom nav
+      // reaches these through `goBranch`/`go`.
+      if (AppBottomNav.tabPaths.contains(route)) {
+        appRouter.go(route);
+      } else {
+        appRouter.push(route);
+      }
       await tester.pumpAndSettle();
       expect(
         tester.takeException(),
@@ -82,7 +112,7 @@ void main() {
     for (final label in [
       'Ekspansi',
       'Pencarian',
-      'Koleksi',
+      'Portofolio',
       'Market',
       'Akun',
       'Beranda',

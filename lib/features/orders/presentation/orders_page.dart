@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../shared/widgets/app_search_field.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/utils/image_url.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -120,6 +121,43 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     _reload();
   }
 
+  /// Drops an unpaid checkout, behind the same confirmation web asks for —
+  /// the stock goes back on sale, so it is not a step to take by mistake.
+  Future<void> _cancelPending(PendingCheckout checkout) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Batalkan pembayaran?'),
+        content: const Text(
+          'Kartu akan tersedia kembali untuk pembeli lain.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Kembali'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Batalkan Pembayaran'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final error = await ref
+        .read(ordersRepositoryProvider)
+        .cancelPendingCheckout(checkout.externalId);
+    if (!mounted) return;
+    if (error != null) {
+      _toast(error);
+      return;
+    }
+    _toast('Pembayaran dibatalkan');
+    ref.invalidate(myPendingCheckoutsProvider);
+    _reload();
+  }
+
   void _toast(String message) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -173,7 +211,13 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     );
   }
 
-  void _reload() => ref.invalidate(ordersProvider);
+  /// Returns a future so `RefreshIndicator` holds its spinner until the
+  /// orders have actually come back; a bare invalidate completes at once and
+  /// reads as a refresh that did nothing.
+  Future<void> _reload() async {
+    ref.invalidate(ordersProvider);
+    await ref.read(ordersProvider.future);
+  }
 
   Widget _buildBody(List<OrderModel> orders) {
     // Unpaid checkouts aren't orders yet — the webhook creates those — so
@@ -259,6 +303,8 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
                         return _PendingCheckoutCard(
                           checkout: visiblePending[i],
                           onPay: () => _resumePayment(visiblePending[i]),
+                          onCancel: () =>
+                              _cancelPending(visiblePending[i]),
                         );
                       }
                       final order = visible[i - visiblePending.length];
@@ -926,86 +972,281 @@ class _CardFooter extends StatelessWidget {
 
 /// An unpaid checkout, shown above the settled orders under Belum Bayar.
 ///
-/// Visibly not an order: it has no order number, no shipment and no detail
-/// page to open — just a countdown and the way back to paying. Dressing it
-/// as an order would promise a page that doesn't exist yet.
+/// Ports `features/orders/components/card/pending-checkout-card.tsx` band for
+/// band: the seller header with its status pill, the card art and name, the
+/// remaining-time pill, then the total with Batalkan / Lanjutkan Bayar.
+///
+/// Still visibly not an order — it has no order number and no detail page to
+/// open — but it is the one row that needs the buyer, so it gets the same
+/// weight here as it does on the site rather than a one-line summary.
 class _PendingCheckoutCard extends StatelessWidget {
-  const _PendingCheckoutCard({required this.checkout, required this.onPay});
+  const _PendingCheckoutCard({
+    required this.checkout,
+    required this.onPay,
+    required this.onCancel,
+  });
 
   final PendingCheckout checkout;
   final VoidCallback onPay;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PendingHeader(checkout: checkout),
+          _PendingItem(checkout: checkout),
+          _PendingCountdownBand(remaining: checkout.remaining),
+          _PendingFooter(
+            total: checkout.total,
+            canPay: checkout.hasInvoice,
+            onPay: onPay,
+            onCancel: onCancel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Band 1 — who the cart is with, and that it is waiting on payment.
+class _PendingHeader extends StatelessWidget {
+  const _PendingHeader({required this.checkout});
+
+  final PendingCheckout checkout;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final secondary = checkout.sellerSecondaryName;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.secondary.withValues(alpha: 0.3),
+        border: Border(bottom: BorderSide(color: context.borderColor)),
+      ),
+      child: Row(
+        children: [
+          SellerAvatar(
+            name: checkout.displayName,
+            imageUrl: checkout.sellerImageUrl,
+            size: 28,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  checkout.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.captionSemibold(colors.onSurface),
+                ),
+                if (secondary != null)
+                  Text(
+                    secondary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          const StatusPill.tone(
+            label: 'Menunggu Pembayaran',
+            tone: InlinePillTone.warning,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Band 2 — the card art and what was bought.
+class _PendingItem extends StatelessWidget {
+  const _PendingItem({required this.checkout});
+
+  final PendingCheckout checkout;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final first = checkout.items.isEmpty ? null : checkout.items.first;
     final extra = checkout.items.length - 1;
-    final remaining = checkout.remaining;
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Container(
+              width: 56,
+              height: 56,
+              color: colors.secondary,
+              child: first?.imageUrl == null
+                  ? Icon(
+                      LucideIcons.image,
+                      size: 18,
+                      color: context.mutedForeground,
+                    )
+                  : Image.network(
+                      proxyImageUrl(first!.imageUrl)!,
+                      fit: BoxFit.cover,
+                      // Cards are portrait and the crop is square, so the
+                      // artwork rather than the middle of the frame.
+                      alignment: const Alignment(0, -0.7),
+                      errorBuilder: (_, __, ___) => Icon(
+                        LucideIcons.image,
+                        size: 18,
+                        color: context.mutedForeground,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  first?.cardName ?? 'Kartu',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+                if (extra > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '+ $extra item lain',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Band 3 — how long is left before the stock goes back on sale.
+class _PendingCountdownBand extends StatelessWidget {
+  const _PendingCountdownBand({required this.remaining});
+
+  final Duration? remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.borderColor)),
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: InlinePill(
+          tone: InlinePillTone.warning,
+          icon: LucideIcons.wallet,
+          label: remaining == null
+              ? 'Selesaikan pembayaran'
+              : 'Sisa waktu: ${formatRemaining(remaining!)}',
+        ),
+      ),
+    );
+  }
+}
+
+/// Band 4 — the total, and the two things the buyer can do about it.
+class _PendingFooter extends StatelessWidget {
+  const _PendingFooter({
+    required this.total,
+    required this.canPay,
+    required this.onPay,
+    required this.onCancel,
+  });
+
+  final int total;
+  final bool canPay;
+  final VoidCallback onPay;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        // Tinted edge so it reads as the one row that still needs the buyer.
-        border: Border.all(
-          color: context.appSemantic.condMp.withValues(alpha: 0.5),
-        ),
+        color: colors.secondary.withValues(alpha: 0.2),
+        border: Border(top: BorderSide(color: context.borderColor)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  first?.cardName ?? 'Pesanan',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
-                ),
+              Text(
+                'Total Pesanan:',
+                style: AppTypography.caption(context.mutedForeground),
               ),
               const SizedBox(width: 6),
-              StatusPill(
-                label: 'Belum Dibayar',
-                color: context.appSemantic.condMp,
+              Text(
+                formatRupiah(total),
+                style: AppTypography.bodySmSemibold(colors.onSurface),
               ),
             ],
           ),
-          if (extra > 0)
-            Text(
-              '+ $extra item lain',
-              style: AppTypography.caption(context.mutedForeground),
-            ),
-          const SizedBox(height: 4),
-          Text(
-            formatRupiah(checkout.total),
-            style: AppTypography.bodySemibold(colors.onSurface),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
             children: [
-              Icon(LucideIcons.clock, size: 14, color: context.mutedForeground),
-              const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  remaining == null
-                      ? 'Selesaikan pembayaran'
-                      : 'Bayar dalam ${_countdown(remaining)}',
-                  style: AppTypography.caption(context.mutedForeground),
+                child: OutlinedButton(
+                  onPressed: onCancel,
+                  child: const Text('Batalkan'),
                 ),
               ),
-              TextButton(onPressed: onPay, child: const Text('Bayar sekarang')),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  // Without an invoice the buyer never reached the payment
+                  // page, so there is nothing to resume — the cart lapses.
+                  onPressed: canPay ? onPay : null,
+                  child: const Text('Lanjutkan Bayar'),
+                ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  static String _countdown(Duration d) {
-    if (d.inHours >= 1) return '${d.inHours} jam';
-    if (d.inMinutes >= 1) return '${d.inMinutes} menit';
-    return 'kurang dari 1 menit';
-  }
+/// Ports web's `PendingCountdown` wording — "1j 34m", down to "<1m".
+///
+/// Hours and minutes rather than the app's old "1 jam": a buyer with 34
+/// minutes left was told "1 jam", which reads as more room than they have.
+String formatRemaining(Duration d) {
+  if (d.inMinutes < 1) return '<1m';
+  final hours = d.inHours;
+  final minutes = d.inMinutes % 60;
+  if (hours >= 1) return '${hours}j ${minutes}m';
+  return '${minutes}m';
 }

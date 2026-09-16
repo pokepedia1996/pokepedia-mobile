@@ -302,7 +302,11 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             sliver: SliverGrid(
-              gridDelegate: cardGridDelegate(context),
+              gridDelegate: cardGridDelegate(
+                context,
+                // The stepper row only exists while editing.
+                extraChrome: _editMode ? cardGridItemFooterChrome : 0,
+              ),
               delegate: SliverChildBuilderDelegate(
                 (context, i) => _collectionCard(visible[i]),
                 childCount: visible.length,
@@ -435,97 +439,64 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
   }
 
   Widget _collectionCard(CardModel card, {bool list = false}) {
-    final tile = list
-        ? CardListItem(
-            card: card,
-            onTap: () =>
-                context.push(Routes.cardDetail(card.packSlug, card.id)),
-          )
-        : CardGridItem(
-            card: card,
-            onTap: () =>
-                context.push(Routes.cardDetail(card.packSlug, card.id)),
-          );
-
-    if (!_editMode) return tile;
+    // Out of edit mode a tile is just a link to the card.
+    if (!_editMode) {
+      void open() => context.push(Routes.cardDetail(card.packSlug, card.id));
+      return list
+          ? CardListItem(card: card, onTap: open)
+          : CardGridItem(card: card, onTap: open);
+    }
 
     // In edit mode the tile stops being a link — it's a checkbox. Tapping
     // through to a card page mid-edit would strand the staged changes.
+    //
+    // The stepper rides in the tile's own footer, the way web's edit mode
+    // renders it, rather than floating over the price line: an overlay had
+    // to cover the tile's text to sit anywhere, and its taps then had to be
+    // carved back out of the tile underneath.
     final selected = _selected.contains(card.id);
-    return GestureDetector(
-      onTap: () => _toggleSelected(card),
-      // Opaque, not the default `deferToChild`: the tile underneath is
-      // wrapped in an IgnorePointer, so with deferToChild nothing in the
-      // card's own area is hit-testable and only the counter took taps.
-      behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          IgnorePointer(child: tile),
-          // Selection state, drawn over the art so it reads at a glance.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: selected
-                        ? context.appColors.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                  color: selected
-                      ? context.appColors.primary.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                ),
+    final footer = _stepperRow(card);
+    return list
+        ? CardListItem(
+            card: card,
+            selected: selected,
+            onTap: () => _toggleSelected(card),
+            footer: footer,
+          )
+        : CardGridItem(
+            card: card,
+            selected: selected,
+            onTap: () => _toggleSelected(card),
+            footer: footer,
+          );
+  }
+
+  /// The quantity stepper, and the trash that zeroes a card out in one tap
+  /// instead of holding minus down — web's edit-mode row.
+  Widget _stepperRow(CardModel card) {
+    final quantity = _edits[card.id] ?? card.owned;
+    return Row(
+      children: [
+        QuantitySelector(
+          value: quantity,
+          onChanged: (value) => _stage(card, value),
+          size: QuantitySelectorSize.sm,
+        ),
+        const Spacer(),
+        if (quantity > 0)
+          InkWell(
+            onTap: () => _stage(card, 0),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                LucideIcons.trash2,
+                size: 15,
+                color: context.appColors.error.withValues(alpha: 0.75),
               ),
             ),
           ),
-          Positioned(
-            top: 6,
-            left: 6,
-            child: IgnorePointer(
-              child: Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? context.appColors.primary
-                      : Theme.of(context).cardColor.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.borderColor),
-                ),
-                child: selected
-                    ? Icon(
-                        LucideIcons.check,
-                        size: 15,
-                        color: context.appColors.onPrimary,
-                      )
-                    : null,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              // Hugs the bottom edge with no padding of its own, so it sits
-              // over the price line and leaves the card's name uncovered.
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor.withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: context.borderColor),
-              ),
-              child: QuantitySelector(
-                value: _edits[card.id] ?? card.owned,
-                onChanged: (value) => _stage(card, value),
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 

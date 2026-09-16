@@ -70,7 +70,13 @@ class _SellerListingOffersPageState
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(receivedOffersProvider),
+        onRefresh: () async {
+          ref.invalidate(receivedOffersProvider);
+          // Awaited, or the spinner ends on the invalidate rather than on the
+          // data, and a refresh that fetched nothing looks the same as one
+          // that worked.
+          await ref.read(receivedOffersProvider.future);
+        },
         child: async.isLoading && offers.isEmpty
             ? const Center(child: PikachuLoader())
             : ListView(
