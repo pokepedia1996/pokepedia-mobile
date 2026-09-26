@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/core/network/pokepedia_api.dart';
+import 'package:pokepedia_mobile/core/network/session_cookie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A syntactically valid JWT — `Session.expiresAt` reads `exp` out of the
@@ -62,6 +63,40 @@ void main() {
         PokepediaApi.sessionCookieName('http://127.0.0.1:54321'),
         'sb-127-auth-token',
       );
+    });
+
+    /// The production 401. This build dials `auth.pokepedia.id`, a custom
+    /// domain in front of the project, so naming the cookie after our own URL
+    /// produced `sb-auth-auth-token` — while pokepedia-web reads
+    /// `sb-tlauakxyrxpwnwgdywum-auth-token`, the name its
+    /// `docs/security/firewall.md` states outright. The token's `iss` is the
+    /// project both sides share, so that is what names the cookie.
+    test('follows the token issuer, not the host this build dials', () {
+      // What the old rule produced from the production build's SUPABASE_URL.
+      expect(
+        PokepediaApi.sessionCookieName('https://auth.pokepedia.id'),
+        'sb-auth-auth-token',
+      );
+
+      // What the server actually reads, and what the app now sends.
+      expect(
+        supabaseAuthCookieNameForToken(
+          unsignedJwt({
+            'iss': 'https://tlauakxyrxpwnwgdywum.supabase.co/auth/v1',
+          }),
+        ),
+        'sb-tlauakxyrxpwnwgdywum-auth-token',
+      );
+    });
+
+    test('an unreadable token falls back rather than sending nothing', () {
+      for (final token in ['', 'nope', 'a.b', 'a.###.c']) {
+        expect(
+          supabaseAuthCookieNameForToken(token),
+          supabaseAuthCookieName,
+          reason: 'token: $token',
+        );
+      }
     });
   });
 
@@ -125,4 +160,13 @@ void main() {
       }
     });
   });
+}
+
+/// An unsigned JWT carrying [claims]. The signature is never checked when
+/// choosing a cookie name, and forging one would only name a cookie the
+/// server does not read.
+String unsignedJwt(Map<String, dynamic> claims) {
+  String seg(Map<String, dynamic> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  return '${seg({'alg': 'ES256', 'typ': 'JWT'})}.${seg(claims)}.sig';
 }

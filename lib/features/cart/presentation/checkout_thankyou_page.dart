@@ -50,10 +50,7 @@ class CheckoutThankYouPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 40,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(AppRadius.lg),

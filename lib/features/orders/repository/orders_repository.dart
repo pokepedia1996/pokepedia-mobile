@@ -8,6 +8,7 @@ import 'models/order_ref.dart';
 import 'models/pending_checkout.dart';
 import 'models/seller_order_detail.dart';
 import '../../../core/network/pokepedia_api.dart';
+import '../../../core/errors/user_message.dart';
 
 /// The card columns [OrderItemModel] needs, matching what
 /// `expansions_repository.dart` selects so both build the same [CardModel].
@@ -196,7 +197,7 @@ class OrdersRepository {
       await _api.post('/api/carts/$externalId/cancel', const {});
       return null;
     } on ApiException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -278,7 +279,9 @@ class OrdersRepository {
   }
 
   /// `listings.id` -> the card it sells, with the fields the card needs.
-  Future<Map<int, Map<String, dynamic>>> _cardArtByAskId(Set<int> askIds) async {
+  Future<Map<int, Map<String, dynamic>>> _cardArtByAskId(
+    Set<int> askIds,
+  ) async {
     if (askIds.isEmpty) return const {};
 
     final listings =
@@ -297,7 +300,9 @@ class OrdersRepository {
     final cards =
         await _client
                 .from('cards')
-                .select('id, name_id, image_url, collector_number, expansion_code')
+                .select(
+                  'id, name_id, image_url, collector_number, expansion_code',
+                )
                 .inFilter('id', cardIdByAsk.values.toSet().toList())
             as List;
 
@@ -449,7 +454,7 @@ class OrdersRepository {
       final code = result is Map ? result['error'] as String? : null;
       return _feedbackErrorMessage(code);
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -634,7 +639,7 @@ class OrdersRepository {
         _ => 'Gagal mengonfirmasi penerimaan.',
       };
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 

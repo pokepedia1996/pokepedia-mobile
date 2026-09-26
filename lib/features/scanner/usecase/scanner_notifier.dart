@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../../../shared/models/card_model.dart';
 import '../repository/models/scan_models.dart';
 import '../repository/scanner_repository.dart';
 import '../utils/card_capture.dart';
+import '../utils/scan_debug_dump.dart';
 
 /// Ports `features/scanner/hooks/useScanner.ts` — the state of the one scan
 /// currently in flight, separate from the batch it eventually lands in
@@ -80,6 +82,8 @@ class ScannerNotifier extends Notifier<ScanState> {
 
     ScanState next;
     try {
+      // Debug builds only — the exact crop the server is judging.
+      unawaited(dumpScanCapture(capture.bytes));
       final response = await ref
           .read(scannerRepositoryProvider)
           .scan(

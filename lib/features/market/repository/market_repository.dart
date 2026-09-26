@@ -6,6 +6,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../usecase/market_filters.dart';
 import 'models/listing_facets.dart';
+import 'models/market_page.dart';
 import 'models/store_feedback.dart';
 
 enum MarketBucket { all, listing, buylist, toko }
@@ -37,14 +38,23 @@ class MarketRepository {
 
   final SupabaseClient _client;
 
-  /// `p_window_hours: 0` disables the RPC's default "last 24h only" window
-  /// — without it the marketplace would look nearly empty most of the
-  /// time. Matches `app/market/page.tsx`'s own explicit override.
-  Future<List<ListingModel>> fetchListings({
+  /// One page of the marketplace feed.
+  ///
+  /// `p_window_hours: 0` disables the RPC's default "last 24h only" window —
+  /// without it the marketplace would look nearly empty most of the time.
+  /// Matches `app/market/page.tsx`'s own explicit override.
+  ///
+  /// [cursor] continues from the last row of the previous page. Keyset
+  /// rather than `p_offset`: the RPC's own note calls OFFSET the legacy mode,
+  /// and a feed people scroll while listings are being created would
+  /// otherwise repeat or skip rows as the window shifts under them.
+  Future<MarketListingsPage> fetchListings({
     required MarketBucket bucket,
     String query = '',
     MarketSort sort = MarketSort.createdDesc,
     MarketFilters filters = const MarketFilters(),
+    MarketCursor? cursor,
+    int limit = 40,
   }) async {
     final side = switch (bucket) {
       MarketBucket.listing => 'ask',
@@ -58,9 +68,19 @@ class MarketRepository {
                 'p_side': side,
                 'p_search': query.trim().isEmpty ? null : query.trim(),
                 'p_window_hours': 0,
-                'p_limit': 40,
+                'p_limit': limit,
                 'p_offset': 0,
                 'p_sort': sort.raw,
+                if (cursor != null) ...{
+                  'p_cursor_id': cursor.id,
+                  'p_cursor_created_at': cursor.createdAt
+                      .toUtc()
+                      .toIso8601String(),
+                  // The price modes have no "null cursor" escape in the RPC:
+                  // a partial cursor fails closed and returns nothing, so it
+                  // is always sent alongside the other two.
+                  'p_cursor_price': cursor.price,
+                },
                 if (filters.conditions.isNotEmpty)
                   'p_conditions': filters.conditions.map((c) => c.raw).toList(),
                 if (filters.rarities.isNotEmpty)
@@ -92,11 +112,28 @@ class MarketRepository {
     // Client-side because `get_recent_marketplace_listings` has no exclusion
     // parameter — its `p_seller_user_id` filters *to* a seller. The cost is
     // that a page can come back slightly short when you have listings in it.
-    return excludeOwnListings(
-      rows.map(
-        (r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>),
-      ),
-      _client.auth.currentUser?.id,
+    final parsed = rows
+        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
+        .toList();
+
+    // Whether more exist is decided by what the *server* returned, before
+    // own-listings are dropped: a page that came back full is a full page
+    // even if filtering leaves it short, and treating short-after-filtering
+    // as "the end" would truncate the feed for anyone who sells.
+    final last = parsed.isEmpty ? null : parsed.last;
+    return MarketListingsPage(
+      listings: excludeOwnListings(
+        parsed,
+        _client.auth.currentUser?.id,
+      ).toList(),
+      hasNext: parsed.length >= limit,
+      cursor: last == null
+          ? null
+          : MarketCursor(
+              id: last.id,
+              createdAt: last.createdAt,
+              price: last.price,
+            ),
     );
   }
 

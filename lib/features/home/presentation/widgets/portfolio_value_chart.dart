@@ -7,6 +7,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../repository/models/portfolio_value.dart';
 import '../../usecase/portfolio_value_notifier.dart';
+import '../../../../core/errors/user_message.dart';
 
 /// The collection-worth history line.
 ///
@@ -36,13 +37,14 @@ class PortfolioValueChart extends ConsumerWidget {
         ),
         error: (error, __) => _ChartMessage(
           title: 'Grafik tidak bisa dimuat',
-          // The real reason in debug only. Swallowing it entirely meant a
-          // chart that had been failing for a different reason each week
-          // looked identical every time, and "coba tarik" is no help when
-          // the table the series reads does not exist.
-          detail: kDebugMode
-              ? '$error'
-              : 'Coba tarik untuk memuat ulang.',
+          // The reason goes to the log, not the chart. It used to be shown
+          // in debug builds, which is where it was most likely to be seen by
+          // someone who was not a developer — the app is demoed and tested
+          // in debug far more often than it is read in a console.
+          detail: userFacingError(
+            error,
+            fallback: 'Coba tarik untuk memuat ulang.',
+          ),
         ),
         data: (series) {
           // Only genuinely *nothing* gets a message. A single day is a value

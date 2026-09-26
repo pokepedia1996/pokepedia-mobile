@@ -25,11 +25,31 @@ final topBarScrolledProvider = StateProvider<bool>((ref) => false);
 /// itself searches in place — see [QuickSearchField] — and hands the whole
 /// query to advanced search only when asked to.
 class AppTopBar extends ConsumerWidget {
-  const AppTopBar({super.key, this.showCart = true});
+  const AppTopBar({
+    super.key,
+    this.showCart = true,
+    this.searchField,
+    this.trailing,
+  });
 
   /// The cart button. On by default — Beranda and the other browsing tabs
   /// all lead to buying.
   final bool showCart;
+
+  /// Replaces the [QuickSearchField] in row two.
+  ///
+  /// Quick search is for pages that are not themselves about searching: it
+  /// carries its own suggestion panel and hands the query off to another
+  /// screen. Pencarian *is* the search screen, so its field drives the page
+  /// under it instead, and a second search UI on top of that would be two
+  /// boxes competing for the same typing.
+  final Widget? searchField;
+
+  /// An action pinned to the right of the search field — Pencarian's filter
+  /// toggle. Unlike the cart beside it this does not fold away on scroll:
+  /// it is how the filters are reached at all, so it has to stay reachable
+  /// wherever the reader has scrolled to.
+  final Widget? trailing;
 
   /// `window.scrollY > 100` in `NavbarMain`.
   static const morphThreshold = 100.0;
@@ -113,10 +133,11 @@ class AppTopBar extends ConsumerWidget {
                 // looking for", scan is "I'm holding it" — so it belongs on
                 // the search control rather than beside it.
                 Expanded(
-                  child: QuickSearchField(
-                    onScan: () => context.push(Routes.scan),
-                  ),
+                  child:
+                      searchField ??
+                      QuickSearchField(onScan: () => context.push(Routes.scan)),
                 ),
+                if (trailing != null) ...[const SizedBox(width: 8), trailing!],
                 if (showCart)
                   // The cart that takes over once the logo row's copy is gone.
                   // `widthFactor` animates the web's `width: 0 -> auto`, and

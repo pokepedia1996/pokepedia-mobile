@@ -128,9 +128,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Batalkan pembayaran?'),
-        content: const Text(
-          'Kartu akan tersedia kembali untuk pembeli lain.',
-        ),
+        content: const Text('Kartu akan tersedia kembali untuk pembeli lain.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -303,8 +301,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
                         return _PendingCheckoutCard(
                           checkout: visiblePending[i],
                           onPay: () => _resumePayment(visiblePending[i]),
-                          onCancel: () =>
-                              _cancelPending(visiblePending[i]),
+                          onCancel: () => _cancelPending(visiblePending[i]),
                         );
                       }
                       final order = visible[i - visiblePending.length];

@@ -9,6 +9,7 @@ import '../../../shared/utils/primary_collection.dart';
 import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
 import 'models/wantlist_model.dart';
+import '../../../core/errors/user_message.dart';
 
 const _deckSelect =
     'id, name, description, share_code, created_at, updated_at, deck_cards(quantity)';
@@ -126,7 +127,7 @@ class PortfolioRepository {
         return (deck: _mapDeckRow(row), error: null);
       } on PostgrestException catch (e) {
         if (e.code == '23505' && i < maxRetries - 1) continue;
-        return (deck: null, error: e.message);
+        return (deck: null, error: userFacingError(e));
       }
     }
     return (deck: null, error: 'Gagal membuat kode berbagi yang unik');
@@ -146,7 +147,7 @@ class PortfolioRepository {
           .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -162,7 +163,7 @@ class PortfolioRepository {
           .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -183,7 +184,7 @@ class PortfolioRepository {
           .single();
       return (deck: _mapDeckRow(row), error: null);
     } on PostgrestException catch (e) {
-      return (deck: null, error: e.message);
+      return (deck: null, error: userFacingError(e));
     }
   }
 
@@ -224,7 +225,7 @@ class PortfolioRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -268,7 +269,7 @@ class PortfolioRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -330,7 +331,7 @@ class PortfolioRepository {
           .single();
       return (id: row['id'] as int, error: null);
     } on PostgrestException catch (e) {
-      return (id: null, error: e.message);
+      return (id: null, error: userFacingError(e));
     }
   }
 
@@ -356,7 +357,7 @@ class PortfolioRepository {
           .eq('is_draft', true);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -373,7 +374,7 @@ class PortfolioRepository {
           .eq('is_draft', true);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -399,7 +400,7 @@ class PortfolioRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -447,7 +448,7 @@ class PortfolioRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -555,7 +556,7 @@ class PortfolioRepository {
       }
       return (count: fresh.length, error: null);
     } on PostgrestException catch (e) {
-      return (count: 0, error: e.message);
+      return (count: 0, error: userFacingError(e));
     }
   }
 

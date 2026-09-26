@@ -549,7 +549,15 @@ class _ReceivedRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The copy being offered. A proposal is an offer of one
+              // specific card, and "Near Mint" is a word until you can see
+              // it — the photos were on the row all along, unasked for.
+              if (proposal.photos.isNotEmpty) ...[
+                _ProposalPhotos(urls: proposal.photos),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,6 +573,10 @@ class _ReceivedRow extends StatelessWidget {
                       '${proposal.proposedQuantity} pcs',
                       style: AppTypography.caption(context.mutedForeground),
                     ),
+                    if (proposal.proposedPrice != null) ...[
+                      const SizedBox(height: 4),
+                      _ProposedPrice(proposal: proposal),
+                    ],
                   ],
                 ),
               ),
@@ -933,6 +945,106 @@ class _Placeholder extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The photos the seller attached, as thumbnails.
+class _ProposalPhotos extends StatelessWidget {
+  const _ProposalPhotos({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    // Two at most on the row: a strip long enough to scroll competes with
+    // the decision the row exists for. Tapping opens the rest.
+    final shown = urls.take(2).toList();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final url in shown)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: GestureDetector(
+              onTap: () => _open(context, urls.indexOf(url)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: SizedBox(
+                  width: 40,
+                  height: 56,
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, _, __) => ColoredBox(
+                      color: context.mutedForeground.withValues(alpha: 0.10),
+                      child: Icon(
+                        LucideIcons.imageOff,
+                        size: 14,
+                        color: context.mutedForeground,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (urls.length > shown.length)
+          Text(
+            '+${urls.length - shown.length}',
+            style: AppTypography.caption(context.mutedForeground),
+          ),
+      ],
+    );
+  }
+
+  void _open(BuildContext context, int index) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: InteractiveViewer(
+          child: Image.network(urls[index.clamp(0, urls.length - 1)]),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the seller is asking, and how it sits against the bid.
+class _ProposedPrice extends StatelessWidget {
+  const _ProposedPrice({required this.proposal});
+
+  final BidProposalModel proposal;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final above = proposal.isAboveBid;
+
+    return Row(
+      children: [
+        Text(
+          formatRupiah(proposal.proposedPrice!),
+          style: AppTypography.bodySmSemibold(colors.onSurface),
+        ),
+        if (above) ...[
+          const SizedBox(width: 6),
+          // Said plainly, because it changes what rejecting costs: a
+          // proposal at the bid price is the buyer's own offer taken up, and
+          // turning it down cancels the bid. This one is a counter.
+          Flexible(
+            child: Text(
+              'di atas bid',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(context.appSemantic.gold),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

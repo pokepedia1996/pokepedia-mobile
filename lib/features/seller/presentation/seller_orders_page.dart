@@ -20,6 +20,7 @@ import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/pending_checkout.dart';
 import '../../orders/repository/models/seller_order.dart';
 import '../../orders/usecase/orders_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Ports `app/seller/orders` — the seller's side of Pesanan.
 ///
@@ -94,10 +95,13 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
   }
 
   String _describe(Object error) {
-    final text = error is PostgrestException
-        ? '${error.message}${error.code == null ? '' : ' (${error.code})'}'
-        : error.toString();
-    return text.length > 240 ? '${text.substring(0, 240)}...' : text;
+    // Was the driver's message plus its SQLSTATE — "(42501)" on screen to
+    // someone trying to look at their orders. The code is worth keeping, so
+    // it goes to the log instead.
+    return userFacingError(
+      error,
+      fallback: 'Pesanan tidak bisa dimuat. Coba lagi ya.',
+    );
   }
 
   @override

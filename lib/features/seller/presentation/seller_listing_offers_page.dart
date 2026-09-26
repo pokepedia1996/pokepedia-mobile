@@ -19,6 +19,7 @@ import '../repository/offers_repository.dart';
 import '../usecase/offers_notifier.dart';
 import 'widgets/counter_offer_sheet.dart';
 import 'widgets/reject_offer_sheet.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Ports `/seller/products/offers/[slug]` — every offer a buyer has made on
 /// one listing, and the three answers the seller can give.
@@ -211,7 +212,7 @@ class _SellerListingOffersPageState
       ref.invalidate(receivedOffersProvider);
       _toast(success);
     } on OfferActionException catch (e) {
-      _toast(e.message);
+      _toast(userFacingError(e));
     } catch (_) {
       _toast('Gagal memproses penawaran');
     } finally {

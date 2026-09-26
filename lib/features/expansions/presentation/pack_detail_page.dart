@@ -174,7 +174,9 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
       // what tapping a tab means anyway. The pill also doesn't shrink on
       // scroll here; that animation is driven by the shell's listener.
       bottomNavigationBar: AppBottomNav(
-        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.expansions),
+        // Pencarian, not Ekspansi: the expansions browser lives inside the
+        // search tab now, so that is the tab a pack page belongs to.
+        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.search),
         onTap: (index) => context.go(AppBottomNav.tabPaths[index]),
       ),
       body: AppBarOverlayBody(

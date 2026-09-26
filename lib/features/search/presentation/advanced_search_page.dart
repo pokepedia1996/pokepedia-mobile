@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,8 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/app_top_bar.dart';
+import '../../expansions/presentation/expansions_page.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/catalog_language_toggle.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -51,11 +55,25 @@ class AdvancedSearchPage extends ConsumerStatefulWidget {
 }
 
 class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
+  /// Whether the filter panel is open. It starts closed: the reader arrives
+  /// here to browse or to type, and a form covering the screen before either
+  /// has happened is a question asked too early.
+  bool _filtersOpen = false;
+
+  final _searchController = TextEditingController();
+
+  /// Live search fires per keystroke, so it waits for a pause first. Without
+  /// it "charizard" is nine searches, eight of them already stale by the time
+  /// they answer.
+  Timer? _debounce;
+  static const _debounceDelay = Duration(milliseconds: 300);
+
   @override
   void initState() {
     super.initState();
     final seed = widget.initialQuery?.trim();
     if (seed == null || seed.isEmpty) return;
+    _searchController.text = seed;
     // After the frame: the notifier is read by a tree that is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -64,6 +82,37 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
       notifier.search();
     });
   }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onTyped(String value) {
+    final notifier = ref.read(searchNotifierProvider.notifier);
+    notifier.setQuery(value);
+    _debounce?.cancel();
+
+    // An empty box is not a search that found nothing, it is no search at
+    // all — the expansions come straight back rather than after a round trip
+    // that was only ever going to return everything.
+    if (value.trim().isEmpty) {
+      notifier.reset();
+      setState(() {});
+      return;
+    }
+    _debounce = Timer(_debounceDelay, () {
+      if (mounted) notifier.search();
+    });
+  }
+
+  /// Whether the screen is answering a question rather than offering the
+  /// catalog. Either half counts: text in the box, or a filter set from the
+  /// panel — a search for "every Kelangkaan: SAR" carries no text at all.
+  bool _isSearching(SearchState state) =>
+      _searchController.text.trim().isNotEmpty || state.hasAnyFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -76,59 +125,60 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
       backgroundColor: colors.surface,
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Pencarian Detail',
-                                style: AppTypography.h2(colors.onSurface),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const CatalogLanguageToggle(),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Cari kartu berdasarkan berbagai kriteria',
-                      style: AppTypography.bodySm(context.mutedForeground),
-                    ),
-                    const SizedBox(height: 14),
-                    _FilterForm(
+        child: Column(
+          children: [
+            AppTopBar(
+              searchField: _SearchBox(
+                controller: _searchController,
+                onChanged: _onTyped,
+              ),
+              trailing: _FilterToggle(
+                open: _filtersOpen,
+                // The dot is the panel's own answer to "is anything on?",
+                // which matters most when the panel is shut and its contents
+                // are the reason the grid looks the way it does.
+                active: state.hasAnyFilter,
+                onTap: () => setState(() => _filtersOpen = !_filtersOpen),
+              ),
+            ),
+            Expanded(
+              child: _filtersOpen
+                  ? _FilterPanel(
                       state: state,
                       notifier: notifier,
                       optionsAsync: optionsAsync,
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ),
-              ),
+                      onClose: () => setState(() => _filtersOpen = false),
+                      onApplied: () => setState(() => _filtersOpen = false),
+                    )
+                  : _isSearching(state)
+                  ? _resultsView(context, state, notifier)
+                  : const ExpansionsBrowser(),
             ),
-            if (state.hasSearched && !state.loading && state.results.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                  child: _ResultsHeader(state: state, notifier: notifier),
-                ),
-              ),
-            ..._results(context, state, notifier),
           ],
         ),
       ),
+    );
+  }
+
+  /// The results, in place of the expansions rather than under them. Showing
+  /// both would leave the answer below a screenful of catalog the reader has
+  /// just said they are not looking at.
+  Widget _resultsView(
+    BuildContext context,
+    SearchState state,
+    SearchNotifier notifier,
+  ) {
+    return CustomScrollView(
+      slivers: [
+        if (state.hasSearched && !state.loading && state.results.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+              child: _ResultsHeader(state: state, notifier: notifier),
+            ),
+          ),
+        ..._results(context, state, notifier),
+      ],
     );
   }
 
@@ -220,6 +270,224 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
   }
 }
 
+/// The page's own search box: the mockup's "Cari Pokemon..." field, with the
+/// scanner where [QuickSearchField] keeps it.
+///
+/// Plain rather than quick-search: this one drives the screen underneath as
+/// it is typed instead of opening a suggestion panel over it.
+class _SearchBox extends StatelessWidget {
+  const _SearchBox({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textInputAction: TextInputAction.search,
+      style: AppTypography.bodySm(colors.onSurface),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Cari Pokemon...',
+        hintStyle: AppTypography.bodySm(context.mutedForeground),
+        filled: true,
+        fillColor: Theme.of(context).cardColor,
+        prefixIcon: Icon(
+          LucideIcons.search,
+          size: 18,
+          color: context.mutedForeground,
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 40),
+        suffixIcon: IconButton(
+          // Clearing is the way back to the expansions, so it is worth a
+          // target of its own rather than a long press on backspace.
+          icon: Icon(
+            controller.text.isEmpty ? LucideIcons.camera : LucideIcons.x,
+            size: 18,
+            color: context.mutedForeground,
+          ),
+          onPressed: () {
+            if (controller.text.isEmpty) {
+              context.push(Routes.scan);
+            } else {
+              controller.clear();
+              onChanged('');
+            }
+          },
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          borderSide: BorderSide(color: colors.primary),
+        ),
+      ),
+    );
+  }
+}
+
+/// The round button beside the search box that opens and closes the filter
+/// panel, carrying a dot while any filter is set.
+class _FilterToggle extends StatelessWidget {
+  const _FilterToggle({
+    required this.open,
+    required this.active,
+    required this.onTap,
+  });
+
+  final bool open;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Semantics(
+      button: true,
+      label: open ? 'Tutup filter pencarian' : 'Buka filter pencarian',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: open ? colors.onSurface : colors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                open ? LucideIcons.x : LucideIcons.slidersHorizontal,
+                size: 20,
+                color: Colors.white,
+              ),
+            ),
+            if (active && !open)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: context.appSemantic.success,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.surface, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Filter Pencarian" — the advanced form, in the page rather than over it.
+///
+/// It takes the body's whole height while open, so the form is read on its
+/// own instead of through a gap above the catalog. Closing it is the only
+/// way back, which is why the toggle turns into an X and the header carries
+/// one too.
+class _FilterPanel extends StatelessWidget {
+  const _FilterPanel({
+    required this.state,
+    required this.notifier,
+    required this.optionsAsync,
+    required this.onClose,
+    required this.onApplied,
+  });
+
+  final SearchState state;
+  final SearchNotifier notifier;
+  final AsyncValue<SearchFilterOptions> optionsAsync;
+  final VoidCallback onClose;
+  final VoidCallback onApplied;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Filter Pencarian',
+                    style: AppTypography.h3(colors.onSurface),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(LucideIcons.x, size: 18),
+                  tooltip: 'Tutup',
+                  onPressed: onClose,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                AppBottomNav.reservedSpace(context) + 12,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Bahasa',
+                        style: AppTypography.bodySmSemibold(colors.onSurface),
+                      ),
+                      const Spacer(),
+                      const CatalogLanguageToggle(),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _FilterForm(
+                    state: state,
+                    notifier: notifier,
+                    optionsAsync: optionsAsync,
+                    onSubmitted: onApplied,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The bordered form card — web's `<form>`, field for field, but collapsed
 /// to just the card-name field until the user opens the advanced section.
 /// The web shows everything at once because it has the width for it; on a
@@ -229,18 +497,29 @@ class _FilterForm extends StatefulWidget {
     required this.state,
     required this.notifier,
     required this.optionsAsync,
+    this.onSubmitted,
   });
 
   final SearchState state;
   final SearchNotifier notifier;
   final AsyncValue<SearchFilterOptions> optionsAsync;
 
+  /// Fired once a search has actually been dispatched, so the panel that
+  /// hosts the form can get out of the way of its own results.
+  final VoidCallback? onSubmitted;
+
   @override
   State<_FilterForm> createState() => _FilterFormState();
 }
 
 class _FilterFormState extends State<_FilterForm> {
-  bool _expanded = false;
+  /// Open from the start when the form is the whole screen.
+  ///
+  /// The collapse exists because this form used to sit above the results and
+  /// would push them off the page. In the panel it *is* the page, so folding
+  /// most of it away leaves a mostly empty screen and one more tap between
+  /// the reader and the filter they came to set.
+  late bool _expanded = widget.onSubmitted != null;
 
   SearchState get state => widget.state;
   SearchNotifier get notifier => widget.notifier;
@@ -274,11 +553,12 @@ class _FilterFormState extends State<_FilterForm> {
             onSubmitted: (_) => _submit(context),
           ),
           const SizedBox(height: 8),
-          AdvancedFilterToggle(
-            expanded: _expanded,
-            activeCount: query.advancedCount,
-            onToggle: () => setState(() => _expanded = !_expanded),
-          ),
+          if (widget.onSubmitted == null)
+            AdvancedFilterToggle(
+              expanded: _expanded,
+              activeCount: query.advancedCount,
+              onToggle: () => setState(() => _expanded = !_expanded),
+            ),
           if (_expanded) ...[
             const SizedBox(height: 8),
             SearchTextField(
@@ -474,6 +754,7 @@ class _FilterFormState extends State<_FilterForm> {
     if (!state.hasAnyFilter || state.loading) return;
     FocusScope.of(context).unfocus();
     notifier.search();
+    widget.onSubmitted?.call();
   }
 }
 

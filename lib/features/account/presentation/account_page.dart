@@ -275,9 +275,17 @@ class _IdentityHeader extends StatelessWidget {
     final colors = context.appColors;
     final user = this.user;
     final isGuest = user == null;
+    final username = user?.username;
+    final hasUsername = username != null && username.isNotEmpty;
+
+    // The username, never the email. This used to fall back to the email's
+    // local part, which reads as a username without being one and puts part
+    // of the address on a screen the user may well be showing someone else.
+    // Someone who has not picked one yet is asked to, which is the only
+    // answer that leads anywhere.
     final displayName = isGuest
         ? 'Tamu'
-        : (user.username ?? user.email.split('@').first);
+        : (hasUsername ? username : 'Belum ada username');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
@@ -321,7 +329,10 @@ class _IdentityHeader extends StatelessWidget {
                   style: AppTypography.bodySemibold(
                     !isGuest && user.isAdmin
                         ? AppColors.gold
-                        : colors.onSurface,
+                        : hasUsername
+                        ? colors.onSurface
+                        // Not a name, so it does not get a name's weight.
+                        : context.mutedForeground,
                   ),
                 ),
                 if (isGuest)
@@ -329,13 +340,23 @@ class _IdentityHeader extends StatelessWidget {
                     'Masuk untuk koleksi & marketplace',
                     style: AppTypography.caption(context.mutedForeground),
                   )
-                else if (user.username != null)
+                else if (hasUsername)
                   InkWell(
-                    onTap: () =>
-                        context.push(Routes.userProfile(user.username!)),
+                    onTap: () => context.push(Routes.userProfile(username)),
                     child: Text(
                       'Lihat profil',
                       style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  )
+                else
+                  // There is no profile to open without a username — the
+                  // route is `/user/{username}` — so the row offers the step
+                  // that unblocks it instead of a dead link.
+                  InkWell(
+                    onTap: () => context.push(Routes.settings),
+                    child: Text(
+                      'Pilih username',
+                      style: AppTypography.captionSemibold(colors.primary),
                     ),
                   ),
               ],

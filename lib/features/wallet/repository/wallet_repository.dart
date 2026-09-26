@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import 'models/wallet_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Data access for the Wallet feature: `public.wallets` for the balance,
 /// `get_wallet_activity` for the ledger, the
@@ -149,7 +150,7 @@ class WalletRepository {
       });
       return null;
     } on ApiException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } catch (_) {
       return 'Terjadi kesalahan jaringan';
     }

@@ -41,6 +41,11 @@ dependencies:
   intl: ^0.19.0
   lottie: ^3.3.1
   supabase_flutter: ^2.16.0
+  # Incoming App Link / Universal Link URLs. Already present transitively via
+  # supabase_flutter, but named here because this app listens on it directly:
+  # the emailed confirmation links carry `token_hash`, which supabase_flutter's
+  # own handler does not recognise.
+  app_links: ^6.4.1
   flutter_svg: ^2.3.0
   url_launcher: ^6.3.1
   # Renders the QRIS payload as a scannable code, on-device.
@@ -59,7 +64,6 @@ dependencies:
   flutter_map: ^8.3.1
   latlong2: ^0.10.1
   image: ^4.9.2
-  onnxruntime: ^1.4.1
   audioplayers: ^6.8.1
   lucide_icons_flutter: ^3.1.17
   # OS notifications raised by the app itself. The server's push pipeline is
@@ -68,6 +72,7 @@ dependencies:
   flutter_local_notifications: ^19.4.2
   sign_in_with_apple: ^8.2.0
   crypto: ^3.0.7
+  flutter_litert: ^3.9.1
 dev_dependencies:
   # Generate the launcher icon and the splash from `branding/`, which
   # `tool/generate_branding.dart` derives from the website's own artwork.
@@ -96,7 +101,10 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/models/
+    # The one model, not the directory: the superseded card_corners.onnx
+    # still sits beside it and a directory entry would ship both, adding
+    # 6 MB of dead weight to every install.
+    - assets/models/card_corners.tflite
     - assets/sounds/
     - assets/images/
     - assets/images/elements/

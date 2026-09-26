@@ -21,6 +21,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../user/repository/models/profile_models.dart';
 import '../../user/usecase/user_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Handles accepted by web's `handleSaveSocial` — plain usernames only.
 final _handleRe = RegExp(r'^[a-zA-Z0-9_.]{0,30}$');
@@ -359,10 +360,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       const SizedBox(height: 16),
                       _passwordSection(user.email),
                       const SizedBox(height: 16),
-                      _privacySections(
-                        user.id,
-                        visibilityAsync.valueOrNull,
-                      ),
+                      _privacySections(user.id, visibilityAsync.valueOrNull),
                       const SizedBox(height: 16),
                       _bioSection(user.id),
                       const SizedBox(height: 16),
@@ -1066,7 +1064,7 @@ class _PhoneVerifySectionState extends ConsumerState<_PhoneVerifySection> {
     } on ApiException catch (e) {
       // The route's own Indonesian message — rate limits, a taken number, a
       // wrong code — is better than anything restated here.
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = userFacingError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

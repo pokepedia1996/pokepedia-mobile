@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/pokepedia_api.dart';
+import '../../../core/errors/user_message.dart';
 
 /// One courier the seller can name when typing in a resi — an entry of
 /// `/api/biteship/couriers`.
@@ -78,7 +79,7 @@ class ShipmentRepository {
       }
       return null;
     } on ApiException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } catch (_) {
       return 'Terjadi kesalahan jaringan';
     }

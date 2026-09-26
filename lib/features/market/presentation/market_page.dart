@@ -1231,36 +1231,72 @@ class _ListingGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(marketListingsProvider);
-    return async.when(
-      data: (listings) {
-        if (listings.isEmpty) {
-          return const EmptyState(
-            icon: LucideIcons.store,
-            title: 'Tidak ada listing',
-          );
-        }
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            AppBottomNav.reservedSpace(context) + 12,
-          ),
-          itemCount: listings.length,
+    final state = ref.watch(marketListingsProvider);
 
-          gridDelegate: listingGridDelegate(context, showSeller: true),
-          itemBuilder: (context, i) => ListingCard(listing: listings[i]),
-        );
-      },
-      loading: () => const PikachuLoader(),
-      error: (_, __) => EmptyState(
+    if (state.loading) return const PikachuLoader();
+    if (state.error) {
+      return EmptyState(
         icon: LucideIcons.circleAlert,
         title: 'Gagal memuat listing',
         action: OutlinedButton(
-          onPressed: () => ref.invalidate(marketListingsProvider),
+          onPressed: () => ref.read(marketListingsProvider.notifier).retry(),
           child: const Text('Coba lagi'),
         ),
+      );
+    }
+    if (state.listings.isEmpty) {
+      return const EmptyState(
+        icon: LucideIcons.store,
+        title: 'Tidak ada listing',
+      );
+    }
+
+    final listings = state.listings;
+
+    return NotificationListener<ScrollNotification>(
+      // Fires well before the last row, as web's sentinel does with its
+      // 200px rootMargin — the next page should already be arriving by the
+      // time the user gets there.
+      onNotification: (notification) {
+        final metrics = notification.metrics;
+        if (metrics.axis != Axis.vertical) return false;
+        if (metrics.extentAfter < 600) {
+          ref.read(marketListingsProvider.notifier).loadMore();
+        }
+        return false;
+      },
+      // A sliver grid with a footer rather than one more grid cell: as a
+      // cell the spinner sat in the first column, off to the left. Below the
+      // grid it spans the full width and centres properly.
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            sliver: SliverGrid(
+              gridDelegate: listingGridDelegate(context, showSeller: true),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => ListingCard(listing: listings[i]),
+                childCount: listings.length,
+              ),
+            ),
+          ),
+          if (state.hasNext)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: SizedBox(height: AppBottomNav.reservedSpace(context) + 12),
+          ),
+        ],
       ),
     );
   }

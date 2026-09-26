@@ -13,8 +13,13 @@ import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import 'widgets/add_listing_sheet.dart';
-import 'widgets/listing_table.dart';
+import 'widgets/draft_bulk_menu.dart';
+import 'widgets/draft_selection_bar.dart';
+import 'widgets/listing_card_tile.dart';
+import 'widgets/seller_header.dart';
+import 'widgets/draft_card.dart';
 import '../repository/models/seller_listing.dart';
 import '../repository/seller_listings_repository.dart';
 import '../usecase/offers_notifier.dart';
@@ -31,10 +36,14 @@ class SellerProductsPage extends ConsumerStatefulWidget {
 
 class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   final _search = TextEditingController();
+  final _draftSearch = TextEditingController();
+  final _workspaceSearch = TextEditingController();
 
   @override
   void dispose() {
     _search.dispose();
+    _draftSearch.dispose();
+    _workspaceSearch.dispose();
     super.dispose();
   }
 
@@ -144,11 +153,51 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     );
   }
 
+  /// Re-reads the drafts after a card or the bulk menu writes one.
+  Future<void> _refreshDrafts() async {
+    ref.invalidate(sellerDraftsProvider);
+    await ref.read(sellerDraftsProvider.future);
+  }
+
+  /// Turns the seller's collection into drafts in one go, through the
+  /// database function built for it. Nothing is posted — the seller still
+  /// prices each draft and presses Pasang.
+  Future<void> _importFromPortfolio() async {
+    final result = await ref
+        .read(sellerListingsRepositoryProvider)
+        .importDraftsFromCollection();
+    if (!mounted) return;
+
+    if (result.error == null) {
+      ref.read(sellerBucketProvider.notifier).state = SellerListingBucket.draft;
+      await _refreshDrafts();
+    }
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            result.error ??
+                (result.inserted == 0
+                    ? 'Tidak ada kartu baru untuk diimpor'
+                    : '${result.inserted} draft dibuat dari koleksimu'),
+          ),
+          persist: false,
+        ),
+      );
+  }
+
   /// Web's "Tambah listing": pick a card, then post the ask through the
   /// same form the catalog page uses.
   Future<void> _addListing() async {
-    final posted = await showAddListingSheet(context);
-    if (posted == true) ref.invalidate(sellerListingsProvider);
+    final added = await showAddListingSheet(context);
+    if (added != true || !mounted) return;
+    // The sheet makes drafts, not listings, so the Draft tab is where the
+    // cards the seller just picked actually are.
+    ref.read(sellerBucketProvider.notifier).state = SellerListingBucket.draft;
+    await _refreshDrafts();
   }
 
   @override
@@ -176,159 +225,474 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
-      body: AppBarOverlayBody(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      // One scroll for the whole page, not a fixed head over a scrolling
+      // list. The chrome above the cards is five rows deep — header, search,
+      // tabs, heading, two buttons — and pinning it left a phone showing
+      // barely two listings through a slot. Everything scrolls away
+      // together; the selection bar is the only thing that stays, because it
+      // is about what is already chosen rather than what is on screen.
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
           children: [
-            // Web's order: the tabs come first, then the heading and the
-            // line that explains the tab you're on, then the one primary
-            // action.
-            SizedBox(
-              height: 32,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  for (final b in SellerListingBucket.values) ...[
-                    _BucketChip(
-                      bucket: b,
-                      selected: b == bucket,
-                      onTap: () =>
-                          ref.read(sellerBucketProvider.notifier).state = b,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Kelola Listing',
-                    style: AppTypography.h1(colors.onSurface),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    bucket.description,
-                    style: AppTypography.bodySm(context.mutedForeground),
-                  ),
-                  if (bucket != SellerListingBucket.preferences) ...[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ElevatedButton.icon(
-                        onPressed: _addListing,
-                        icon: const Icon(LucideIcons.plus, size: 16),
-                        label: const Text('Tambahkan Listing'),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(0, 42),
+            CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SellerHeader(controller: _workspaceSearch),
+                      const SizedBox(height: 12),
+                      // Web's order: the tabs come first, then the heading and the
+                      // line that explains the tab you're on, then the one primary
+                      // action.
+                      SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: [
+                            for (final b in SellerListingBucket.values) ...[
+                              _BucketChip(
+                                bucket: b,
+                                selected: b == bucket,
+                                onTap: () =>
+                                    ref
+                                            .read(sellerBucketProvider.notifier)
+                                            .state =
+                                        b,
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                          ],
                         ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (bucket.isListingBucket)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: AppSearchField(
-                  hintText: 'Cari nama, ekspansi, nomor, kondisi...',
-                  controller: _search,
-                  onChanged: (v) =>
-                      ref.read(sellerListingQueryProvider.notifier).state = v,
-                ),
-              ),
-            if (bucket.isListingBucket)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: _OfferFilterChip(
-                    active: ref.watch(sellerOfferFilterProvider),
-                    count: ref.watch(offerCountsProvider).length,
-                    onTap: () => ref
-                        .read(sellerOfferFilterProvider.notifier)
-                        .update((on) => !on),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Kelola Listing',
+                              style: AppTypography.h3(colors.onSurface),
+                            ),
+                            if (bucket != SellerListingBucket.preferences) ...[
+                              const SizedBox(height: 12),
+                              // Full width and stacked rather than a lone button on
+                              // the left: these are the two ways a listing starts, and
+                              // the page is otherwise a list of listings that already
+                              // exist. Importing comes first because it is the one
+                              // that turns a collection into a shop in one go.
+                              OutlinedButton.icon(
+                                onPressed: _importFromPortfolio,
+                                icon: const Icon(
+                                  LucideIcons.folderOpen,
+                                  size: 15,
+                                ),
+                                label: const Text('Impor dari Portofolio'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: colors.onSurface,
+                                  backgroundColor: Theme.of(context).cardColor,
+                                  side: BorderSide(color: context.borderColor),
+                                  minimumSize: const Size.fromHeight(40),
+                                  textStyle: AppTypography.bodySmSemibold(
+                                    colors.onSurface,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: _addListing,
+                                icon: const Icon(LucideIcons.plus, size: 15),
+                                label: const Text('Tambahkan Listing'),
+                                // Black, not the brand red the theme gives an
+                                // ElevatedButton. Red is the app's "careful" colour,
+                                // and it sits directly under a red-dotted bell and a
+                                // row of white chips — the one filled control on this
+                                // screen should read as the primary action, not as an
+                                // alert.
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: colors.onSurface,
+                                  foregroundColor: Theme.of(context).cardColor,
+                                  minimumSize: const Size.fromHeight(40),
+                                  textStyle: AppTypography.bodySmSemibold(
+                                    Theme.of(context).cardColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (bucket == SellerListingBucket.draft) ...[
+                        const SizedBox(height: 12),
+                        _DraftFilterChips(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: AppSearchField(
+                                  hintText: 'Cari nama kartu...',
+                                  controller: _draftSearch,
+                                  onChanged: (v) =>
+                                      ref
+                                              .read(draftQueryProvider.notifier)
+                                              .state =
+                                          v,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              DraftBulkMenu(onChanged: _refreshDrafts),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (bucket.isListingBucket) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: AppSearchField(
+                                  hintText:
+                                      'Cari nama, ekspansi, nomor, kondisi...',
+                                  controller: _search,
+                                  onChanged: (v) =>
+                                      ref
+                                              .read(
+                                                sellerListingQueryProvider
+                                                    .notifier,
+                                              )
+                                              .state =
+                                          v,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              _SortMenuButton(
+                                sort: ref.watch(sellerSortProvider),
+                                onChanged: (col) => ref
+                                    .read(sellerSortProvider.notifier)
+                                    .update((s) => s.toggled(col)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // How much is being shown, and the one filter worth a chip.
+                        // The count used to live nowhere: a seller filtering a hundred
+                        // listings down to four had no way to tell that was the whole
+                        // answer rather than the top of a longer one.
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Row(
+                            children: [
+                              Text(
+                                _rangeLabel(async),
+                                style: AppTypography.bodySm(
+                                  context.mutedForeground,
+                                ),
+                              ),
+                              const Spacer(),
+                              _OfferFilterChip(
+                                active: ref.watch(sellerOfferFilterProvider),
+                                count: ref.watch(offerCountsProvider).length,
+                                onTap: () => ref
+                                    .read(sellerOfferFilterProvider.notifier)
+                                    .update((on) => !on),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                    ],
                   ),
                 ),
-              ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: switch (bucket) {
-                SellerListingBucket.preferences => const _PreferencesPanel(),
-                SellerListingBucket.draft => _DraftList(onChanged: _refresh),
-                _ => _listingBody(bucket, async),
-              },
+                ..._bodySlivers(bucket, async),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: AppBottomNav.reservedSpace(context) + 16,
+                  ),
+                ),
+              ],
             ),
+            if (bucket == SellerListingBucket.draft)
+              Positioned(
+                left: 0,
+                right: 0,
+                // Sat on the full nav reserve, which includes the gap above
+                // the pill — so the bar floated a pill-gap clear of it and
+                // read as a third layer. It belongs on top of the nav.
+                bottom: (AppBottomNav.reservedSpace(context) - 40),
+                child: DraftSelectionBar(onDone: _refreshDrafts),
+              ),
           ],
         ),
       ),
     );
   }
 
-  void _refresh() {
-    ref.invalidate(sellerListingsProvider);
-    ref.invalidate(sellerDraftsProvider);
+  /// The part of the page that changes with the tab, as slivers so it shares
+  /// the page's one scroll.
+  List<Widget> _bodySlivers(
+    SellerListingBucket bucket,
+    AsyncValue<List<SellerListing>> async,
+  ) {
+    return switch (bucket) {
+      SellerListingBucket.preferences => const [
+        SliverToBoxAdapter(child: _PreferencesPanel()),
+      ],
+      SellerListingBucket.draft => _draftSlivers(),
+      _ => _listingSlivers(bucket, async),
+    };
   }
 
-  Widget _listingBody(
+  /// "1-2 dari 2 listing" — what is on screen out of what matched.
+  String _rangeLabel(AsyncValue<List<SellerListing>> async) {
+    final listings = async.valueOrNull;
+    if (listings == null) return 'Memuat...';
+    if (listings.isEmpty) return 'Tidak ada listing';
+    return '1-${listings.length} dari ${listings.length} listing';
+  }
+
+  /// A message where the cards would be, sized so it sits in the page's
+  /// scroll rather than fighting it for height.
+  Widget _messageSliver(Widget child) => SliverToBoxAdapter(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+      child: Center(child: child),
+    ),
+  );
+
+  List<Widget> _listingSlivers(
     SellerListingBucket bucket,
     AsyncValue<List<SellerListing>> async,
   ) {
     return async.when(
-      loading: () => const PikachuLoader(),
-      error: (_, __) => Center(
-        child: Text(
-          'Gagal memuat listing',
-          style: AppTypography.bodySm(context.mutedForeground),
+      loading: () => [_messageSliver(const PikachuLoader())],
+      error: (_, __) => [
+        _messageSliver(
+          Text(
+            'Gagal memuat listing',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
         ),
-      ),
+      ],
       data: (listings) {
         if (listings.isEmpty) {
-          return _EmptyCard(
-            title: _emptyTitle(bucket),
-            description: _emptyDescription(bucket),
-          );
+          return [
+            SliverToBoxAdapter(
+              child: _EmptyCard(
+                title: _emptyTitle(bucket),
+                description: _emptyDescription(bucket),
+              ),
+            ),
+          ];
         }
-        return ListingTable(
-          listings: listings,
-          sort: ref.watch(sellerSortProvider),
-          onSort: (col) => ref
-              .read(sellerSortProvider.notifier)
-              .update((s) => s.toggled(col)),
-          onArchive: _confirmArchive,
-          onUnarchive: (l) => _run(
-            () => ref.read(sellerListingActionsProvider).unarchive(l.slug),
-            'Listing dikembalikan',
+        final offers = ref.watch(offerCountsProvider);
+
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            sliver: SliverList.builder(
+              itemCount: listings.length,
+              itemBuilder: (context, i) {
+                final listing = listings[i];
+                return ListingCardTile(
+                  key: ValueKey(listing.id),
+                  listing: listing,
+                  offerCount: offers[listing.slug]?.needsResponse ?? 0,
+                  onToggleAutoRelist: (v) => _run(
+                    () => ref
+                        .read(sellerListingActionsProvider)
+                        .setAutoRelist(listing.slug, v),
+                    v ? 'Auto-relist aktif' : 'Auto-relist mati',
+                  ),
+                  onToggleOffers: (v) => _run(
+                    () => ref
+                        .read(sellerListingActionsProvider)
+                        .setAcceptsOffers(listing.slug, v),
+                    v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
+                  ),
+                  onMenu: () => _showListingMenu(listing),
+                );
+              },
+            ),
           ),
-          onRestock: _restock,
-          onDelete: _confirmDelete,
-          onToggleOffers: (l, v) => _run(
-            () => ref
-                .read(sellerListingActionsProvider)
-                .setAcceptsOffers(l.slug, v),
-            v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
-          ),
-          offerCounts: ref.watch(offerCountsProvider),
-          onViewOffers: (l) => context.push(Routes.sellerListingOffers(l.slug)),
-          onToggleAutoRelist: (l, v) => _run(
-            () =>
-                ref.read(sellerListingActionsProvider).setAutoRelist(l.slug, v),
-            v ? 'Auto-relist aktif' : 'Auto-relist mati',
-          ),
-          onRefresh: () async {
-            ref.invalidate(sellerListingsProvider);
-            await ref.read(sellerListingsProvider.future);
-          },
-        );
+        ];
       },
+    );
+  }
+
+  List<Widget> _draftSlivers() {
+    final async = ref.watch(sellerDraftsProvider);
+
+    return async.when(
+      loading: () => [_messageSliver(const PikachuLoader())],
+      error: (_, __) => [
+        _messageSliver(
+          Text(
+            'Gagal memuat draft',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+        ),
+      ],
+      data: (all) {
+        if (all.isEmpty) {
+          return const [
+            SliverToBoxAdapter(
+              child: _EmptyCard(
+                title: 'Belum ada draft',
+                description:
+                    'Draft yang kamu simpan tapi belum dipasang akan muncul '
+                    'di sini.',
+              ),
+            ),
+          ];
+        }
+
+        // The chip and the search box have already had their say.
+        final drafts = ref.watch(visibleDraftsProvider);
+        if (drafts.isEmpty) {
+          return const [
+            SliverToBoxAdapter(
+              child: _EmptyCard(
+                title: 'Tidak ada draft yang cocok',
+                description: 'Coba ganti filter atau kata kuncinya.',
+              ),
+            ),
+          ];
+        }
+
+        final selection = ref.watch(draftSelectionProvider);
+
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            sliver: SliverList.builder(
+              itemCount: drafts.length,
+              itemBuilder: (context, i) {
+                final draft = drafts[i];
+                return DraftCard(
+                  // Keyed by draft: the cards hold what is being typed into
+                  // them, and without this a filter change would hand one
+                  // card's half-finished price to a different draft.
+                  key: ValueKey(draft.id),
+                  draft: draft,
+                  selected: selection.contains(draft.id),
+                  onToggleSelect: () {
+                    final next = {...selection};
+                    if (!next.remove(draft.id)) next.add(draft.id);
+                    ref.read(draftSelectionProvider.notifier).state = next;
+                  },
+                  onDelete: () => _deleteDraft(draft),
+                  onChanged: _refreshDrafts,
+                );
+              },
+            ),
+          ),
+        ];
+      },
+    );
+  }
+
+  Future<void> _deleteDraft(SellerDraft draft) async {
+    await showConfirmDialog(
+      context,
+      title: 'Hapus draft?',
+      description: '${draft.card.name} akan dihapus dari daftar draft.',
+      confirmLabel: 'Hapus',
+      loadingLabel: 'Menghapus...',
+      onConfirm: () async {
+        final error = await ref
+            .read(sellerListingsRepositoryProvider)
+            .deleteDraft(draft.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(content: Text(error ?? 'Draft dihapus'), persist: false),
+          );
+        if (error == null) await _refreshDrafts();
+      },
+    );
+  }
+
+  /// The `⋮` on a listing card. The same actions the table's row menu had —
+  /// they are the listing's, not the table's.
+  Future<void> _showListingMenu(SellerListing listing) async {
+    final offers =
+        ref.read(offerCountsProvider)[listing.slug]?.needsResponse ?? 0;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.handCoins, size: 20),
+              title: const Text('Lihat penawaran'),
+              trailing: offers == 0 ? null : Text('$offers'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                context.push(Routes.sellerListingOffers(listing.slug));
+              },
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.packagePlus, size: 20),
+              title: const Text('Ubah stok'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _restock(listing);
+              },
+            ),
+            if (listing.isArchived)
+              ListTile(
+                leading: const Icon(LucideIcons.archiveRestore, size: 20),
+                title: const Text('Kembalikan dari arsip'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _run(
+                    () => ref
+                        .read(sellerListingActionsProvider)
+                        .unarchive(listing.slug),
+                    'Listing dikembalikan',
+                  );
+                },
+              )
+            else
+              ListTile(
+                leading: const Icon(LucideIcons.archive, size: 20),
+                title: const Text('Arsipkan'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _confirmArchive(listing);
+                },
+              ),
+            ListTile(
+              leading: Icon(
+                LucideIcons.trash2,
+                size: 20,
+                color: context.appColors.error,
+              ),
+              title: Text(
+                'Hapus listing',
+                style: TextStyle(color: context.appColors.error),
+              ),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _confirmDelete(listing);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -397,6 +761,141 @@ class _EmptyCard extends StatelessWidget {
   }
 }
 
+/// Semua / Perlu dilengkapi / Siap dipasang, with how many are in each.
+///
+/// A draft is only ever missing a price, so this splits the pile into the
+/// ones that can be posted now and the ones that still need a decision —
+/// which is the only question worth asking of a list of drafts.
+class _DraftFilterChips extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(draftFilterProvider);
+    final counts = ref.watch(draftCountsProvider);
+
+    return SizedBox(
+      height: 32,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          for (final filter in DraftFilter.values) ...[
+            _DraftChip(
+              label: '${filter.label} · ${counts[filter] ?? 0}',
+              selected: filter == selected,
+              onTap: () =>
+                  ref.read(draftFilterProvider.notifier).state = filter,
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DraftChip extends StatelessWidget {
+  const _DraftChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final success = context.appSemantic.success;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? success : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(color: selected ? success : context.borderColor),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.captionSemibold(
+            selected ? Colors.white : colors.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The `⋮` beside the listing search: the sort that used to live in the
+/// table's column headers.
+///
+/// Sorting had nowhere to go once the rows became cards — there are no
+/// headers to tap. It is a menu rather than a row of chips because it is a
+/// choice of one from several, and the seller makes it rarely.
+class _SortMenuButton extends StatelessWidget {
+  const _SortMenuButton({required this.sort, required this.onChanged});
+
+  final ListingSort sort;
+  final ValueChanged<ListingSortCol> onChanged;
+
+  static const _labels = {
+    ListingSortCol.name: 'Nama kartu',
+    ListingSortCol.expansion: 'Ekspansi',
+    ListingSortCol.number: 'Nomor',
+    ListingSortCol.condition: 'Kondisi',
+    ListingSortCol.price: 'Harga',
+    ListingSortCol.quantity: 'Jumlah',
+    ListingSortCol.views: 'Dilihat',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<ListingSortCol>(
+      tooltip: 'Urutkan listing',
+      initialValue: sort.col,
+      onSelected: onChanged,
+      itemBuilder: (context) => [
+        for (final entry in _labels.entries)
+          PopupMenuItem(
+            value: entry.key,
+            child: Row(
+              children: [
+                Expanded(child: Text(entry.value)),
+                if (entry.key == sort.col)
+                  Icon(
+                    sort.ascending
+                        ? LucideIcons.arrowUp
+                        : LucideIcons.arrowDown,
+                    size: 15,
+                    color: context.mutedForeground,
+                  ),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Icon(
+          LucideIcons.ellipsisVertical,
+          size: 20,
+          color: context.appColors.onSurface,
+        ),
+      ),
+    );
+  }
+}
+
 class _BucketChip extends StatelessWidget {
   const _BucketChip({
     required this.bucket,
@@ -409,44 +908,41 @@ class _BucketChip extends StatelessWidget {
   final VoidCallback onTap;
 
   static IconData _icon(SellerListingBucket bucket) => switch (bucket) {
-    SellerListingBucket.active => LucideIcons.circleCheck,
-    SellerListingBucket.inactive => LucideIcons.circlePause,
-    SellerListingBucket.archived => LucideIcons.archive,
-    SellerListingBucket.draft => LucideIcons.squarePen,
+    SellerListingBucket.active => LucideIcons.tag,
+    SellerListingBucket.inactive => LucideIcons.archive,
+    SellerListingBucket.archived => LucideIcons.packageX,
+    SellerListingBucket.draft => LucideIcons.fileText,
     SellerListingBucket.preferences => LucideIcons.slidersHorizontal,
   };
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final foreground = selected ? colors.primary : context.mutedForeground;
+    final card = Theme.of(context).cardColor;
+    // Inverted rather than tinted. These are the page's top-level switch and
+    // they sit directly under a search box of the same shape — a tint left
+    // the selected one reading as one more field in the row rather than as
+    // the tab you are on.
+    final foreground = selected ? card : colors.onSurface;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          // Web tints the selected tab rather than inverting it, so the
-          // label stays the same colour family across the row.
-          color: selected
-              ? colors.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
+          color: selected ? colors.onSurface : card,
           border: Border.all(
-            color: selected ? colors.primary : context.borderColor,
+            color: selected ? colors.onSurface : context.borderColor,
           ),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(AppRadius.full),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(_icon(bucket), size: 13, color: foreground),
-            const SizedBox(width: 4),
-            Text(
-              bucket.label,
-              // `badge` is already bold; the unselected tab just carries
-              // the muted colour, the way web separates them.
-              style: AppTypography.badge(foreground),
-            ),
+            const SizedBox(width: 6),
+            Text(bucket.label, style: AppTypography.bodySmSemibold(foreground)),
           ],
         ),
       ),
@@ -456,71 +952,6 @@ class _BucketChip extends StatelessWidget {
 
 /// The Draft tab. `listing_drafts` is own-row CRUD under RLS, so this reads
 /// and deletes straight from the table.
-class _DraftList extends ConsumerWidget {
-  const _DraftList({required this.onChanged});
-
-  final VoidCallback onChanged;
-
-  Future<void> _delete(
-    BuildContext context,
-    WidgetRef ref,
-    SellerDraft draft,
-  ) async {
-    await showConfirmDialog(
-      context,
-      title: 'Hapus draft?',
-      description: '${draft.card.name} akan dihapus dari daftar draft.',
-      confirmLabel: 'Hapus',
-      loadingLabel: 'Menghapus...',
-      onConfirm: () async {
-        final error = await ref
-            .read(sellerListingsRepositoryProvider)
-            .deleteDraft(draft.id);
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(content: Text(error ?? 'Draft dihapus'), persist: false),
-          );
-        if (error == null) onChanged();
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(sellerDraftsProvider);
-
-    return async.when(
-      loading: () => const PikachuLoader(),
-      error: (_, __) => Center(
-        child: Text(
-          'Gagal memuat draft',
-          style: AppTypography.bodySm(context.mutedForeground),
-        ),
-      ),
-      data: (drafts) {
-        if (drafts.isEmpty) {
-          return const _EmptyCard(
-            title: 'Belum ada draft',
-            description:
-                'Draft yang kamu simpan tapi belum dipasang akan muncul di '
-                'sini.',
-          );
-        }
-        return DraftTable(
-          drafts: drafts,
-          onDelete: (draft) => _delete(context, ref, draft),
-          onRefresh: () async {
-            ref.invalidate(sellerDraftsProvider);
-            await ref.read(sellerDraftsProvider.future);
-          },
-        );
-      },
-    );
-  }
-}
-
 /// The Preferensi tab — defaults stamped onto new listings. Saved on toggle
 /// rather than behind a Simpan button, matching the rest of the app's
 /// switches.

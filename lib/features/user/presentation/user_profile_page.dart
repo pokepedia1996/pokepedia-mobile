@@ -105,7 +105,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
               userCollectionProvider(widget.username),
             );
             final isCollectionPublic =
-                ref.watch(collectionVisibilityProvider(widget.username))
+                ref
+                    .watch(collectionVisibilityProvider(widget.username))
                     .valueOrNull ??
                 false;
             final contributionsAsync = ref.watch(

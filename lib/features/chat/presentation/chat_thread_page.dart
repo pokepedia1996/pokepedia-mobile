@@ -22,6 +22,7 @@ import '../usecase/chat_notifier.dart';
 import 'widgets/chat_party_colors.dart';
 import 'widgets/chat_context_banner.dart';
 import 'widgets/chat_event_cards.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Ports `components/chat/chat-room.tsx`, backed by `chat_messages` with a
 /// realtime subscription for the other side's replies.
@@ -167,7 +168,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+        ..showSnackBar(SnackBar(content: Text(userFacingError(e))));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)

@@ -87,8 +87,7 @@ class PendingCheckout {
 
   /// What the header calls the shop: its storefront name, falling back to the
   /// handle for a seller who never named one.
-  String get displayName =>
-      (storeName != null && storeName!.isNotEmpty)
+  String get displayName => (storeName != null && storeName!.isNotEmpty)
       ? storeName!
       : (sellerUsername != null && sellerUsername!.isNotEmpty)
       ? sellerUsername!

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/utils/seller_identity.dart';
 import 'models/trading_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Writes to the order book. Ports `POST /api/listings` — which is itself a
 /// thin wrapper over the `place_order` RPC — straight onto Supabase, since
@@ -179,7 +180,7 @@ class TradingRepository {
         error: null,
       );
     } on PostgrestException catch (e) {
-      return (sentCount: 0, error: e.message);
+      return (sentCount: 0, error: userFacingError(e));
     }
   }
 
@@ -220,7 +221,7 @@ class TradingRepository {
       }
       return (proposalSlug: row['proposal_slug'] as String?, error: null);
     } on PostgrestException catch (e) {
-      return (proposalSlug: null, error: e.message);
+      return (proposalSlug: null, error: userFacingError(e));
     }
   }
 

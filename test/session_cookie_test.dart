@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/core/config/app_config.dart';
 import 'package:pokepedia_mobile/core/network/session_cookie.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Session, User;
 
 /// The encoding `@supabase/ssr` expects, mirrored from its installed source
 /// so a change on either side shows up here rather than as a 401.
@@ -120,5 +121,63 @@ void main() {
     test('matches the chunk size the package uses', () {
       expect(maxCookieChunk, 3180);
     });
+
+    /// Production 401s came from here. The app dials Supabase through
+    /// `auth.pokepedia.id`, so naming the cookie after our own URL produced
+    /// `sb-auth-auth-token`; the server, configured with the project URL,
+    /// read `sb-<ref>-auth-token` and saw an anonymous request. The token's
+    /// `iss` is the project both sides actually share.
+    test('is named after the token issuer, not the host we dialled', () {
+      final name = supabaseAuthCookieNameFor(
+        sessionWithIssuer('https://tlauakxyrxpwnwgdywum.supabase.co/auth/v1'),
+      );
+
+      expect(name, 'sb-tlauakxyrxpwnwgdywum-auth-token');
+      expect(name, isNot('sb-auth-auth-token'));
+    });
+
+    test('a custom auth domain in front of the project does not rename it', () {
+      // The same project reached two ways still yields one cookie name.
+      expect(
+        supabaseAuthCookieNameFor(
+          sessionWithIssuer('https://ovbzifwfohqflfsgedsj.supabase.co/auth/v1'),
+        ),
+        'sb-ovbzifwfohqflfsgedsj-auth-token',
+      );
+    });
+
+    test('a token with no readable iss falls back to the configured host', () {
+      for (final token in ['', 'not-a-jwt', 'a.b', 'a.!!!notbase64!!!.c']) {
+        expect(
+          supabaseAuthCookieNameFor(sessionWithToken(token)),
+          supabaseAuthCookieName,
+          reason: 'token: $token',
+        );
+      }
+    });
   });
 }
+
+/// A [Session] carrying [token] as its access token. Only the token is read
+/// when naming the cookie, so the rest is filler.
+Session sessionWithToken(String token) =>
+    Session(accessToken: token, tokenType: 'bearer', user: _user);
+
+/// A [Session] whose access token is an unsigned JWT claiming [issuer].
+Session sessionWithIssuer(String issuer) {
+  String segment(Map<String, dynamic> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  final header = segment({'alg': 'ES256', 'typ': 'JWT'});
+  final payload = segment({'iss': issuer, 'sub': 'me'});
+  // The signature is never checked here — picking a cookie name does not
+  // need one, and the server verifies the real token itself.
+  return sessionWithToken('$header.$payload.signature');
+}
+
+final _user = User(
+  id: 'me',
+  appMetadata: const {},
+  userMetadata: const {},
+  aud: 'authenticated',
+  createdAt: '2026-09-23T00:00:00Z',
+);

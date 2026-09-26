@@ -172,9 +172,7 @@ class _ListsPageState extends ConsumerState<ListsPage> {
       return;
     }
     await Clipboard.setData(
-      ClipboardData(
-        text: '${AppConfig.appUrl}/user/$username/${list.slug}',
-      ),
+      ClipboardData(text: '${AppConfig.appUrl}/user/$username/${list.slug}'),
     );
     _toast('Link disalin ke clipboard');
   }

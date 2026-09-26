@@ -77,6 +77,9 @@ class Routes {
   static const sellerProducts = '/seller/products';
   static const sellerOrders = '/seller/orders';
 
+  /// The numbers behind the dashboard's headline — opened from it.
+  static const sellerPerformance = '/seller/performance';
+
   /// The orders list opened on one tab — web's `?filter=` links, which the
   /// dashboard's counters carry so a number opens the list it counted.
   static String sellerOrdersFiltered(String filterKey) =>

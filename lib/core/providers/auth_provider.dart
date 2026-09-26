@@ -11,8 +11,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/utils/primary_collection.dart';
 import '../config/app_config.dart';
+import '../../app/router/app_router.dart';
+import '../../app/router/routes.dart';
 import '../utils/image_url.dart';
 import 'supabase_provider.dart';
+import '../errors/user_message.dart';
 
 /// Bounds every auth network call so a stalled connection surfaces as an
 /// error instead of leaving the caller's loading state stuck forever.
@@ -115,6 +118,12 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
         case AuthChangeEvent.signedOut:
         case AuthChangeEvent.userUpdated:
           ref.invalidateSelf();
+        // A recovery link establishes a session and then has nothing to show
+        // for it: the reset form is a route, and without this the user lands
+        // back wherever they were with no password field in sight.
+        case AuthChangeEvent.passwordRecovery:
+          ref.invalidateSelf();
+          appRouter.push(Routes.resetPassword);
         default:
           break;
       }
@@ -198,7 +207,7 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       ref.invalidateSelf();
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } on TimeoutException {
       return 'Waktu koneksi habis. Periksa koneksi internet atau coba lagi.';
     }
@@ -303,7 +312,7 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       }
       return (signedIn: false, error: e.description ?? e.code.name);
     } on AuthException catch (e) {
-      return (signedIn: false, error: e.message);
+      return (signedIn: false, error: userFacingError(e));
     } on TimeoutException {
       return (
         signedIn: false,
@@ -389,11 +398,11 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       if (e.code == AuthorizationErrorCode.canceled) {
         return (signedIn: false, error: null);
       }
-      return (signedIn: false, error: e.message);
+      return (signedIn: false, error: userFacingError(e));
     } on SignInWithAppleException catch (e) {
       return (signedIn: false, error: e.toString());
     } on AuthException catch (e) {
-      return (signedIn: false, error: e.message);
+      return (signedIn: false, error: userFacingError(e));
     } on TimeoutException {
       return (
         signedIn: false,
@@ -462,7 +471,10 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       ref.invalidateSelf();
       return const SignUpResult(SignUpOutcome.signedIn);
     } on AuthException catch (e) {
-      return SignUpResult(SignUpOutcome.error, errorMessage: e.message);
+      return SignUpResult(
+        SignUpOutcome.error,
+        errorMessage: userFacingError(e),
+      );
     } on TimeoutException {
       return const SignUpResult(
         SignUpOutcome.error,
@@ -531,7 +543,7 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
           .timeout(_authTimeout);
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } on TimeoutException {
       return 'Waktu koneksi habis. Periksa koneksi internet atau coba lagi.';
     }
@@ -546,7 +558,7 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
           .timeout(_authTimeout);
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } on TimeoutException {
       return 'Waktu koneksi habis. Periksa koneksi internet atau coba lagi.';
     }

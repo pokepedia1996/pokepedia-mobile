@@ -284,6 +284,14 @@ img.Image _snapToCardAspect(img.Image source) {
 
 /// Laplacian variance as a cheap focus score, with mean luma riding the same
 /// grayscale pass. Ports `laplacianVarianceAndLuma`.
+/// The focus score and mean brightness of [source].
+///
+/// Public because the capture burst picks between frames on it before any of
+/// them is cropped — web scores each burst candidate the same way
+/// (`captureBurstFrame`) and keeps the sharpest.
+({double variance, double luma}) scoreFrame(img.Image source) =>
+    _laplacianVarianceAndLuma(source);
+
 ({double variance, double luma}) _laplacianVarianceAndLuma(img.Image source) {
   final sample = img.copyResize(
     source,

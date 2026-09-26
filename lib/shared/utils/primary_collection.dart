@@ -22,10 +22,7 @@ Future<String?> primaryCollectionId(
   final cached = _primaryIds[userId];
   if (cached != null) return cached;
   final id =
-      await client.rpc(
-            'primary_collection_id',
-            params: {'p_user_id': userId},
-          )
+      await client.rpc('primary_collection_id', params: {'p_user_id': userId})
           as String?;
   if (id != null && id.isNotEmpty) {
     _primaryIds[userId] = id;

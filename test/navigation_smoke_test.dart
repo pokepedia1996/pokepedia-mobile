@@ -109,14 +109,15 @@ void main() {
     appRouter.go('/');
     await tester.pumpAndSettle();
 
-    for (final label in [
-      'Ekspansi',
-      'Pencarian',
-      'Portofolio',
-      'Market',
-      'Akun',
+    // Driven off the nav's own list rather than a copy of it: the labels
+    // changed under this test once already, when Ekspansi gave way to Jual.
+    // Beranda goes last so the walk ends where it started.
+    final labels = [
+      ...AppBottomNav.items.map((item) => item.label).skip(1),
       'Beranda',
-    ]) {
+    ];
+
+    for (final label in labels) {
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Tab "$label" threw');

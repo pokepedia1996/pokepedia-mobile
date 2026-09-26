@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/card_market_price.dart';
@@ -28,24 +29,25 @@ Future<List<CardModel>> priceCards(
   final ids = {for (final card in cards) card.id}.toList();
   final prices = <int, CardMarketPrice>{};
 
-  for (var start = 0; start < ids.length; start += _priceChunk) {
-    final end = start + _priceChunk;
-    final slice = ids.sublist(start, end > ids.length ? ids.length : end);
-    try {
-      final rows = await client.rpc(
-        'get_card_prices_by_ids',
-        params: {'p_card_ids': slice},
-      );
-      if (rows is! List) continue;
-      for (final row in rows.cast<Map<String, dynamic>>()) {
-        final id = (row['card_id'] as num?)?.toInt();
-        if (id != null && row['price'] != null) {
-          prices[id] = CardMarketPrice.fromRow(row);
-        }
-      }
-    } catch (_) {
-      // A pricing failure leaves the cards unpriced rather than taking the
-      // collection down with it — the grid already copes with a null price.
+  final slices = <List<int>>[
+    for (var start = 0; start < ids.length; start += _priceChunk)
+      ids.sublist(
+        start,
+        start + _priceChunk > ids.length ? ids.length : start + _priceChunk,
+      ),
+  ];
+
+  // Chunks go out together rather than one after another: a two-thousand-card
+  // collection paid five round trips end to end before a single tile could
+  // show a price, and the page waits on all of it. A few at a time, though —
+  // a big enough collection is a lot of chunks, and firing all of them at once
+  // just moves the queue from the client to the database.
+  for (var i = 0; i < slices.length; i += _maxInFlight) {
+    final wave = slices.skip(i).take(_maxInFlight);
+    for (final chunk in await Future.wait(
+      wave.map((s) => _fetchChunk(client, s)),
+    )) {
+      prices.addAll(chunk);
     }
   }
 
@@ -57,4 +59,41 @@ Future<List<CardModel>> priceCards(
       else
         card,
   ];
+}
+
+/// How many price chunks are in flight at once.
+const _maxInFlight = 4;
+
+/// One chunk, parsed. Everything that can throw is inside the guard —
+/// reaching the RPC, and reading the rows it answers with. A price the
+/// client can't parse costs that card its price and nothing else: the grid
+/// coped with a null price long before this, and the collection behind it
+/// must not fail to load over one bad row.
+Future<Map<int, CardMarketPrice>> _fetchChunk(
+  SupabaseClient client,
+  List<int> ids,
+) async {
+  final prices = <int, CardMarketPrice>{};
+  try {
+    final rows = await client.rpc(
+      'get_card_prices_by_ids',
+      params: {'p_card_ids': ids},
+    );
+    if (rows is! List) return prices;
+    for (final row in rows) {
+      if (row is! Map) continue;
+      try {
+        final parsed = Map<String, dynamic>.from(row);
+        final id = (parsed['card_id'] as num?)?.toInt();
+        if (id != null && parsed['price'] != null) {
+          prices[id] = CardMarketPrice.fromRow(parsed);
+        }
+      } catch (error) {
+        if (kDebugMode) debugPrint('[pricing] bad row skipped: $error');
+      }
+    }
+  } catch (error) {
+    if (kDebugMode) debugPrint('[pricing] chunk failed: $error');
+  }
+  return prices;
 }

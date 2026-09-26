@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -113,6 +116,72 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
   bool _saving = false;
   bool _working = false;
 
+  /// How many of the filtered cards are handed to the sliver, and how much
+  /// that grows by when the end of the window comes into view.
+  ///
+  /// The sliver builds its children lazily either way, but the child count is
+  /// also the ceiling on how much work one fling can start: every tile the
+  /// scroll passes resolves an image. A collection of a few thousand cards
+  /// flung end to end opened that many requests at once, and the decodes
+  /// alone pushed everything earlier out of the image cache. The window keeps
+  /// it to a few screens' worth at a time.
+  static const _pageSize = 36;
+  int _shown = _pageSize;
+
+  /// The last filter-and-sort pass, kept so that a rebuild which changes
+  /// nothing about what is listed — a stepper tap, a tick in Kelola, the
+  /// selection bar appearing — doesn't filter and re-sort the whole
+  /// collection again. Both are O(n log n) over every card the user owns, and
+  /// in Kelola mode they ran on every single tap.
+  List<CardModel>? _visibleSource;
+  CardFilters? _visibleFilters;
+  String? _visibleSearch;
+  CardSortOption? _visibleSort;
+  List<CardModel> _visible = const [];
+
+  /// Same idea for the facet options, which scan every card to find the
+  /// rarities and types present. They only depend on the unfiltered set.
+  List<CardModel>? _optionsSource;
+  CardFilterOptions? _options;
+
+  List<CardModel> _visibleFor(List<CardModel> cards, String search) {
+    if (identical(cards, _visibleSource) &&
+        identical(_filters, _visibleFilters) &&
+        search == _visibleSearch &&
+        _sortBy == _visibleSort) {
+      return _visible;
+    }
+
+    _visibleSource = cards;
+    _visibleFilters = _filters;
+    _visibleSearch = search;
+    _visibleSort = _sortBy;
+    _visible = sortCards(
+      applyCardFilters(cards, _filters.copyWith(search: search)),
+      _sortBy,
+    );
+    // A different list of cards starts at the top again.
+    _shown = _pageSize;
+    return _visible;
+  }
+
+  CardFilterOptions _optionsFor(List<CardModel> cards) {
+    if (!identical(cards, _optionsSource) || _options == null) {
+      _optionsSource = cards;
+      _options = deriveCardFilterOptions(cards);
+    }
+    return _options!;
+  }
+
+  /// Reveals the next page once the end of the current one is within a
+  /// screenful. Returns false so the notification carries on bubbling.
+  bool _revealMore(ScrollNotification notification, int total) {
+    if (notification.depth != 0 || _shown >= total) return false;
+    if (notification.metrics.extentAfter > 800) return false;
+    setState(() => _shown = math.min(_shown + _pageSize, total));
+    return false;
+  }
+
   void _exitEdit() => setState(() {
     _editMode = false;
     _edits.clear();
@@ -218,14 +287,12 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     final async = ref.watch(selectedPortfolioCardsProvider);
     // The search box lives at the top of the page now, so the query comes
     // from there rather than from this tab's own filter bar.
-    final filters = _filters.copyWith(
-      search: ref.watch(collectionSearchProvider),
-    );
+    final search = ref.watch(collectionSearchProvider);
+    final filters = _filters.copyWith(search: search);
 
     return async.when(
       data: (cards) {
-        var visible = applyCardFilters(cards, filters);
-        visible = sortCards(visible, _sortBy);
+        final visible = _visibleFor(cards, search);
 
         return Stack(
           children: [
@@ -250,7 +317,14 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
         );
       },
       loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat data')),
+      error: (error, stack) {
+        // The message on screen stays the same; the reason behind it used to
+        // go nowhere at all, which made a failure here impossible to place.
+        if (kDebugMode) {
+          debugPrint('[portfolio] collection failed: $error\n$stack');
+        }
+        return const Center(child: Text('Gagal memuat data'));
+      },
     );
   }
 
@@ -259,82 +333,110 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     List<CardModel> visible,
     CardFilters filters,
   ) {
-    return CustomScrollView(
-      slivers: [
-        const SliverToBoxAdapter(child: _TitleRow()),
-        SliverToBoxAdapter(
-          child: _CollectionHeader(
-            cards: cards,
-            visible: visible,
-            editMode: _editMode,
-            pendingEdits: _edits.length,
-            saving: _saving,
-            onAdd: _openAddSheet,
-            onManage: () => setState(() => _editMode = true),
-            onDone: () => _save(cards),
-            onCancel: _exitEdit,
-          ),
-        ),
-        if (cards.isNotEmpty)
+    final shown = math.min(_shown, visible.length);
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) =>
+          _revealMore(notification, visible.length),
+      child: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(child: _TitleRow()),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: CardFilterBar(
-                cards: cards,
-                showSearch: false,
-                filters: filters,
-                onFiltersChanged: (f) => setState(() => _filters = f),
-                sortBy: _sortBy,
-                onSortChanged: (s) => setState(() => _sortBy = s),
-                viewMode: _viewMode,
-                onViewModeChanged: (v) => setState(() => _viewMode = v),
-              ),
+            child: _CollectionHeader(
+              cards: cards,
+              visible: visible,
+              editMode: _editMode,
+              pendingEdits: _edits.length,
+              saving: _saving,
+              onAdd: _openAddSheet,
+              onManage: () => setState(() => _editMode = true),
+              onDone: () => _save(cards),
+              onCancel: _exitEdit,
             ),
           ),
-        if (cards.isEmpty)
-          _message(
-            'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
-            'ekspansi!',
-          )
-        else if (visible.isEmpty)
-          _message('Tidak ada kartu yang sesuai filter.')
-        else if (_viewMode == CardViewMode.grid)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            sliver: SliverGrid(
-              gridDelegate: cardGridDelegate(
-                context,
-                // The stepper row only exists while editing.
-                extraChrome: _editMode ? cardGridItemFooterChrome : 0,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => _collectionCard(visible[i]),
-                childCount: visible.length,
-              ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _collectionCard(visible[i], list: true),
+          if (cards.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: CardFilterBar(
+                  cards: cards,
+                  showSearch: false,
+                  // Derived once per collection rather than on every tap.
+                  optionsOverride: _optionsFor(cards),
+                  filters: filters,
+                  onFiltersChanged: (f) => setState(() => _filters = f),
+                  sortBy: _sortBy,
+                  onSortChanged: (s) => setState(() => _sortBy = s),
+                  viewMode: _viewMode,
+                  onViewModeChanged: (v) => setState(() => _viewMode = v),
                 ),
-                childCount: visible.length,
               ),
             ),
+          if (cards.isEmpty)
+            _message(
+              'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
+              'ekspansi!',
+            )
+          else if (visible.isEmpty)
+            _message('Tidak ada kartu yang sesuai filter.')
+          else if (_viewMode == CardViewMode.grid)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              sliver: SliverGrid(
+                gridDelegate: cardGridDelegate(
+                  context,
+                  // The stepper row only exists while editing.
+                  extraChrome: _editMode ? cardGridItemFooterChrome : 0,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => _collectionCard(visible[i]),
+                  childCount: shown,
+                  // A tile holds nothing worth keeping once it is off screen,
+                  // and the keep-alive wrapper is per child.
+                  addAutomaticKeepAlives: false,
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _collectionCard(visible[i], list: true),
+                  ),
+                  childCount: shown,
+                  addAutomaticKeepAlives: false,
+                ),
+              ),
+            ),
+          // Says the rest is coming rather than letting the grid look like it
+          // ends early. It is only ever on screen for the frame or two the
+          // next page takes to build.
+          if (shown < visible.length)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              // Room for the nav pill, plus the batch bar when it's up.
+              height:
+                  AppBottomNav.reservedSpace(context) +
+                  (_selected.isEmpty ? 0 : 72),
+            ),
           ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            // Room for the nav pill, plus the batch bar when it's up.
-            height:
-                AppBottomNav.reservedSpace(context) +
-                (_selected.isEmpty ? 0 : 72),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

@@ -5,30 +5,47 @@
 /// `immutable, max-age=86400` and no content hash, so a browser can hold a
 /// stale copy for a day after a rotation. Bundling sidesteps that and costs
 /// the app its own update path — a model change rides an app release.
+///
+/// LiteRT rather than ONNX Runtime. `onnxruntime` ships no `Package.swift`,
+/// and Swift Package Manager is becoming the default for Flutter's iOS
+/// builds — the warning it printed says so itself. `tflite_flutter`, the
+/// obvious replacement, has the same gap (tensorflow/flutter-tflite#303);
+/// `flutter_litert` declares the TensorFlowLite frameworks as SPM binary
+/// targets, so it is the one that actually settles the question.
+///
+/// The converted model keeps the ONNX one's signature exactly — `image`
+/// `[1, 3, 224, 224]` float32 in, `prediction` `[1, 9]` float32 out, still
+/// NCHW — so every line of preprocessing in `card_detector.dart` and every
+/// line of decoding after it is untouched by the swap.
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+// `show`, not a bare import: the package exports a `Detection` of its own,
+// which collides with this feature's.
+import 'package:flutter_litert/flutter_litert.dart'
+    show Interpreter, IsolateInterpreter;
 import 'package:image/image.dart' as img;
-import 'package:onnxruntime/onnxruntime.dart';
 import 'card_detector.dart';
 
-const _modelAsset = 'assets/models/card_corners.onnx';
-const _inputName = 'image';
-const _outputName = 'prediction';
+const _modelAsset = 'assets/models/card_corners.tflite';
+
+/// Eight corner coordinates, then the presence logit.
+const _outputCount = 9;
 
 /// A detection hung on the runtime must not wedge the tick loop.
 const _inferenceTimeout = Duration(seconds: 2);
 
 class CornerModel {
-  CornerModel._(this._session);
+  CornerModel._(this._interpreter, this._isolate);
 
-  final OrtSession _session;
+  /// Held only to own the native interpreter: [IsolateInterpreter] works from
+  /// its address, so this must outlive it and be closed after it.
+  final Interpreter _interpreter;
 
-  /// Serialises inference. The tick loop is single-flight already, but a
-  /// capture's own detection can land in the same frame as a live tick, and
-  /// two concurrent `run` calls on one session is not a supported shape.
-  Future<void> _chain = Future.value();
+  /// Inference runs on its own isolate. A 6 MB model invoked on the platform
+  /// thread would stall the frame it was called from, and this one is called
+  /// from a camera tick.
+  final IsolateInterpreter _isolate;
 
   static CornerModel? _instance;
   static Future<CornerModel>? _loading;
@@ -44,72 +61,52 @@ class CornerModel {
   }
 
   static Future<CornerModel> _load() async {
-    OrtEnv.instance.init();
-    final bytes = await rootBundle.load(_modelAsset);
-    final session = OrtSession.fromBuffer(
-      bytes.buffer.asUint8List(),
-      OrtSessionOptions(),
+    final interpreter = await Interpreter.fromAsset(_modelAsset);
+    final isolate = await IsolateInterpreter.create(
+      address: interpreter.address,
     );
-    final model = CornerModel._(session);
+    final model = CornerModel._(interpreter, isolate);
     _instance = model;
     return model;
   }
 
   /// Runs the model over [region] of [frame] and decodes the result.
-  Future<Detection?> detect(img.Image frame, DetectRegion region) {
-    final run = _chain.then((_) => _detect(frame, region));
-    // The chain must survive a failure, or one bad frame stalls every tick
-    // after it.
-    _chain = run.then((_) {}, onError: (_) {});
-    return run;
-  }
+  ///
+  /// Convenience for callers that already hold the image — the scanner does
+  /// not, because its frames live on [DetectorWorker]'s isolate. That path
+  /// uses [run] with a tensor the worker has already built.
+  Future<Detection?> detect(img.Image frame, DetectRegion region) =>
+      run(prepareInput(frame, region), region);
 
-  Future<Detection?> _detect(img.Image frame, DetectRegion region) async {
-    OrtValueTensor? input;
-    List<OrtValue?>? outputs;
+  /// Runs the model over a tensor someone else prepared, and decodes the
+  /// result into [region]'s coordinate space.
+  ///
+  /// Concurrent calls are safe: a capture's own detection can land in the
+  /// same frame as a live tick, and [IsolateInterpreter] queues a run issued
+  /// while another is in flight rather than dropping it or letting the two
+  /// collide on one native interpreter.
+  Future<Detection?> run(Float32List input, DetectRegion region) async {
     try {
-      final tensor = prepareInput(frame, region);
-      input = OrtValueTensor.createTensorWithDataList(tensor, [
-        1,
-        3,
-        modelInputSize,
-        modelInputSize,
-      ]);
+      // Flat typed data, matching the input tensor's byte size exactly — the
+      // runtime memcpies it straight in rather than walking a nested list.
+      final output = Float32List(_outputCount);
 
-      outputs = await _session
-          .runAsync(OrtRunOptions(), {_inputName: input}, [_outputName])
-          ?.timeout(_inferenceTimeout);
+      await _isolate.run(input, output).timeout(_inferenceTimeout);
 
-      final raw = outputs?.firstOrNull?.value;
-      final prediction = _flatten(raw);
-      if (prediction == null || prediction.length < 9) return null;
-      return decodePrediction(prediction, region);
+      return decodePrediction(output.toList(), region);
     } catch (e) {
       if (kDebugMode) debugPrint('[scan] corner model failed: $e');
       return null;
-    } finally {
-      input?.release();
-      for (final o in outputs ?? const <OrtValue?>[]) {
-        o?.release();
-      }
     }
-  }
-
-  /// The runtime hands back the output nested by shape; the model's is
-  /// `[1, 9]`, but tolerate a bare list too rather than assuming.
-  List<double>? _flatten(Object? raw) {
-    if (raw is List && raw.isNotEmpty && raw.first is List) {
-      return (raw.first as List).map((v) => (v as num).toDouble()).toList();
-    }
-    if (raw is List) {
-      return raw.whereType<num>().map((v) => v.toDouble()).toList();
-    }
-    if (raw is Float32List) return raw.toList();
-    return null;
   }
 
   void dispose() {
-    _session.release();
+    // The isolate first: it holds the same native interpreter by address, and
+    // freeing that underneath a live worker crashes the process. `close()`
+    // kills the isolate before its first await, so not awaiting it here is
+    // safe — and this is called from a synchronous `dispose`.
+    _isolate.close();
+    _interpreter.close();
     if (identical(_instance, this)) {
       _instance = null;
       _loading = null;

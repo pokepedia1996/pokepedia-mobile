@@ -28,7 +28,8 @@ Future<void> _pump(WidgetTester tester, int packCount) async {
       ],
       child: MaterialApp(
         theme: AppTheme.light,
-        home: const ExpansionsPage(),
+        // A body now, not a page: Pencarian supplies the scaffold.
+        home: const Scaffold(body: ExpansionsBrowser()),
       ),
     ),
   );

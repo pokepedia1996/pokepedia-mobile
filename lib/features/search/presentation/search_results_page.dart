@@ -138,8 +138,7 @@ class SearchResultsPage extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     sliver: state.viewMode == CardViewMode.grid
                         ? SliverGrid(
-                            gridDelegate:
-                                cardGridDelegate(context),
+                            gridDelegate: cardGridDelegate(context),
                             delegate: SliverChildBuilderDelegate((context, i) {
                               final card = visible[i];
                               return CardGridItem(

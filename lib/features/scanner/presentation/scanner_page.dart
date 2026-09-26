@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
-import 'package:image/image.dart' as img;
-
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +17,8 @@ import '../usecase/scan_session_notifier.dart';
 import '../usecase/scanner_notifier.dart';
 import '../usecase/scan_sound.dart';
 import '../utils/auto_capture.dart';
-import '../utils/camera_frame.dart';
+import '../utils/card_detector.dart';
+import '../utils/detector_worker.dart';
 import '../utils/card_capture.dart';
 import '../utils/corner_model.dart';
 import '../utils/warp_quad.dart';
@@ -66,6 +65,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// How often the detector samples the stream. Ports the web's poll rate.
   static const _tickInterval = Duration(milliseconds: 120);
 
+  /// Web's `CAPTURE_BURST_FRAMES` / `CAPTURE_BURST_GAP_MS`.
+  static const _burstFrames = 2;
+  static const _burstGap = Duration(milliseconds: 80);
+
   /// Up to 40% of [_resultSettle] added at random on each re-arm.
   ///
   /// Not cosmetic: the scan tier is 30 requests per 60s per user, and the
@@ -79,6 +82,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   /// The corner model, warmed while the camera starts.
   CornerModel? _model;
+
+  /// Owns the decoded frame and every per-pixel step of a tick. Spawned
+  /// alongside the model, because both are dead weight until the camera is
+  /// actually running.
+  DetectorWorker? _worker;
 
   /// Newest frame off the stream. Held, not queued: detection is slower than
   /// frames arrive, and a queue would work through stale poses instead of
@@ -114,6 +122,26 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initialization = _startCamera();
+    DetectorWorker.spawn()
+        .then((worker) {
+          if (mounted) {
+            _worker = worker;
+          } else {
+            worker.dispose();
+          }
+        })
+        .catchError((Object e) {
+          if (kDebugMode) debugPrint('[scan] worker spawn failed: $e');
+          // Said out loud. Without the worker the tick returns early on
+          // every frame, so the scanner is alive, streaming, and incapable
+          // of ever detecting anything — which looks like a camera that
+          // cannot see rather than a fault.
+          if (mounted) {
+            setState(() {
+              _cameraError = 'Pemindai gagal disiapkan. Tutup dan buka lagi.';
+            });
+          }
+        });
     // ~6 MB to parse; the camera's own startup is dead time anyway.
     CornerModel.load()
         .then((model) {
@@ -130,6 +158,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   @override
   void dispose() {
+    _worker?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _rearmTimer?.cancel();
     _tickTimer?.cancel();
@@ -262,14 +291,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
     _detecting = true;
     try {
-      final rgb = frameToImage(frame);
-      if (rgb == null || !mounted) return;
-
-      final upright = orientFrame(
-        rgb,
+      // Decode, orient and build the first tensor on the worker's isolate.
+      // This is the pixel work that used to block the UI thread every tick.
+      final prep = await _worker?.prepareFrame(
+        frame,
         controller.description.sensorOrientation,
       );
-      final detection = await detectCardTwoStage(model, upright);
+      if (prep == null || !mounted) return;
+
+      final detection = await _detect(model, prep);
       if (!mounted) return;
 
       final result = _autoCapture.tick(detection?.quad, DateTime.now());
@@ -284,8 +314,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
       if (result.action == AutoCaptureAction.capture && result.quad != null) {
         await _captureQuad(
-          upright,
-          result.quad!,
+          model,
+          liveQuad: result.quad!,
           presence: detection?.present ?? 0,
         );
       }
@@ -294,14 +324,55 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     }
   }
 
+  /// One pass over the whole frame, then a tighter re-run around what it
+  /// found — `detectCardTwoStage`, split so each tensor is built on the
+  /// worker while the model runs on its own isolate.
+  Future<Detection?> _detect(CornerModel model, FramePrep prep) async {
+    // The rect the worker actually cut the tensor from — the visible crop,
+    // not the whole sensor frame. Recomputing it here instead of taking it
+    // back would risk the two disagreeing, and the corners are fractions of
+    // whichever rect the tensor came from.
+    final full = prep.region;
+    final stage1 = await model.run(prep.tensor, full);
+    if (stage1 == null || !passesGates(stage1, full)) return null;
+
+    final region = stage2Region(stage1.quad, prep.width, prep.height);
+    // Only now is the second tensor cut. Building it before the gates had
+    // passed was half the tick's preprocessing spent on frames that were
+    // never going to refine.
+    final tensor = await _worker?.prepareRegion(region);
+    if (tensor == null) return stage1;
+
+    final stage2 = await model.run(tensor, region);
+    if (stage2 == null) return stage1;
+
+    // Accepted only on the stricter bar: stage 2's input is already zoomed
+    // and mostly frontal, so a large aspect error there is a wrong answer
+    // rather than foreshortening.
+    return passesGates(stage2, region, aspectTolerance: stage2AspectTolerance)
+        ? stage2
+        : stage1;
+  }
+
   /// Warps the locked quad out of the frame it was detected in and scans it.
   ///
   /// The same frame detection ran on, not a fresh still: the quad's
   /// coordinates only mean anything there, and a `takePicture` between lock
   /// and capture would move the card out from under them.
+  /// Captures, then finds the card in what it captured — web's crop cascade.
+  ///
+  /// The quad that tripped the lock came from an older frame. Warping the
+  /// new capture with it assumes the card has not moved in the meantime,
+  /// which is exactly the assumption a hand holding a card breaks. So the
+  /// detector runs again on the frame about to be sent, and the live quad is
+  /// only the fallback.
+  ///
+  /// A miss is a miss: if no tier finds a card, nothing is sent. An unwarped
+  /// frame reaches the embedder as a photo of a desk with a card on it, and
+  /// scores against the catalog accordingly.
   Future<void> _captureQuad(
-    img.Image frame,
-    Quad quad, {
+    CornerModel model, {
+    required Quad liveQuad,
     required double presence,
   }) async {
     if (_capturing) return;
@@ -309,15 +380,69 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     _rearmTimer?.cancel();
 
     try {
-      final capture = await compute(_warpInIsolate, (frame: frame, quad: quad));
+      final worker = _worker;
+      final controller = _controller;
+      if (worker == null || controller == null) return;
+
+      final orientation = controller.description.sensorOrientation;
+
+      // The burst: two frames a gap apart, sharpest kept. A hand is never
+      // still, and one grab lands on the blurred half of that wobble often
+      // enough to be the difference between a match and a miss.
+      await worker.beginBurst();
+      for (var i = 0; i < _burstFrames; i++) {
+        final frame = _latestFrame;
+        if (frame == null || !mounted) return;
+        await worker.offerBurstFrame(frame, orientation);
+        if (i < _burstFrames - 1) await Future<void>.delayed(_burstGap);
+      }
       if (!mounted) return;
+
+      final prep = await worker.burstTensor();
+      if (prep == null || !mounted) return;
+
+      // Tier one: detect on the frame being sent.
+      var quad = (await _detect(model, prep))?.quad;
+      var tier = 'model';
+      var tierPresence = presence;
+
+      // Tier two: the quad that locked the overlay, if it still describes a
+      // card-shaped thing inside this frame. Aspect alone cannot vouch for
+      // it — it is a copy of a quad that already passed — so bounds are what
+      // this tier actually checks.
+      if (quad == null &&
+          _quadWithinFrame(liveQuad, prep) &&
+          passesGates(
+            Detection(present: presence, quad: liveQuad),
+            prep.region,
+          )) {
+        quad = liveQuad;
+        tier = 'model_stale_quad';
+      }
+
+      if (quad == null) {
+        // Web's miss branch: re-arm and say so rather than sending anything.
+        _showError('Kartu tidak terdeteksi, posisikan ulang');
+        _autoCapture.reset();
+        return;
+      }
+
+      final capture = await worker.warpBurst(quad);
+      if (capture == null || !mounted) return;
 
       final result = await ref
           .read(scannerProvider.notifier)
           .scan(
             capture: capture,
             language: ref.read(scanLanguageProvider),
-            captureMeta: _quadCaptureMeta(frame, capture, quad, presence),
+            captureMeta: _quadCaptureMeta(
+              prep.width,
+              prep.height,
+              capture,
+              quad,
+              tierPresence,
+              tier,
+            ),
           );
       if (!mounted) return;
 
@@ -340,41 +465,50 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         // Let the same card be retried without moving it.
         _autoCapture.reset();
       }
-      _scheduleRearm(after: result is ScanFailed ? result.retryAfter : null);
-    } catch (e) {
-      if (!mounted) return;
-      if (kDebugMode) debugPrint('[scan] capture failed: $e');
-      _showError('Gagal memproses gambar');
-      _autoCapture.reset();
-      _scheduleRearm();
     } finally {
       if (mounted) setState(() => _capturing = false);
+      _scheduleRearm();
     }
   }
 
+  /// Whether [quad] still lands inside [prep]'s frame, with web's 10% slack.
+  bool _quadWithinFrame(Quad quad, FramePrep prep) {
+    final slackX = prep.width * 0.1;
+    final slackY = prep.height * 0.1;
+    return quad.corners.every(
+      (p) =>
+          p.x >= -slackX &&
+          p.x <= prep.width + slackX &&
+          p.y >= -slackY &&
+          p.y <= prep.height + slackY,
+    );
+  }
+
   Map<String, dynamic> _quadCaptureMeta(
-    img.Image frame,
+    int frameWidth,
+    int frameHeight,
     CardCapture capture,
     Quad quad,
     double presence,
+    String cropTier,
   ) {
     final controller = _controller;
     final bounds = quad.bounds;
     return {
       'label': controller?.description.name ?? '',
       'deviceId': controller?.description.name ?? '',
-      'trackWidth': frame.width,
-      'trackHeight': frame.height,
+      'trackWidth': frameWidth,
+      'trackHeight': frameHeight,
       'pinnedToSingleLens': true,
-      'videoWidth': frame.width,
-      'videoHeight': frame.height,
+      'videoWidth': frameWidth,
+      'videoHeight': frameHeight,
       'cropWidth': (bounds.right - bounds.left).round().clamp(0, 20000),
       'cropHeight': (bounds.bottom - bounds.top).round().clamp(0, 20000),
       'outWidth': capture.width,
       'outHeight': capture.height,
       'sharpness': capture.sharpness.round().clamp(0, 1000000),
       'luma': capture.luma.round().clamp(0, 255),
-      'cropTier': 'model',
+      'cropTier': cropTier,
       'modelPresence': presence.clamp(0.0, 1.0),
     };
   }
@@ -588,5 +722,3 @@ extension _FirstOrNull<T> on Iterable<T> {
 /// Warps and encodes off the UI thread — a 1400px warp plus a JPEG encode is
 /// tens of milliseconds, and the preview should stay smooth at exactly the
 /// moment of capture.
-CardCapture _warpInIsolate(({img.Image frame, Quad quad}) args) =>
-    captureFromQuad(args.frame, args.quad);

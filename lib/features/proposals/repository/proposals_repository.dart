@@ -9,6 +9,7 @@ import 'models/listing_offer_model.dart';
 import 'models/my_bid.dart';
 import 'models/sent_proposal.dart';
 import 'models/proposals_summary.dart';
+import '../../../core/errors/user_message.dart';
 
 /// The `cards` columns these rows embed — same list the other repositories
 /// hand to [CardModel.fromRow].
@@ -25,7 +26,7 @@ seller_id, listing:ask_order_id(slug), card:cards!inner($_cardColumns)
 
 const _proposalColumns =
     '''
-slug, status, proposed_quantity, proposed_price, condition, message,
+slug, status, proposed_quantity, proposed_price, condition, message, photos,
 created_at, expires_at, seen_at, seller_id,
 bid:listings!inner(id, price, user_id, card:cards!inner($_cardColumns))
 ''';
@@ -434,6 +435,16 @@ class ProposalsRepository {
         expiresAt: _date(row['expires_at']),
         seenAt: _date(row['seen_at']),
         message: row['message'] as String?,
+        // Both were already on the row — the price was selected and dropped,
+        // the photos never asked for. A buyer deciding on a proposal is
+        // deciding on a specific copy at a specific price, and the list
+        // showed neither.
+        proposedPrice: (row['proposed_price'] as num?)?.toInt(),
+        photos: [
+          for (final url in (row['photos'] as List?) ?? const [])
+            if (url is String && url.isNotEmpty) url,
+        ],
+        bidPrice: (bid['price'] as num?)?.toInt(),
       );
     }).toList();
   }
@@ -466,7 +477,7 @@ class ProposalsRepository {
       }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 

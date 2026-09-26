@@ -425,9 +425,7 @@ class _PasswordStepState extends State<_PasswordStep> {
             // waiting for the submit to fail.
             helperText: widget.error == null ? 'Minimal 8 karakter' : null,
             suffixIcon: IconButton(
-              icon: Icon(
-                widget.obscure ? LucideIcons.eyeOff : LucideIcons.eye,
-              ),
+              icon: Icon(widget.obscure ? LucideIcons.eyeOff : LucideIcons.eye),
               onPressed: widget.onToggleObscure,
             ),
           ),
@@ -506,11 +504,7 @@ class _TermsNoticeState extends State<_TermsNotice> {
         style: AppTypography.caption(context.mutedForeground),
         children: [
           const TextSpan(text: 'Dengan mendaftar, kamu menyetujui '),
-          TextSpan(
-            text: 'Syarat & Ketentuan',
-            style: link,
-            recognizer: _terms,
-          ),
+          TextSpan(text: 'Syarat & Ketentuan', style: link, recognizer: _terms),
           const TextSpan(text: ' dan '),
           TextSpan(
             text: 'Kebijakan Privasi',

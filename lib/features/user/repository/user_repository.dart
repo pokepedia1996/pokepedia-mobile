@@ -7,6 +7,7 @@ import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
 import '../../../shared/utils/primary_collection.dart';
 import 'models/profile_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// The owner's own `collection_cards` → `cards` embed.
 ///
@@ -251,7 +252,7 @@ class UserRepository {
       await _client.rpc('follow_shop', params: {'p_shop_user_id': shopUserId});
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -263,7 +264,7 @@ class UserRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -304,7 +305,10 @@ class UserRepository {
   Future<bool?> isUsernameAvailable(String username) async {
     try {
       final value = await _client
-          .rpc('is_username_available', params: {'requested_username': username})
+          .rpc(
+            'is_username_available',
+            params: {'requested_username': username},
+          )
           .timeout(const Duration(seconds: 10));
       return value as bool?;
     } catch (error, stack) {
@@ -364,15 +368,15 @@ class UserRepository {
           '${bucket.getPublicUrl(path)}'
           '?t=${DateTime.now().millisecondsSinceEpoch}';
 
-      await _client.from('profiles').update({'avatar_url': url}).eq(
-        'id',
-        userId,
-      );
+      await _client
+          .from('profiles')
+          .update({'avatar_url': url})
+          .eq('id', userId);
       return null;
     } on StorageException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -386,15 +390,13 @@ class UserRepository {
       await _client.from('profiles').update(values).eq('id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
   /// The owner's primary-collection visibility settings — what the two
   /// privacy switches read. Own-row under RLS, so no server route.
-  Future<CollectionVisibility?> fetchCollectionVisibility(
-    String userId,
-  ) async {
+  Future<CollectionVisibility?> fetchCollectionVisibility(String userId) async {
     final collectionId = await primaryCollectionId(_client, userId);
     if (collectionId == null) return null;
     final row = await _client
@@ -419,7 +421,7 @@ class UserRepository {
       await _client.from('collections').update(values).eq('id', collectionId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -449,7 +451,7 @@ class UserRepository {
       }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 }

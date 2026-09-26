@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,6 +47,55 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
   bool _editMode = false;
   bool _working = false;
   final Set<int> _selected = {};
+
+  /// The reveal window and the memoised filter pass — the same reasoning as
+  /// the collection tab's, which this view shares a page with.
+  static const _pageSize = 36;
+  int _shown = _pageSize;
+
+  List<CardModel>? _visibleSource;
+  CardFilters? _visibleFilters;
+  String? _visibleSearch;
+  CardSortOption? _visibleSort;
+  List<CardModel> _visible = const [];
+
+  List<CardModel>? _optionsSource;
+  CardFilterOptions? _options;
+
+  List<CardModel> _visibleFor(List<CardModel> cards, String search) {
+    if (identical(cards, _visibleSource) &&
+        identical(_filters, _visibleFilters) &&
+        search == _visibleSearch &&
+        _sortBy == _visibleSort) {
+      return _visible;
+    }
+
+    _visibleSource = cards;
+    _visibleFilters = _filters;
+    _visibleSearch = search;
+    _visibleSort = _sortBy;
+    _visible = sortCards(
+      applyCardFilters(cards, _filters.copyWith(search: search)),
+      _sortBy,
+    );
+    _shown = _pageSize;
+    return _visible;
+  }
+
+  CardFilterOptions _optionsFor(List<CardModel> cards) {
+    if (!identical(cards, _optionsSource) || _options == null) {
+      _optionsSource = cards;
+      _options = deriveCardFilterOptions(cards);
+    }
+    return _options!;
+  }
+
+  bool _revealMore(ScrollNotification notification, int total) {
+    if (notification.depth != 0 || _shown >= total) return false;
+    if (notification.metrics.extentAfter > 800) return false;
+    setState(() => _shown = math.min(_shown + _pageSize, total));
+    return false;
+  }
 
   void _exitEdit() => setState(() {
     _editMode = false;
@@ -193,81 +244,102 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
       );
     }
 
-    final filters = widget.showSearch
-        ? _filters
-        : _filters.copyWith(search: ref.watch(collectionSearchProvider));
-    var visible = applyCardFilters(cards, filters);
-    visible = sortCards(visible, _sortBy);
+    final search = widget.showSearch
+        ? _filters.search
+        : ref.watch(collectionSearchProvider);
+    final filters = _filters.copyWith(search: search);
+    final visible = _visibleFor(cards, search);
+    final shown = math.min(_shown, visible.length);
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: _WishlistHeader(
-            editMode: _editMode,
-            hasCards: cards.isNotEmpty,
-            onManage: () => setState(() => _editMode = true),
-            onDone: _exitEdit,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: CardFilterBar(
-              cards: cards,
-              showSearch: widget.showSearch,
-              filters: filters,
-              onFiltersChanged: (f) => setState(() => _filters = f),
-              sortBy: _sortBy,
-              onSortChanged: (s) => setState(() => _sortBy = s),
-              viewMode: _viewMode,
-              onViewModeChanged: (v) => setState(() => _viewMode = v),
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) =>
+          _revealMore(notification, visible.length),
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _WishlistHeader(
+              editMode: _editMode,
+              hasCards: cards.isNotEmpty,
+              onManage: () => setState(() => _editMode = true),
+              onDone: _exitEdit,
             ),
           ),
-        ),
-        if (visible.isEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(vertical: 48),
-            sliver: SliverToBoxAdapter(
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: CardFilterBar(
+                cards: cards,
+                showSearch: widget.showSearch,
+                optionsOverride: _optionsFor(cards),
+                filters: filters,
+                onFiltersChanged: (f) => setState(() => _filters = f),
+                sortBy: _sortBy,
+                onSortChanged: (s) => setState(() => _sortBy = s),
+                viewMode: _viewMode,
+                onViewModeChanged: (v) => setState(() => _viewMode = v),
+              ),
+            ),
+          ),
+          if (visible.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: Text(
+                    'Tidak ada kartu yang sesuai filter.',
+                    style: AppTypography.bodySm(context.mutedForeground),
+                  ),
+                ),
+              ),
+            )
+          else if (_viewMode == CardViewMode.grid)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              sliver: SliverGrid(
+                gridDelegate: cardGridDelegate(context),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => _tile(visible[i]),
+                  childCount: shown,
+                  addAutomaticKeepAlives: false,
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _tile(visible[i], list: true),
+                  ),
+                  childCount: shown,
+                  addAutomaticKeepAlives: false,
+                ),
+              ),
+            ),
+          if (shown < visible.length)
+            const SliverToBoxAdapter(
               child: Center(
-                child: Text(
-                  'Tidak ada kartu yang sesuai filter.',
-                  style: AppTypography.bodySm(context.mutedForeground),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               ),
             ),
-          )
-        else if (_viewMode == CardViewMode.grid)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            sliver: SliverGrid(
-              gridDelegate: cardGridDelegate(context),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => _tile(visible[i]),
-                childCount: visible.length,
-              ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _tile(visible[i], list: true),
-                ),
-                childCount: visible.length,
-              ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height:
+                  AppBottomNav.reservedSpace(context) +
+                  (_selected.isEmpty ? 0 : 72),
             ),
           ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height:
-                AppBottomNav.reservedSpace(context) +
-                (_selected.isEmpty ? 0 : 72),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

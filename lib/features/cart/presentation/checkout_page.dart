@@ -173,9 +173,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // Read before anything mutates the cart: `selectedCartItemsProvider`
       // is derived from it, so it empties the moment the lines are removed.
       final selected = ref.read(selectedCartItemsProvider);
-      final checkedOutItemIds = [
-        for (final item in selected) item.cartItemId,
-      ];
+      final checkedOutItemIds = [for (final item in selected) item.cartItemId];
       // Copies, not cart lines: one line at quantity three is three cards.
       final checkedOutCardCount = selected.fold<int>(
         0,

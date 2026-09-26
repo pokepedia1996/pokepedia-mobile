@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../repository/market_repository.dart';
 import '../../usecase/market_notifier.dart';
+import '../../../../core/errors/user_message.dart';
 
 /// The reasons `report_listing` accepts, in web's order and wording.
 ///
@@ -88,7 +89,7 @@ class _ReportListingSheetState extends ConsumerState<_ReportListingSheet> {
       if (!mounted) return;
       setState(() => _submitting = false);
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(userFacingError(e))));
     } catch (_) {
       if (!mounted) return;
       setState(() => _submitting = false);

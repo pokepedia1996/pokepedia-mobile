@@ -45,6 +45,7 @@ import '../../proposals/repository/models/listing_offer_model.dart';
 import '../../proposals/usecase/proposals_notifier.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 const _monthNamesIdFull = [
   'Januari',
@@ -112,7 +113,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       await ref.read(cartProvider.notifier).add(listing.id, quantity);
     } on CartException catch (e) {
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(userFacingError(e))));
       return;
     }
     if (!mounted) return;

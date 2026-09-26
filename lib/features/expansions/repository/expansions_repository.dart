@@ -6,6 +6,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/primary_collection.dart';
 import 'models/market_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Mirrors `EXPANSION_COLUMNS` in `pokepedia-web/lib/data/client.ts`.
 const _expansionColumns =
@@ -190,7 +191,7 @@ class ExpansionsRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -289,7 +290,7 @@ class ExpansionsRepository {
       } on PostgrestException catch (e) {
         // Earlier batches already committed, so the partial count travels
         // with the error and the caller still revalidates.
-        return (count: count, error: e.message);
+        return (count: count, error: userFacingError(e));
       }
     }
     return (count: count, error: null);

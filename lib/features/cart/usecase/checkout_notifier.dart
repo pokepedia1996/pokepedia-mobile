@@ -12,6 +12,7 @@ import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import 'cart_notifier.dart';
 import 'cart_selection.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Per-seller shipping state. Ports `SellerShipping` from
 /// `features/checkout/types.ts`.
@@ -75,6 +76,7 @@ class CheckoutState {
   final String buyerNote;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
+
   /// Null until the wallet has answered. Distinct from zero on purpose:
   /// an unknown balance must not read as an empty one, or saldo shows up
   /// greyed out as "tidak cukup" for the moment before it loads.
@@ -278,7 +280,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         origins = await ref.read(checkoutGatewayProvider).fetchSellerOrigins();
         state = state.copyWith(sellerOrigins: origins);
       } on ApiException catch (e) {
-        _setShipping(sellerId, SellerShipping(error: e.message));
+        _setShipping(sellerId, SellerShipping(error: userFacingError(e)));
         return;
       }
     }
@@ -340,7 +342,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       );
       _syncMandatoryInsurance(sellerId);
     } on ApiException catch (e) {
-      _setShipping(sellerId, SellerShipping(error: e.message));
+      _setShipping(sellerId, SellerShipping(error: userFacingError(e)));
     }
   }
 

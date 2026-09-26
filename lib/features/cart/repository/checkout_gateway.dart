@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
 import 'models/checkout_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// What checkout needs to know about the buyer before it can start.
 class CheckoutContext {
@@ -150,7 +151,7 @@ class CheckoutGateway {
           .maybeSingle();
       return CheckoutContext(phoneVerified: row?['phone_verified_at'] != null);
     } on PostgrestException catch (e) {
-      throw ApiException(e.message);
+      throw ApiException(userFacingError(e));
     }
   }
 

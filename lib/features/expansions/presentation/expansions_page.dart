@@ -10,7 +10,6 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/app_top_bar.dart';
 import '../../../shared/widgets/catalog_language_toggle.dart';
 import '../../../shared/widgets/expansion_list_item.dart';
 import '../../../shared/widgets/pack_card.dart';
@@ -19,18 +18,25 @@ import '../../../shared/widgets/view_mode_toggle.dart';
 import '../usecase/expansions_notifier.dart';
 import '../utils/pack_sort.dart';
 
-/// Ports `features/expansions/components/expansions-list-client.tsx` — the
-/// Ekspansi tab: a sort + view toolbar over the expansions, grouped by
-/// series while sorted by date and flattened when sorted by name.
+/// Ports `features/expansions/components/expansions-list-client.tsx` — a
+/// sort + view toolbar over the expansions, grouped by series while sorted
+/// by date and flattened when sorted by name.
 ///
 /// The ID/EN/JP switch scopes which language's catalog is shown, like the
 /// web's localized `/en/expansions` routes. Its ad slots between series are
 /// skipped — the app has no ad placements.
-class ExpansionsPage extends ConsumerStatefulWidget {
-  const ExpansionsPage({super.key});
+///
+/// A body, not a page: this had its own tab, its own [Scaffold] and its own
+/// top bar until the expansions moved inside Pencarian. Browsing the
+/// expansions and searching the cards in them were never two errands, and
+/// splitting them across two tabs meant the reader had to know which one
+/// their question belonged to before they could ask it. The search screen
+/// owns the chrome now and shows this when nothing is being searched for.
+class ExpansionsBrowser extends ConsumerStatefulWidget {
+  const ExpansionsBrowser({super.key});
 
   @override
-  ConsumerState<ExpansionsPage> createState() => _ExpansionsPageState();
+  ConsumerState<ExpansionsBrowser> createState() => _ExpansionsBrowserState();
 }
 
 /// How many expansions a series shows before asking to be opened.
@@ -42,7 +48,7 @@ class ExpansionsPage extends ConsumerStatefulWidget {
 /// one is always in reach.
 const _packsPerSeries = 4;
 
-class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
+class _ExpansionsBrowserState extends ConsumerState<ExpansionsBrowser> {
   PackSortOption _sortBy = PackSortOption.newest;
   CardViewMode _viewMode = CardViewMode.grid;
 
@@ -54,25 +60,10 @@ class _ExpansionsPageState extends ConsumerState<ExpansionsPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(seriesGroupsProvider);
 
-    return Scaffold(
-      // `bottom: false` lets the list run under the floating nav pill —
-      // the scroll padding below keeps the last row clear of it.
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const AppTopBar(),
-            Expanded(
-              child: async.when(
-                data: (groups) => _buildBody(groups),
-                loading: () => const PikachuLoader(),
-                error: (_, __) =>
-                    const Center(child: Text('Gagal memuat ekspansi')),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return async.when(
+      data: (groups) => _buildBody(groups),
+      loading: () => const PikachuLoader(),
+      error: (_, __) => const Center(child: Text('Gagal memuat ekspansi')),
     );
   }
 

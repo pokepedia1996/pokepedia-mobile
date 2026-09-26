@@ -40,7 +40,11 @@ class AppBottomNav extends StatelessWidget {
   /// Pill height (6px padding + 8/20/2/11/8 item stack + 6px padding) and
   /// the gap it floats above the screen edge.
   static const _pillHeight = 61.0;
-  static const _pillGap = 12.0;
+
+  /// The gap the pill floats above the screen's bottom edge. Public because
+  /// anything else pinned down there has to know whether it is sitting on
+  /// the pill or on the gap above it.
+  static const pillGap = 12.0;
 
   /// Vertical space the floating pill covers, for tabs that let their
   /// content scroll underneath it.
@@ -51,7 +55,7 @@ class AppBottomNav extends StatelessWidget {
   static double reservedSpace(BuildContext context) {
     final media = MediaQuery.of(context);
     final fromScaffold = media.padding.bottom;
-    final intrinsic = _pillHeight + _pillGap + media.viewPadding.bottom;
+    final intrinsic = _pillHeight + pillGap + media.viewPadding.bottom;
     return fromScaffold > intrinsic ? fromScaffold : intrinsic;
   }
 
@@ -65,23 +69,24 @@ class AppBottomNav extends StatelessWidget {
   /// has to name the route itself.
   static const tabPaths = [
     Routes.home,
-    Routes.expansions,
     Routes.search,
     Routes.portfolio,
     Routes.market,
+    Routes.seller,
     Routes.account,
   ];
 
+  /// Ekspansi is gone from here: the expansions browser now opens inside
+  /// Pencarian, which is where someone looking for a card was always headed
+  /// anyway. Its old tab is spent on Jual instead — selling was three taps
+  /// deep under Akun, which is a poor place for the thing the marketplace
+  /// runs on.
   static const items = [
     BottomNavItem(label: 'Beranda', icon: LucideIcons.house),
-    BottomNavItem(
-      label: 'Ekspansi',
-      icon: LucideIcons.circle,
-      usePokeball: true,
-    ),
     BottomNavItem(label: 'Pencarian', icon: LucideIcons.search),
-    BottomNavItem(label: 'Portofolio', icon: LucideIcons.walletCards),
+    BottomNavItem(label: 'Koleksi', icon: LucideIcons.archive),
     BottomNavItem(label: 'Market', icon: LucideIcons.store),
+    BottomNavItem(label: 'Jual', icon: LucideIcons.tag),
     BottomNavItem(label: 'Akun', icon: LucideIcons.user),
   ];
 

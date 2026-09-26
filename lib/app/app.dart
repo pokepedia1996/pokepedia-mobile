@@ -1,17 +1,34 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers/auth_link_handler.dart';
 import '../core/providers/theme_mode_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/presentation/onboarding_modal.dart';
 import '../features/notifications/usecase/notification_push_notifier.dart';
 import 'router/app_router.dart';
 
-class PokepediaApp extends ConsumerWidget {
+class PokepediaApp extends ConsumerStatefulWidget {
   const PokepediaApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PokepediaApp> createState() => _PokepediaAppState();
+}
+
+class _PokepediaAppState extends ConsumerState<PokepediaApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Started here rather than in `main`: a link can arrive before the first
+    // frame (a cold start from the email) or long after, and this outlives
+    // every route either way.
+    unawaited(ref.read(authLinkHandlerProvider).start());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     // Kept alive for the life of the app: it follows the session on its own,
     // subscribing to this user's notifications and showing them.
