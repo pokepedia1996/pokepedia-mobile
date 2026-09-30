@@ -95,7 +95,7 @@ class CornerModel {
 
       return decodePrediction(output.toList(), region);
     } catch (e) {
-      if (kDebugMode) debugPrint('[scan] corner model failed: $e');
+      debugPrint('[scan] corner model failed: $e');
       return null;
     }
   }
