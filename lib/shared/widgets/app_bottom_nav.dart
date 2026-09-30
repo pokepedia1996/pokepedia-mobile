@@ -28,14 +28,15 @@ class AppBottomNav extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onTap,
-    this.compact = false,
+    this.hidden = false,
   });
 
-  /// Matches the web's GSAP shrink: the pill scales down and settles a few
-  /// pixels lower while the user scrolls down the page.
-  static const _compactScale = 0.94;
-  static const _compactOffsetY = 3.0;
-  static const _compactDuration = Duration(milliseconds: 350);
+  /// How long the pill takes to leave or come back.
+  ///
+  /// Shorter than the shrink it replaced: this one is the difference between
+  /// the nav being there and not, so it has to finish inside the flick that
+  /// asked for it rather than trailing the thumb.
+  static const _slideDuration = Duration(milliseconds: 220);
 
   /// Pill height (6px padding + 8/20/2/11/8 item stack + 6px padding) and
   /// the gap it floats above the screen edge.
@@ -93,8 +94,15 @@ class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  /// Shrinks the pill — driven by [AppShell]'s scroll listener.
-  final bool compact;
+  /// Slides the pill off the bottom of the screen — driven by [AppShell]'s
+  /// scroll listener, which sets it while the page is being scrolled down
+  /// and clears it on any upward scroll.
+  ///
+  /// The pill used to merely shrink, which kept it over the last row of
+  /// whatever was being read. Reading a grid of listings is most of what
+  /// this app is for, so the nav gets out of the way entirely and comes
+  /// back the moment the thumb goes the other way.
+  final bool hidden;
 
   @override
   Widget build(BuildContext context) {
@@ -103,19 +111,18 @@ class AppBottomNav extends StatelessWidget {
     final bottomInset = media.padding.bottom;
     final reduceMotion = media.disableAnimations;
 
+    // Far enough that the shadow clears the edge too.
+    final travel = _pillHeight + pillGap + bottomInset + 8;
+
     return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: compact && !reduceMotion ? 1 : 0),
-      duration: reduceMotion ? Duration.zero : _compactDuration,
-      curve: Curves.easeOutQuad,
+      tween: Tween<double>(begin: 0, end: hidden ? 1 : 0),
+      duration: reduceMotion ? Duration.zero : _slideDuration,
+      curve: Curves.easeOutCubic,
       builder: (context, t, child) => Transform.translate(
-        offset: Offset(0, _compactOffsetY * t),
-        child: Transform.scale(
-          scale: 1 - (1 - _compactScale) * t,
-          // Bottom-anchored so the pill shrinks toward the screen edge, the
-          // same `transformOrigin: "bottom center"` the web uses.
-          alignment: Alignment.bottomCenter,
-          child: child,
-        ),
+        offset: Offset(0, travel * t),
+        // A pill that is off-screen must not still be catching taps meant
+        // for the content it was covering.
+        child: IgnorePointer(ignoring: t > 0.5, child: child),
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 12),

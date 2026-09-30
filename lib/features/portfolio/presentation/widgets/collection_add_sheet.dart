@@ -127,7 +127,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
     final colors = context.appColors;
     final searching = _query.length >= _minPickerQuery;
     final resultsAsync = searching
-        ? ref.watch(cardSearchPickerProvider(_query))
+        ? ref.watch(cardSearchPickerProvider((query: _query, language: null)))
         : null;
 
     return PopScope(

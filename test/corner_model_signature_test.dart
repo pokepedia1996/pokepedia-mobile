@@ -13,22 +13,25 @@ import 'package:pokepedia_mobile/features/scanner/utils/card_detector.dart';
 /// They would just be wrong, in a way only a scan in the hand would show.
 /// So the signature is asserted here rather than trusted.
 void main() {
-  test('the bundled tflite model has the signature the detector prepares for', () {
-    final bytes = File('assets/models/card_corners.tflite').readAsBytesSync();
-    final interpreter = Interpreter.fromBuffer(Uint8List.fromList(bytes));
-    addTearDown(interpreter.close);
+  test(
+    'the bundled tflite model has the signature the detector prepares for',
+    () {
+      final bytes = File('assets/models/card_corners.tflite').readAsBytesSync();
+      final interpreter = Interpreter.fromBuffer(Uint8List.fromList(bytes));
+      addTearDown(interpreter.close);
 
-    final input = interpreter.getInputTensors().single;
-    final output = interpreter.getOutputTensors().single;
+      final input = interpreter.getInputTensors().single;
+      final output = interpreter.getOutputTensors().single;
 
-    // NCHW, not NHWC: `prepareInput` packs channel-planar.
-    expect(input.shape, [1, 3, modelInputSize, modelInputSize]);
-    expect(input.type.toString(), contains('float32'));
+      // NCHW, not NHWC: `prepareInput` packs channel-planar.
+      expect(input.shape, [1, 3, modelInputSize, modelInputSize]);
+      expect(input.type.toString(), contains('float32'));
 
-    // Eight corner coordinates plus the presence logit.
-    expect(output.shape, [1, 9]);
-    expect(output.type.toString(), contains('float32'));
-  });
+      // Eight corner coordinates plus the presence logit.
+      expect(output.shape, [1, 9]);
+      expect(output.type.toString(), contains('float32'));
+    },
+  );
 
   test('it runs, and the flat Float32List shapes are accepted as-is', () {
     final bytes = File('assets/models/card_corners.tflite').readAsBytesSync();

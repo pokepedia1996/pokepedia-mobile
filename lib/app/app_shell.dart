@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../shared/widgets/app_bottom_nav.dart';
+import 'tab_reselect.dart';
 import '../shared/widgets/app_top_bar.dart';
 
 /// Wraps the six buyer tab branches with the floating bottom nav, mirroring
@@ -30,15 +31,16 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  /// Below this offset the nav always stays at full size, so short pages and
-  /// the first flick of a long one don't shrink it. Mirrors the `y > 80`
+  /// Below this offset the nav always stays put, so short pages and the
+  /// first flick of a long one don't send it away. Mirrors the `y > 80`
   /// check in `mobile-bottom-nav.tsx`.
-  static const _compactThreshold = 80.0;
+  static const _hideThreshold = 80.0;
 
   /// Ignores sub-pixel jitter from the scroll physics settling.
   static const _minDelta = 1.0;
 
-  bool _compact = false;
+  /// Whether the nav is currently off-screen.
+  bool _navHidden = false;
 
   bool _onScroll(ScrollNotification notification) {
     // Horizontal carousels (set rows, market shelves) also bubble up here.
@@ -54,10 +56,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     final delta = notification.scrollDelta ?? 0;
     if (delta.abs() < _minDelta) return false;
 
-    // Down past the threshold shrinks it; any upward scroll restores it.
-    final compact =
-        delta > 0 && notification.metrics.pixels > _compactThreshold;
-    if (compact != _compact) setState(() => _compact = compact);
+    // Down past the threshold sends it away; any upward scroll brings it
+    // back — the behaviour of every feed the reader already knows.
+    final hidden = delta > 0 && notification.metrics.pixels > _hideThreshold;
+    if (hidden != _navHidden) setState(() => _navHidden = hidden);
     return false;
   }
 
@@ -80,12 +82,21 @@ class _AppShellState extends ConsumerState<AppShell> {
       bottomNavigationBar: isTabRoot
           ? AppBottomNav(
               currentIndex: navigationShell.currentIndex,
-              compact: _compact,
+              hidden: _navHidden,
               onTap: (index) {
-                // The incoming tab starts at its own scroll offset, so drop
-                // back to the full-size pill and bring the logo row back.
-                if (_compact) setState(() => _compact = false);
+                // The incoming tab starts at its own scroll offset, so bring
+                // the pill and the logo row back.
+                if (_navHidden) setState(() => _navHidden = false);
                 _syncTopBar(false);
+
+                // Tapping the tab already open is not navigation — the
+                // branch pops to its root either way, and a page sitting at
+                // its root would answer with nothing at all. The page hears
+                // about it instead and decides what "again" means for it.
+                if (index == navigationShell.currentIndex) {
+                  ref.read(tabReselectProvider.notifier).tapped(index);
+                }
+
                 navigationShell.goBranch(
                   index,
                   initialLocation: index == navigationShell.currentIndex,

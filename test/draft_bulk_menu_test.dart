@@ -10,8 +10,9 @@ import 'package:pokepedia_mobile/shared/models/card_condition.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// The menu beside the draft search speaks for every draft at once, so what
-/// it reports and what it writes both have to be about the whole pile.
+/// The menu beside the draft search speaks for the drafts that are ticked,
+/// so what it reports and what it writes both have to be about that set —
+/// and "Pilih semua listing" has to be what puts drafts in it.
 class _FakeRepo extends SellerListingsRepository {
   _FakeRepo._(this.client) : super(client);
 
@@ -29,8 +30,16 @@ class _FakeRepo extends SellerListingsRepository {
   final calls = <Map<String, Object?>>[];
 
   @override
-  Future<String?> updateAllDrafts({bool? autoRelist, bool? acceptsOffers}) async {
-    calls.add({'autoRelist': autoRelist, 'acceptsOffers': acceptsOffers});
+  Future<String?> updateDrafts({
+    required List<int> ids,
+    bool? autoRelist,
+    bool? acceptsOffers,
+  }) async {
+    calls.add({
+      'ids': [...ids]..sort(),
+      'autoRelist': autoRelist,
+      'acceptsOffers': acceptsOffers,
+    });
     return null;
   }
 }
@@ -59,17 +68,26 @@ SellerDraft _draft(
   acceptsOffers: acceptsOffers,
 );
 
+late ProviderContainer _container;
+
 Future<_FakeRepo> _open(
   WidgetTester tester,
-  List<SellerDraft> drafts,
-) async {
+  List<SellerDraft> drafts, {
+  Set<int> selected = const {},
+}) async {
   final repo = _FakeRepo();
+  _container = ProviderContainer(
+    overrides: [
+      sellerListingsRepositoryProvider.overrideWithValue(repo),
+      sellerDraftsProvider.overrideWith((ref) async => drafts),
+    ],
+  );
+  addTearDown(_container.dispose);
+  _container.read(draftSelectionProvider.notifier).state = selected;
+
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        sellerListingsRepositoryProvider.overrideWithValue(repo),
-        sellerDraftsProvider.overrideWith((ref) async => drafts),
-      ],
+    UncontrolledProviderScope(
+      container: _container,
       child: MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(body: DraftBulkMenu(onChanged: () {})),
@@ -104,7 +122,9 @@ void main() {
   });
 
   group('the bulk menu', () {
-    testWidgets('counts every draft, not the ones on screen', (tester) async {
+    testWidgets('counts what is on screen and says whose switches these are', (
+      tester,
+    ) async {
       await _open(tester, [
         _draft(1),
         _draft(2, price: 1),
@@ -113,16 +133,43 @@ void main() {
 
       expect(find.text('Pilih semua listing'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
-      expect(find.text('TERAPKAN KE SEMUA LISTING'), findsOneWidget);
+      expect(find.text('TERAPKAN KE LISTING TERPILIH'), findsOneWidget);
     });
 
-    testWidgets('a switch is on only when it is true of every draft', (
+    testWidgets('the switches are dead until something is ticked', (
       tester,
     ) async {
-      await _open(tester, [
-        _draft(1, autoRelist: true),
-        _draft(2, autoRelist: false),
-      ]);
+      await _open(tester, [_draft(1), _draft(2)]);
+
+      // Nothing selected is nothing to apply to, so the rows say so rather
+      // than silently writing to the whole table.
+      for (final s in tester.widgetList<Switch>(find.byType(Switch))) {
+        expect(s.onChanged, isNull);
+      }
+    });
+
+    testWidgets('"Pilih semua listing" ticks every draft, then clears them', (
+      tester,
+    ) async {
+      await _open(tester, [_draft(1), _draft(2), _draft(3)]);
+
+      await tester.tap(find.text('Pilih semua listing'));
+      await tester.pump();
+      expect(_container.read(draftSelectionProvider), {1, 2, 3});
+
+      await tester.tap(find.text('Pilih semua listing'));
+      await tester.pump();
+      expect(_container.read(draftSelectionProvider), isEmpty);
+    });
+
+    testWidgets('a switch is on only when it is true of every ticked draft', (
+      tester,
+    ) async {
+      await _open(
+        tester,
+        [_draft(1, autoRelist: true), _draft(2, autoRelist: false)],
+        selected: {1, 2},
+      );
 
       // Mixed reads as off, so one tap makes it true of all of them rather
       // than turning it off for the one draft that had it.
@@ -130,14 +177,34 @@ void main() {
       expect(switches.first.value, isFalse);
     });
 
-    testWidgets('toggling writes once for the whole pile', (tester) async {
-      final repo = await _open(tester, [_draft(1), _draft(2)]);
+    testWidgets('a switch reads only the ticked drafts', (tester) async {
+      await _open(
+        tester,
+        [_draft(1, autoRelist: true), _draft(2, autoRelist: false)],
+        selected: {1},
+      );
+
+      // The unticked draft has it off, but it is not part of what this row
+      // is about.
+      final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+      expect(switches.first.value, isTrue);
+    });
+
+    testWidgets('toggling writes once, for the ticked drafts only', (
+      tester,
+    ) async {
+      final repo = await _open(
+        tester,
+        [_draft(1), _draft(2), _draft(3)],
+        selected: {1, 3},
+      );
 
       await tester.tap(find.byType(Switch).first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(repo.calls, hasLength(1));
+      expect(repo.calls.single['ids'], [1, 3]);
       expect(repo.calls.single['autoRelist'], isTrue);
       // The other switch is left alone — only what was touched is sent.
       expect(repo.calls.single['acceptsOffers'], isNull);

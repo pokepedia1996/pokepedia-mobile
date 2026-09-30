@@ -207,18 +207,20 @@ class SellerListingsRepository {
     }
   }
 
-  /// Applies one switch to every draft at once — the bulk row in the listing
-  /// page's dropdown.
+  /// Applies one switch to the ticked drafts at once — the bulk rows in the
+  /// listing page's dropdown.
   ///
-  /// One statement rather than a call per draft: the seller is saying
-  /// something about the whole pile, and a loop would leave it half-applied
-  /// if it failed partway, with no way to tell which half.
-  Future<String?> updateAllDrafts({
+  /// One statement rather than a call per draft: the seller is saying one
+  /// thing about a set of them, and a loop would leave it half-applied if it
+  /// failed partway, with no way to tell which half.
+  Future<String?> updateDrafts({
+    required List<int> ids,
     bool? autoRelist,
     bool? acceptsOffers,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return 'Sesi berakhir.';
+    if (ids.isEmpty) return null;
 
     final patch = <String, dynamic>{
       if (autoRelist != null) 'auto_relist': autoRelist,
@@ -227,33 +229,49 @@ class SellerListingsRepository {
     if (patch.isEmpty) return null;
 
     try {
-      await _client.from('listing_drafts').update(patch).eq('user_id', userId);
+      await _client
+          .from('listing_drafts')
+          .update(patch)
+          // Scoped to the ticked rows. The owner check stays: `ids` comes
+          // from the client, and the table's policy is the only thing
+          // standing between a hand-made list and someone else's drafts.
+          .inFilter('id', ids)
+          .eq('user_id', userId);
       return null;
     } on PostgrestException catch (e) {
       return userFacingError(e);
     }
   }
 
-  /// Creates a draft for each of [cardIds] through `add_listing_draft`.
+  /// Creates a draft for each of [picks] through `add_listing_draft`.
   ///
   /// Drafts, not listings: the sheet that calls this asks only *which*
-  /// cards. Price, condition and photos are decided afterwards on the cards
-  /// themselves, which is why a seller can pick a dozen at once here without
-  /// being asked a dozen questions.
+  /// cards and *how many*. Price, condition and photos are decided
+  /// afterwards on the cards themselves, which is why a seller can pick a
+  /// dozen at once here without being asked a dozen questions.
   ///
   /// The function is idempotent per (card, variant, condition) — picking a
   /// card already drafted bumps its quantity rather than making a second row.
-  Future<({int added, String? error})> addDrafts(List<int> cardIds) async {
+  Future<({int added, String? error})> addDrafts(
+    List<({int cardId, int quantity})> picks,
+  ) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return (added: 0, error: 'Sesi berakhir.');
 
     var added = 0;
     String? failure;
-    for (final cardId in cardIds) {
+    for (final pick in picks) {
       try {
         await _client.rpc(
           'add_listing_draft',
-          params: {'p_user_id': userId, 'p_card_id': cardId},
+          params: {
+            'p_user_id': userId,
+            'p_card_id': pick.cardId,
+            // The function clamps to 1..99 and, on a card already drafted,
+            // adds to what is there rather than replacing it — so picking
+            // three of something with two in Draft leaves five.
+            'p_qty': pick.quantity,
+          },
         );
         added++;
       } on PostgrestException catch (e) {

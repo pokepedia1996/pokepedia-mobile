@@ -5,16 +5,21 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../repository/models/seller_listing.dart';
 import '../../repository/seller_listings_repository.dart';
 import '../../usecase/seller_listings_notifier.dart';
 import 'seller_switch.dart';
 
 /// The button beside the draft search box, and the menu it drops.
 ///
-/// Every row in it speaks for the whole pile rather than one draft. That is
-/// the point of it: setting "Perpanjang otomatis" on forty drafts one switch
-/// at a time is forty taps to say one thing, and the thing being said is
+/// Every row in it speaks for a set of drafts rather than one. That is the
+/// point of it: setting "Perpanjang otomatis" on forty drafts one switch at
+/// a time is forty taps to say one thing, and the thing being said is
 /// identical every time.
+///
+/// The set is whatever is ticked. It used to be "all of them", which made
+/// the tick boxes on the cards beside it mean nothing here — and left no way
+/// to say the thing about half the pile.
 class DraftBulkMenu extends ConsumerStatefulWidget {
   const DraftBulkMenu({super.key, required this.onChanged});
 
@@ -28,13 +33,19 @@ class DraftBulkMenu extends ConsumerStatefulWidget {
 class _DraftBulkMenuState extends ConsumerState<DraftBulkMenu> {
   bool _busy = false;
 
-  Future<void> _applyToAll({bool? autoRelist, bool? acceptsOffers}) async {
+  Future<void> _applyToSelected({bool? autoRelist, bool? acceptsOffers}) async {
     if (_busy) return;
+    final ids = ref.read(draftSelectionProvider).toList();
+    if (ids.isEmpty) return;
     setState(() => _busy = true);
 
     final error = await ref
         .read(sellerListingsRepositoryProvider)
-        .updateAllDrafts(autoRelist: autoRelist, acceptsOffers: acceptsOffers);
+        .updateDrafts(
+          ids: ids,
+          autoRelist: autoRelist,
+          acceptsOffers: acceptsOffers,
+        );
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -44,15 +55,41 @@ class _DraftBulkMenuState extends ConsumerState<DraftBulkMenu> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content: Text(error ?? 'Diterapkan ke semua listing'),
+          content: Text(error ?? 'Diterapkan ke ${ids.length} listing'),
           persist: false,
         ),
       );
   }
 
+  /// Ticks every draft on screen, or clears them if they already are.
+  ///
+  /// Scoped to the filtered list rather than the table: the count beside the
+  /// row is what the seller can see, and a tap that quietly also took the
+  /// drafts behind an active filter would apply the next switch to rows they
+  /// are not looking at.
+  void _toggleSelectAll(List<SellerDraft> visible) {
+    final selection = ref.read(draftSelectionProvider);
+    final ids = visible.map((d) => d.id).toSet();
+    final allTicked = ids.isNotEmpty && ids.every(selection.contains);
+    ref.read(draftSelectionProvider.notifier).state = allTicked
+        ? selection.difference(ids)
+        : selection.union(ids);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final drafts = ref.watch(sellerDraftsProvider).valueOrNull ?? const [];
+    final visible = ref.watch(visibleDraftsProvider);
+    final selection = ref.watch(draftSelectionProvider);
+    // The switches read the drafts they are about to write to, so a set that
+    // already has the flag shows it on.
+    final chosen = [
+      for (final draft
+          in ref.watch(sellerDraftsProvider).valueOrNull ??
+              const <SellerDraft>[])
+        if (selection.contains(draft.id)) draft,
+    ];
+    final visibleIds = visible.map((d) => d.id).toSet();
+    final ready = chosen.isNotEmpty && !_busy;
 
     return MenuAnchor(
       alignmentOffset: const Offset(0, 6),
@@ -72,33 +109,40 @@ class _DraftBulkMenuState extends ConsumerState<DraftBulkMenu> {
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
       ),
       menuChildren: [
-        _SelectAllRow(count: drafts.length),
+        _SelectAllRow(
+          count: visible.length,
+          // Three states, as a checkbox over a list has to have: every one
+          // ticked, some of them, or none.
+          value: visibleIds.isNotEmpty && visibleIds.every(selection.contains),
+          partial: visibleIds.any(selection.contains),
+          onTap: visible.isEmpty ? null : () => _toggleSelectAll(visible),
+        ),
         const Divider(height: 12),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(
-            'TERAPKAN KE SEMUA LISTING',
+            'TERAPKAN KE LISTING TERPILIH',
             style: AppTypography.overline(context.mutedForeground),
           ),
         ),
         _BulkSwitchRow(
           icon: LucideIcons.refreshCw,
           label: 'Perpanjang otomatis',
-          // The switch reads the pile: on only when every draft has it, so
-          // a mixed set shows off and one tap makes it true of all of them.
-          value: drafts.isNotEmpty && drafts.every((d) => d.autoRelist),
-          enabled: drafts.isNotEmpty && !_busy,
-          onChanged: (v) => _applyToAll(autoRelist: v),
+          // On only when every chosen draft has it, so a mixed set shows off
+          // and one tap makes it true of all of them.
+          value: chosen.isNotEmpty && chosen.every((d) => d.autoRelist),
+          enabled: ready,
+          onChanged: (v) => _applyToSelected(autoRelist: v),
         ),
         _BulkSwitchRow(
           icon: LucideIcons.handCoins,
           label: 'Terima penawaran',
-          value: drafts.isNotEmpty && drafts.every((d) => d.acceptsOffers),
-          enabled: drafts.isNotEmpty && !_busy,
-          onChanged: (v) => _applyToAll(acceptsOffers: v),
+          value: chosen.isNotEmpty && chosen.every((d) => d.acceptsOffers),
+          enabled: ready,
+          onChanged: (v) => _applyToSelected(acceptsOffers: v),
         ),
         _MarketPriceRow(
-          enabled: drafts.isNotEmpty && !_busy,
+          enabled: ready,
           onTap: () {
             ScaffoldMessenger.of(context)
               ..clearSnackBars()
@@ -154,38 +198,62 @@ class _MenuButton extends StatelessWidget {
 
 /// "Pilih semua listing", with how many that is.
 class _SelectAllRow extends StatelessWidget {
-  const _SelectAllRow({required this.count});
+  const _SelectAllRow({
+    required this.count,
+    required this.value,
+    required this.partial,
+    required this.onTap,
+  });
 
   final int count;
+
+  /// Every visible draft is ticked.
+  final bool value;
+
+  /// At least one is — which with [value] false is the half-ticked state.
+  final bool partial;
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Row(
-        children: [
-          Icon(LucideIcons.square, size: 22, color: colors.onSurface),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Pilih semua listing',
-              style: AppTypography.bodySemibold(colors.onSurface),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        child: Row(
+          children: [
+            Icon(
+              value
+                  ? LucideIcons.squareCheck
+                  : partial
+                  ? LucideIcons.squareMinus
+                  : LucideIcons.square,
+              size: 22,
+              color: value || partial ? colors.primary : colors.onSurface,
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: context.mutedForeground.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(AppRadius.full),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Pilih semua listing',
+                style: AppTypography.bodySemibold(colors.onSurface),
+              ),
             ),
-            child: Text(
-              '$count',
-              style: AppTypography.captionSemibold(context.mutedForeground),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: context.mutedForeground.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                '$count',
+                style: AppTypography.captionSemibold(context.mutedForeground),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

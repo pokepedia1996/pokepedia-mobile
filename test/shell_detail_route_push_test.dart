@@ -25,7 +25,9 @@ GoRouter buildRouter() => GoRouter(
       builder: (context, state, shell) => Scaffold(body: shell),
       branches: [
         StatefulShellBranch(
-          routes: [GoRoute(path: '/home', builder: (_, __) => const Text('home'))],
+          routes: [
+            GoRoute(path: '/home', builder: (_, __) => const Text('home')),
+          ],
         ),
         StatefulShellBranch(
           routes: [

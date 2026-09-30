@@ -150,7 +150,9 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
         label: 'Ada penawaran masuk',
         count: offers,
         urgent: offers > 0,
-        route: Routes.sellerProducts,
+        // The listings with offers on them, filtered — not the whole list
+        // on whichever tab happened to be open last.
+        route: Routes.sellerProductsWithOffers(),
       ),
       (
         label: 'Komplain terbuka',
@@ -276,7 +278,7 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: ElevatedButton.icon(
-              onPressed: () => context.push(Routes.sellerProducts),
+              onPressed: () => context.push(Routes.sellerProductsTab('draft')),
               icon: const Icon(LucideIcons.plus, size: 16),
               label: const Text('Tambahkan Listing'),
               style: ElevatedButton.styleFrom(
@@ -390,11 +392,22 @@ class _StatStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Each tile opens the tab it counted. They all used to land on Kelola
+    // Listing as it was last left, so tapping "DRAFT" and arriving on Aktif
+    // read as the tap having gone somewhere else entirely.
     final tiles = <({String label, int? value, String route})>[
-      (label: 'AKTIF', value: active, route: Routes.sellerProducts),
+      (
+        label: 'AKTIF',
+        value: active,
+        route: Routes.sellerProductsTab('active'),
+      ),
       (label: 'PESANAN', value: orders, route: Routes.sellerOrders),
-      (label: 'DRAFT', value: drafts, route: Routes.sellerProducts),
-      (label: 'INAKTIF', value: inactive, route: Routes.sellerProducts),
+      (label: 'DRAFT', value: drafts, route: Routes.sellerProductsTab('draft')),
+      (
+        label: 'INAKTIF',
+        value: inactive,
+        route: Routes.sellerProductsTab('inactive'),
+      ),
     ];
 
     return SizedBox(

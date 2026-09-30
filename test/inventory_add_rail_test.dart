@@ -44,7 +44,10 @@ Future<void> _search(
         authProvider.overrideWith(_FakeAuth.new),
         inventoryRecordsProvider.overrideWith((ref) async => []),
         inventoryDraftsProvider.overrideWith((ref) async => drafts),
-        cardSearchPickerProvider('pika').overrideWith((ref) async => results),
+        cardSearchPickerProvider((
+          query: 'pika',
+          language: null,
+        )).overrideWith((ref) async => results),
       ],
       child: MaterialApp(
         theme: AppTheme.light,

@@ -24,7 +24,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: const Scaffold(body: Center(child: ShareCardButton(card: _card))),
+        home: const Scaffold(
+          body: Center(child: ShareCardButton(card: _card)),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -36,9 +38,6 @@ void main() {
   test('links to the card on the web, matching the store share link', () {
     // Same host the store poster shares, so both point at one place.
     final button = const ShareCardButton(card: _card);
-    expect(
-      button.url,
-      '${AppConfig.appUrl}/expansions/m-p/98765',
-    );
+    expect(button.url, '${AppConfig.appUrl}/expansions/m-p/98765');
   });
 }

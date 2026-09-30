@@ -29,7 +29,8 @@ GoRouter _router() => GoRouter(
       path: Routes.checkoutSuccess,
       builder: (_, state) => CheckoutThankYouPage(
         cardCount: int.tryParse(state.uri.queryParameters['cards'] ?? '') ?? 0,
-        totalAmount: int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
+        totalAmount:
+            int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
       ),
     ),
   ],
@@ -40,10 +41,7 @@ Future<void> _pump(WidgetTester tester) async {
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-    MaterialApp.router(
-      theme: AppTheme.light,
-      routerConfig: _router(),
-    ),
+    MaterialApp.router(theme: AppTheme.light, routerConfig: _router()),
   );
   await tester.pumpAndSettle();
 }

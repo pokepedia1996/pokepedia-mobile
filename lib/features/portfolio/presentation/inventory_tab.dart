@@ -634,7 +634,9 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     final draftsAsync = ref.watch(inventoryDraftsProvider);
     final showResults = _debouncedQuery.trim().length >= 2;
     final resultsAsync = showResults
-        ? ref.watch(cardSearchPickerProvider(_debouncedQuery))
+        ? ref.watch(
+            cardSearchPickerProvider((query: _debouncedQuery, language: null)),
+          )
         : null;
 
     return ListView(

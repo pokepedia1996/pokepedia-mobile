@@ -15,6 +15,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/app_top_bar.dart';
 import '../../expansions/presentation/expansions_page.dart';
 import '../../../shared/widgets/card_grid_item.dart';
@@ -53,6 +54,14 @@ class AdvancedSearchPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<AdvancedSearchPage> createState() => _AdvancedSearchPageState();
 }
+
+/// How long the filter panel takes to arrive or leave. Long enough to be
+/// read as a movement, short enough that a second tap is never waiting on it.
+const _panelDuration = Duration(milliseconds: 220);
+
+/// Identifies the panel among the three things that can occupy the body, so
+/// the transition can tell which of them is the one that should travel.
+const _panelKey = ValueKey('search-filter-panel');
 
 class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
   /// Whether the filter panel is open. It starts closed: the reader arrives
@@ -128,12 +137,19 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
         child: Column(
           children: [
             AppTopBar(
-              searchField: _SearchBox(
+              // The app's one search input, rather than a second one built
+              // here. This field used to be its own `TextField` on the card
+              // fill with a taller decoration, so the box on the tab people
+              // search from was the one box that did not match the rest.
+              searchField: AppSearchField(
+                hintText: 'Cari Pokemon...',
                 controller: _searchController,
                 onChanged: _onTyped,
+                onScan: () => context.push(Routes.scan),
               ),
               trailing: _FilterToggle(
                 open: _filtersOpen,
+                duration: _panelDuration,
                 // The dot is the panel's own answer to "is anything on?",
                 // which matters most when the panel is shut and its contents
                 // are the reason the grid looks the way it does.
@@ -142,17 +158,54 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
               ),
             ),
             Expanded(
-              child: _filtersOpen
-                  ? _FilterPanel(
-                      state: state,
-                      notifier: notifier,
-                      optionsAsync: optionsAsync,
-                      onClose: () => setState(() => _filtersOpen = false),
-                      onApplied: () => setState(() => _filtersOpen = false),
-                    )
-                  : _isSearching(state)
-                  ? _resultsView(context, state, notifier)
-                  : const ExpansionsBrowser(),
+              // The panel used to appear and vanish between frames, which
+              // read as the page having been replaced rather than as
+              // something having opened over it. It drops in from under the
+              // button that opens it and lifts back out the same way, so the
+              // two are visibly the same object.
+              child: AnimatedSwitcher(
+                duration: _panelDuration,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  // Only the panel travels. Sliding the catalog underneath it
+                  // as well would read as two pages passing each other.
+                  final incoming = child.key == _panelKey;
+                  return FadeTransition(
+                    opacity: animation,
+                    child: incoming
+                        ? SlideTransition(
+                            position: Tween(
+                              begin: const Offset(0, -0.04),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          )
+                        : child,
+                  );
+                },
+                layoutBuilder: (current, previous) => Stack(
+                  // Top-aligned: centred, the shorter of the two crossfading
+                  // children drifts vertically while it goes.
+                  alignment: Alignment.topCenter,
+                  children: [...previous, if (current != null) current],
+                ),
+                child: _filtersOpen
+                    ? _FilterPanel(
+                        key: _panelKey,
+                        state: state,
+                        notifier: notifier,
+                        optionsAsync: optionsAsync,
+                        onClose: () => setState(() => _filtersOpen = false),
+                        onApplied: () => setState(() => _filtersOpen = false),
+                      )
+                    : _isSearching(state)
+                    ? KeyedSubtree(
+                        key: const ValueKey('results'),
+                        child: _resultsView(context, state, notifier),
+                      )
+                    : const ExpansionsBrowser(key: ValueKey('expansions')),
+              ),
             ),
           ],
         ),
@@ -270,85 +323,21 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
   }
 }
 
-/// The page's own search box: the mockup's "Cari Pokemon..." field, with the
-/// scanner where [QuickSearchField] keeps it.
-///
-/// Plain rather than quick-search: this one drives the screen underneath as
-/// it is typed instead of opening a suggestion panel over it.
-class _SearchBox extends StatelessWidget {
-  const _SearchBox({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      style: AppTypography.bodySm(colors.onSurface),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: 'Cari Pokemon...',
-        hintStyle: AppTypography.bodySm(context.mutedForeground),
-        filled: true,
-        fillColor: Theme.of(context).cardColor,
-        prefixIcon: Icon(
-          LucideIcons.search,
-          size: 18,
-          color: context.mutedForeground,
-        ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 40),
-        suffixIcon: IconButton(
-          // Clearing is the way back to the expansions, so it is worth a
-          // target of its own rather than a long press on backspace.
-          icon: Icon(
-            controller.text.isEmpty ? LucideIcons.camera : LucideIcons.x,
-            size: 18,
-            color: context.mutedForeground,
-          ),
-          onPressed: () {
-            if (controller.text.isEmpty) {
-              context.push(Routes.scan);
-            } else {
-              controller.clear();
-              onChanged('');
-            }
-          },
-        ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          borderSide: BorderSide(color: context.borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          borderSide: BorderSide(color: context.borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.full),
-          borderSide: BorderSide(color: colors.primary),
-        ),
-      ),
-    );
-  }
-}
-
-/// The round button beside the search box that opens and closes the filter
-/// panel, carrying a dot while any filter is set.
 class _FilterToggle extends StatelessWidget {
   const _FilterToggle({
     required this.open,
     required this.active,
     required this.onTap,
+    this.duration = _panelDuration,
   });
 
   final bool open;
   final bool active;
   final VoidCallback onTap;
+
+  /// Matched to the panel's own, so the button finishes turning into a close
+  /// button exactly as the panel finishes arriving.
+  final Duration duration;
 
   @override
   Widget build(BuildContext context) {
@@ -363,17 +352,30 @@ class _FilterToggle extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Container(
+            AnimatedContainer(
+              duration: duration,
+              curve: Curves.easeOutCubic,
               width: 44,
               height: 44,
               decoration: BoxDecoration(
                 color: open ? colors.onSurface : colors.primary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                open ? LucideIcons.x : LucideIcons.slidersHorizontal,
-                size: 20,
-                color: Colors.white,
+              // The sliders become a cross by turning into it, which is what
+              // says the button is still the same control in another state
+              // rather than a different button that has appeared.
+              child: AnimatedSwitcher(
+                duration: duration,
+                transitionBuilder: (child, animation) => RotationTransition(
+                  turns: Tween(begin: 0.6, end: 1.0).animate(animation),
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: Icon(
+                  open ? LucideIcons.x : LucideIcons.slidersHorizontal,
+                  key: ValueKey(open),
+                  size: 20,
+                  color: Colors.white,
+                ),
               ),
             ),
             if (active && !open)
@@ -405,6 +407,7 @@ class _FilterToggle extends StatelessWidget {
 /// one too.
 class _FilterPanel extends StatelessWidget {
   const _FilterPanel({
+    super.key,
     required this.state,
     required this.notifier,
     required this.optionsAsync,

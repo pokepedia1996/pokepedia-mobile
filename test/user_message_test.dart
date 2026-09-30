@@ -27,7 +27,8 @@ void main() {
     test('a missing table is not described to the reader', () {
       final message = userFacingError(
         const PostgrestException(
-          message: 'relation "public.collection_value_snapshots" does not exist',
+          message:
+              'relation "public.collection_value_snapshots" does not exist',
           code: '42P01',
         ),
       );
@@ -68,9 +69,7 @@ void main() {
       // `RAISE EXCEPTION 'order_not_found_for_shipment_%'` arrives with the
       // id appended; the leading token is what identifies it.
       expect(
-        userFacingError(
-          const PostgrestException(message: 'not_found: 91823'),
-        ),
+        userFacingError(const PostgrestException(message: 'not_found: 91823')),
         'Data yang kamu cari tidak ditemukan.',
       );
     });

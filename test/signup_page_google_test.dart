@@ -108,7 +108,9 @@ void main() {
 
   testWidgets('a Google failure is shown on the form', (tester) async {
     await tester.pumpWidget(
-      _host(_FakeAuth(googleError: 'Unsupported provider: provider is not enabled')),
+      _host(
+        _FakeAuth(googleError: 'Unsupported provider: provider is not enabled'),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -117,9 +119,6 @@ void main() {
 
     expect(find.text('Akun'), findsNothing);
     // Rendered through the shared translation table, as the email path is.
-    expect(
-      find.textContaining('Google'),
-      findsWidgets,
-    );
+    expect(find.textContaining('Google'), findsWidgets);
   });
 }

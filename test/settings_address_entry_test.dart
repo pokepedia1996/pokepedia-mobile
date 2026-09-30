@@ -40,7 +40,9 @@ Widget _host() {
           contributionCount: 0,
         ),
       ),
-      privateProfileProvider.overrideWith((ref) async => const PrivateProfile()),
+      privateProfileProvider.overrideWith(
+        (ref) async => const PrivateProfile(),
+      ),
       myCollectionVisibilityProvider.overrideWith(
         (ref) async => const CollectionVisibility(
           collectionId: 'col-1',

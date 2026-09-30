@@ -10,11 +10,9 @@ import 'package:pokepedia_mobile/shared/widgets/simple_markdown.dart';
 /// so a renamed heading or a mistyped anchor fails here rather than silently
 /// becoming a link that does nothing.
 void main() {
-  final docs = Directory('assets/legal')
-      .listSync()
-      .whereType<File>()
-      .where((f) => f.path.endsWith('.md'))
-      .toList();
+  final docs = Directory(
+    'assets/legal',
+  ).listSync().whereType<File>().where((f) => f.path.endsWith('.md')).toList();
 
   test('there are documents to check', () {
     expect(docs, isNotEmpty);
@@ -33,8 +31,9 @@ void main() {
     };
 
     final linked = [
-      for (final match
-          in RegExp(r'\]\(#([^)]+)\)').allMatches(lines.join('\n')))
+      for (final match in RegExp(
+        r'\]\(#([^)]+)\)',
+      ).allMatches(lines.join('\n')))
         match.group(1)!,
     ];
 

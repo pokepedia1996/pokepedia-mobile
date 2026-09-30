@@ -58,6 +58,7 @@ import '../../features/wallet/presentation/wallet_page.dart';
 import '../app_shell.dart';
 import 'go_router_refresh_stream.dart';
 import 'routes.dart';
+import '../../features/seller/repository/models/seller_listing.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -115,7 +116,10 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: Routes.market,
-              builder: (_, __) => const MarketPage(),
+              builder: (_, state) => MarketPage(
+                initialQuery: state.uri.queryParameters['q'],
+                initialTab: state.uri.queryParameters['tab'],
+              ),
               routes: [
                 GoRoute(
                   path: ':handle',
@@ -162,7 +166,21 @@ final appRouter = GoRouter(
                 // back out a Back button instead of a destination.
                 GoRoute(
                   path: 'products',
-                  builder: (_, __) => const SellerProductsPage(),
+                  builder: (_, state) => SellerProductsPage(
+                    initialBucket: switch (state.uri.queryParameters['tab']) {
+                      'active' => SellerListingBucket.active,
+                      'inactive' => SellerListingBucket.inactive,
+                      'archived' => SellerListingBucket.archived,
+                      'draft' => SellerListingBucket.draft,
+                      'preferences' => SellerListingBucket.preferences,
+                      // An unknown tab leaves the page as it was rather than
+                      // guessing — a typo in a link should not silently move
+                      // the seller somewhere.
+                      _ => null,
+                    },
+                    initialOffersFilter:
+                        state.uri.queryParameters['offers'] == '1',
+                  ),
                 ),
               ],
             ),

@@ -161,36 +161,42 @@ class CardGridItem extends StatelessWidget {
             ),
             const SizedBox(height: 3),
 
-            // Row 3 — how many are held, then the price and its week on the
-            // right edge. The quantity is the incidental half, so the price
-            // is the one that gets the tile's edge to line up against.
+            // Row 3 — the price, then its week's move, then how many are
+            // held. The price leads the row rather than sitting against the
+            // tile's right edge: it is the number every tile is read for,
+            // and a column of prices that all start in the same place can be
+            // compared down the grid without reading each one.
             Row(
               children: [
-                if (owned)
-                  Text(
-                    'Qty: ${card.owned}',
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        card.marketPrice != null
-                            ? formatRupiah(card.marketPrice!)
-                            : 'Rp-',
-                        maxLines: 1,
-                        style: AppTypography.price(colors.onSurface),
-                      ),
-                      // Only the note gives way when the row runs out of
-                      // room — it scales itself down inside this box. The
-                      // price is never flexed: a price that had to shrink or
-                      // clip to fit is a number the reader can't trust.
-                      Flexible(child: CardPriceNote(card: card)),
-                    ],
-                  ),
+                Text(
+                  card.marketPrice != null
+                      ? formatRupiah(card.marketPrice!)
+                      : 'Rp-',
+                  maxLines: 1,
+                  style: AppTypography.price(colors.onSurface),
                 ),
+                // Only the note gives way when the row runs out of room — it
+                // scales itself down inside this box. The price is never
+                // flexed: a price that had to shrink or clip to fit is a
+                // number the reader can't trust.
+                Flexible(child: CardPriceNote(card: card)),
+                // The count is the incidental half, so it takes the edge the
+                // price gave up. A tile with a stepper below says it there
+                // instead, and this would only repeat it.
+                if (owned && footer == null) ...[
+                  const SizedBox(width: 6),
+                  // Flexed so a long price and a trend beside it push this
+                  // out of the way rather than off the tile — it is the one
+                  // thing in the row the reader can do without.
+                  Flexible(
+                    child: Text(
+                      'Qty: ${card.owned}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  ),
+                ],
               ],
             ),
             if (footer != null) ...[const SizedBox(height: 6), footer!],

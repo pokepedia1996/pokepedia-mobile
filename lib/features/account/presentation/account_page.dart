@@ -83,12 +83,6 @@ class AccountPage extends ConsumerWidget {
                             label: 'Pesanan',
                             onTap: () => context.push(Routes.orders),
                           ),
-                          // _Row(
-                          //   icon: LucideIcons.messageCircle,
-                          //   label: 'Pesan',
-                          //   badge: ref.watch(chatUnreadCountProvider),
-                          //   onTap: () => context.push(Routes.chat),
-                          // ),
                           _Row(
                             icon: LucideIcons.listChecks,
                             label: 'Proposal WTB',
@@ -98,11 +92,6 @@ class AccountPage extends ConsumerWidget {
                             icon: LucideIcons.users,
                             label: 'Cari Pengguna',
                             onTap: () => context.push(Routes.users),
-                          ),
-                          _Row(
-                            icon: LucideIcons.store,
-                            label: 'Dashboard Penjual',
-                            onTap: () => context.push(Routes.seller),
                           ),
                           if (user.username != null)
                             _Row(

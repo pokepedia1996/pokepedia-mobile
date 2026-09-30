@@ -8,7 +8,9 @@ import 'package:pokepedia_mobile/shared/widgets/wishlist_heart.dart';
 void main() {
   Future<void> pump(WidgetTester tester, bool active) => tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(body: Center(child: WishlistHeart(active: active))),
+      home: Scaffold(
+        body: Center(child: WishlistHeart(active: active)),
+      ),
     ),
   );
 

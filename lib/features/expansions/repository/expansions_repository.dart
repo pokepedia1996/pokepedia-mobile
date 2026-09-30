@@ -82,6 +82,12 @@ class ExpansionsRepository {
         .select(_cardColumns)
         .eq('language', language)
         .eq('expansion_code_lower', slug.toLowerCase())
+        // Booster boxes and packs share this table with the singles, and an
+        // expansion page is a checklist of cards: a product has no rarity,
+        // no collector number to sort among the rest, and nothing to own
+        // towards completion. Web's `fetchCardsByPackServer` cuts them here
+        // too — they stay reachable through search and their own page.
+        .neq('category', sealedCategory)
         .order('collector_number', ascending: true);
     final cards = rows.map((r) => CardModel.fromRow(r)).toList();
     cards.sort((a, b) => compareNatural(a.collectorNumber, b.collectorNumber));
@@ -203,20 +209,23 @@ class ExpansionsRepository {
   /// out in [_bulkChunkSize] batches for that reason.
   Future<Map<int, int>> fetchOwnedQuantities(
     String userId,
-    List<int> cardIds,
-  ) async {
+    List<int> cardIds, {
+    String? collectionId,
+  }) async {
     final ids = _sanitizeCardIds(cardIds);
     if (ids.isEmpty) return const {};
 
-    final collectionId = await primaryCollectionId(_client, userId);
-    if (collectionId == null) return const {};
+    // Whichever portfolio the page is pointed at. Falls back to the main
+    // collection, which is what every caller without a switcher means.
+    final target = collectionId ?? await primaryCollectionId(_client, userId);
+    if (target == null) return const {};
 
     final quantities = <int, int>{};
     for (final batch in _batches(ids)) {
       final rows = await _client
           .from('collection_cards')
           .select('card_id, quantity')
-          .eq('collection_id', collectionId)
+          .eq('collection_id', target)
           .inFilter('card_id', batch)
           .gt('quantity', 0);
       for (final row in rows) {

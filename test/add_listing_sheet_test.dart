@@ -8,10 +8,10 @@ import 'package:pokepedia_mobile/features/seller/repository/seller_listings_repo
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// "Tambahkan Listing" asks one question — which cards — and answers it with
-/// drafts. It used to hand a single card straight to the ask form, which
-/// wanted a price before the seller had finished saying what they were
-/// selling.
+/// "Tambahkan Listing" asks two questions — which cards, and how many of
+/// each — and answers them with drafts. It used to hand a single card
+/// straight to the ask form, which wanted a price before the seller had
+/// finished saying what they were selling.
 class _FakeRepo extends SellerListingsRepository {
   _FakeRepo._(SupabaseClient c) : super(c);
 
@@ -23,12 +23,16 @@ class _FakeRepo extends SellerListingsRepository {
     ),
   );
 
-  List<int>? addedIds;
+  List<({int cardId, int quantity})>? added;
+
+  List<int>? get addedIds => added?.map((p) => p.cardId).toList();
 
   @override
-  Future<({int added, String? error})> addDrafts(List<int> cardIds) async {
-    addedIds = cardIds;
-    return (added: cardIds.length, error: null);
+  Future<({int added, String? error})> addDrafts(
+    List<({int cardId, int quantity})> picks,
+  ) async {
+    added = picks;
+    return (added: picks.length, error: null);
   }
 }
 
@@ -56,7 +60,10 @@ Future<_FakeRepo> _open(WidgetTester tester) async {
       overrides: [
         sellerListingsRepositoryProvider.overrideWithValue(repo),
         cardSearchPickerProvider.overrideWith(
-          (ref, query) async => [_card(1), _card(2), _card(3)],
+          (ref, key) async => [
+            for (final card in [_card(1), _card(2), _card(3)])
+              if (key.language == null || card.language == key.language) card,
+          ],
         ),
       ],
       child: MaterialApp(
@@ -121,18 +128,74 @@ void main() {
 
     // In the order they were tapped — the strip reads as a history.
     expect(repo.addedIds, [1, 3]);
+    expect(repo.added!.map((p) => p.quantity), [1, 1]);
   });
 
-  testWidgets('tapping a ticked card lets it go again', (tester) async {
+  testWidgets('tapping a picked card asks for another copy of it', (
+    tester,
+  ) async {
+    final repo = await _open(tester);
+    await _search(tester, 'pikachu');
+
+    // A playset is the commonest thing to add, and tapping used to undo the
+    // pick instead: four taps ending with nothing selected.
+    await tester.tap(find.text('Pikachu 1'));
+    await tester.pump();
+    await tester.tap(find.text('Pikachu 1'));
+    await tester.pump();
+    await tester.tap(find.text('Pikachu 1'));
+    await tester.pump();
+
+    // One card, three copies — and the button says both.
+    expect(find.text('Tambahkan 1 kartu · 3 lembar ke Draft'), findsOneWidget);
+
+    await tester.tap(find.text('Tambahkan 1 kartu · 3 lembar ke Draft'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(repo.added, [(cardId: 1, quantity: 3)]);
+  });
+
+  testWidgets('the stepper takes copies back off, then the card itself', (
+    tester,
+  ) async {
     await _open(tester);
     await _search(tester, 'pikachu');
 
     await tester.tap(find.text('Pikachu 1'));
     await tester.pump();
-    expect(find.text('Tambahkan 1 kartu ke Draft'), findsOneWidget);
-
     await tester.tap(find.text('Pikachu 1'));
     await tester.pump();
+    expect(find.text('Tambahkan 1 kartu · 2 lembar ke Draft'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Kurangi jumlah'));
+    await tester.pump();
+    expect(find.text('Tambahkan 1 kartu ke Draft'), findsOneWidget);
+
+    // The last copy takes the card out of the pick — the way back from a
+    // mistap.
+    await tester.tap(find.bySemanticsLabel('Lepas dari pilihan'));
+    await tester.pump();
     expect(find.textContaining('ke Draft'), findsNothing);
+  });
+
+  testWidgets('the language chips narrow the search', (tester) async {
+    await _open(tester);
+    await _search(tester, 'pikachu');
+    expect(find.text('3 kartu cocok'), findsOneWidget);
+
+    // The fixture is all Indonesian, so EN has to come back empty — which
+    // only happens if the chip reaches the query rather than being
+    // decoration over an unfiltered list.
+    await tester.tap(find.text('EN'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.textContaining('Tidak ada kartu'), findsOneWidget);
+
+    await tester.tap(find.text('Semua'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('3 kartu cocok'), findsOneWidget);
   });
 }

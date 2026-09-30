@@ -2,20 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/features/orders/presentation/orders_page.dart';
 import 'package:pokepedia_mobile/features/orders/repository/models/pending_checkout.dart';
 
-PendingCheckout _checkout({
-  String? storeName,
-  String? username,
-}) => PendingCheckout(
-  cartId: 1,
-  externalId: 'INV-1',
-  buyerUsername: null,
-  createdAt: DateTime(2026, 9, 15),
-  expiresAt: DateTime(2026, 9, 15, 2),
-  items: const [],
-  hasInvoice: true,
-  storeName: storeName,
-  sellerUsername: username,
-);
+PendingCheckout _checkout({String? storeName, String? username}) =>
+    PendingCheckout(
+      cartId: 1,
+      externalId: 'INV-1',
+      buyerUsername: null,
+      createdAt: DateTime(2026, 9, 15),
+      expiresAt: DateTime(2026, 9, 15, 2),
+      items: const [],
+      hasInvoice: true,
+      storeName: storeName,
+      sellerUsername: username,
+    );
 
 void main() {
   group('formatRemaining ports web PendingCountdown', () {

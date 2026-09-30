@@ -458,7 +458,9 @@ class _SearchPane extends StatelessWidget {
       builder: (context, ref, _) {
         final trimmed = query.trim();
         final resultsAsync = trimmed.length >= 2
-            ? ref.watch(cardSearchPickerProvider(trimmed))
+            ? ref.watch(
+                cardSearchPickerProvider((query: trimmed, language: null)),
+              )
             : null;
         final nameQuantities = _nameQuantities();
 

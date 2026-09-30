@@ -93,7 +93,9 @@ Future<MarketListingsState> _settled(ProviderContainer c) async {
 
 void main() {
   test('loads the first page and reports there is more', () async {
-    final repo = _FakeRepo([_page([1, 2], hasNext: true)]);
+    final repo = _FakeRepo([
+      _page([1, 2], hasNext: true),
+    ]);
     final state = await _settled(_container(repo));
 
     expect(state.loading, isFalse);
@@ -121,7 +123,9 @@ void main() {
   });
 
   test('stops asking once the server says there is no more', () async {
-    final repo = _FakeRepo([_page([1], hasNext: false)]);
+    final repo = _FakeRepo([
+      _page([1], hasNext: false),
+    ]);
     final container = _container(repo);
     await _settled(container);
 
@@ -164,7 +168,9 @@ void main() {
   });
 
   test('a failed page keeps the rows already on screen', () async {
-    final repo = _FakeRepo([_page([1, 2], hasNext: true)]);
+    final repo = _FakeRepo([
+      _page([1, 2], hasNext: true),
+    ]);
     final container = _container(repo);
     await _settled(container);
 

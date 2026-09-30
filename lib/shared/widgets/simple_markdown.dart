@@ -10,9 +10,9 @@ import '../../core/theme/app_typography.dart';
 ///
 /// Deliberately not a full CommonMark implementation, and not a package: the
 /// bundled documents use headings, ordered and bulleted lists, blockquotes,
-/// one small table, and inline bold / links / code. Supporting exactly that
-/// keeps the typography on [AppTypography] rather than a package's own
-/// theme, which is what makes it look like the rest of the app.
+/// one small table, screenshots, and inline bold / links / code. Supporting
+/// exactly that keeps the typography on [AppTypography] rather than a
+/// package's own theme, which is what makes it look like the rest of the app.
 class SimpleMarkdown extends StatefulWidget {
   const SimpleMarkdown({super.key, required this.data});
 
@@ -36,6 +36,9 @@ class SimpleMarkdown extends StatefulWidget {
   @override
   State<SimpleMarkdown> createState() => _SimpleMarkdownState();
 }
+
+/// `![alt](url)` on a line of its own.
+final _imagePattern = RegExp(r'^!\[([^\]]*)\]\(([^)]+)\)$');
 
 class _SimpleMarkdownState extends State<SimpleMarkdown> {
   /// One key per heading slug, so a `[Label](#slug)` link in a document's own
@@ -167,6 +170,21 @@ class _SimpleMarkdownState extends State<SimpleMarkdown> {
             child: _inline(context, trimmed.substring(2)),
           ),
         );
+      } else if (_imagePattern.hasMatch(trimmed)) {
+        // The tutorials are mostly screenshots with a sentence each, and
+        // every one of them sits on a line of its own. They used to render
+        // as the text "!" followed by a link titled with the alt text,
+        // because the inline link pattern matched everything after the "!".
+        final match = _imagePattern.firstMatch(trimmed)!;
+        blocks.add(
+          _MarkdownImage(
+            url: match.group(2)!,
+            alt: match.group(1) ?? '',
+            // Screenshots under a numbered step are indented in the source;
+            // line them up with that step's text rather than with its number.
+            indent: line.startsWith('   ') || line.startsWith('\t') ? 22 : 0,
+          ),
+        );
       } else if (RegExp(r'^\d+\. ').hasMatch(trimmed)) {
         blocks.add(
           _ListItem(
@@ -214,8 +232,12 @@ class _InlineText extends StatelessWidget {
   /// text, in which case such a link simply does nothing.
   final Future<void> Function(String slug)? onAnchor;
 
+  // The link alternative refuses a leading "!" so an image that shares a
+  // line with text degrades to its alt text rather than to a link that
+  // navigates to a picture.
   static final _pattern = RegExp(
-    r'\*\*(.+?)\*\*|`(.+?)`|\[([^\]]+)\]\(([^)]+)\)',
+    r'\*\*(.+?)\*\*|`(.+?)`|!\[([^\]]*)\]\(([^)]+)\)|'
+    r'\[([^\]]+)\]\(([^)]+)\)',
   );
 
   @override
@@ -246,9 +268,14 @@ class _InlineText extends StatelessWidget {
             ),
           ),
         );
+      } else if (match.group(4) != null) {
+        // An inline image: the documents put theirs on their own line, where
+        // the block renderer draws them, so this is the odd one out and its
+        // alt text is what it has to say.
+        spans.add(TextSpan(text: match.group(3)));
       } else {
-        final label = match.group(3)!;
-        final href = match.group(4)!;
+        final label = match.group(5)!;
+        final href = match.group(6)!;
         spans.add(
           TextSpan(
             text: label,
@@ -291,6 +318,94 @@ class _InlineText extends StatelessWidget {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+}
+
+/// A screenshot in a document.
+///
+/// Bounded rather than free to size itself: these are phone captures, and at
+/// their natural aspect one of them fills the screen and pushes the step it
+/// illustrates out of view. Capped so the picture stays an illustration of
+/// the sentence above it.
+class _MarkdownImage extends StatelessWidget {
+  const _MarkdownImage({required this.url, required this.alt, this.indent = 0});
+
+  final String url;
+
+  /// What the picture shows, for anyone who cannot see it and for when it
+  /// fails to load.
+  final String alt;
+
+  final double indent;
+
+  static const _maxHeight = 420.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(indent, 8, 0, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: _maxHeight),
+          child: Semantics(
+            image: true,
+            label: alt.isEmpty ? null : alt,
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              alignment: Alignment.topLeft,
+              loadingBuilder: (context, child, progress) => progress == null
+                  ? child
+                  : _Placeholder(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.mutedForeground,
+                          // Determinate once the size is known, which on a
+                          // slow connection is most of the wait.
+                          value: progress.expectedTotalBytes == null
+                              ? null
+                              : progress.cumulativeBytesLoaded /
+                                    progress.expectedTotalBytes!,
+                        ),
+                      ),
+                    ),
+              // A missing screenshot must not leave a blank gap where a step
+              // was: the alt text says what it would have shown.
+              errorBuilder: (context, error, stack) => _Placeholder(
+                child: Text(
+                  alt.isEmpty ? 'Gambar tidak bisa dimuat' : alt,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The box a screenshot occupies before it arrives, or instead of it.
+class _Placeholder extends StatelessWidget {
+  const _Placeholder({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 180,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      color: context.appColors.secondary,
+      child: child,
+    );
   }
 }
 

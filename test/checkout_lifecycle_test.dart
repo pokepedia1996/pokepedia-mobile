@@ -136,10 +136,7 @@ void main() {
   });
 
   test('an unread balance is unknown, not empty', () async {
-    final container = _container(
-      walletBalance: 5000000,
-      cart: [_cartItem],
-    );
+    final container = _container(walletBalance: 5000000, cart: [_cartItem]);
     final visit = container.listen(checkoutProvider, (_, __) {});
     addTearDown(visit.close);
 

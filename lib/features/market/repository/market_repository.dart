@@ -86,7 +86,7 @@ class MarketRepository {
                 if (filters.rarities.isNotEmpty)
                   'p_rarities': filters.rarities.toList(),
                 if (filters.categories.isNotEmpty)
-                  'p_categories': filters.categories.map((c) => c.raw).toList(),
+                  'p_categories': filters.categories.toList(),
                 if (filters.trainerSubtypes.isNotEmpty)
                   'p_trainer_subtypes': filters.trainerSubtypes.toList(),
                 if (filters.languages.isNotEmpty)

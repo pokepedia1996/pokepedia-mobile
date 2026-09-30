@@ -67,6 +67,26 @@ class _DraftCardState extends ConsumerState<DraftCard> {
   late CardCondition _condition = widget.draft.condition;
 
   @override
+  void didUpdateWidget(DraftCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // These two can be set from outside the card: the bulk menu applies
+    // either switch to every ticked draft at once, and the card has to show
+    // what was just done to it rather than the value it was built with.
+    //
+    // Adopted only when the arriving draft differs from the one this card
+    // was showing. That difference is what marks a change made elsewhere —
+    // the echo of a toggle made here arrives already equal, so a seller
+    // flipping a switch never sees it snap back while the write is in
+    // flight. The typed fields above stay out of this on purpose.
+    if (widget.draft.autoRelist != oldWidget.draft.autoRelist) {
+      _autoRelist = widget.draft.autoRelist;
+    }
+    if (widget.draft.acceptsOffers != oldWidget.draft.acceptsOffers) {
+      _acceptsOffers = widget.draft.acceptsOffers;
+    }
+  }
+
+  @override
   void dispose() {
     _price.dispose();
     super.dispose();

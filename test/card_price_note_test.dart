@@ -56,18 +56,14 @@ void main() {
   ) async {
     await _pump(
       tester,
-      _card(
-        price: 20000,
-        price7dAgo: 10000,
-        source: CardPriceSource.confirmed,
-      ),
+      _card(price: 20000, price7dAgo: 10000, source: CardPriceSource.confirmed),
     );
 
-    expect(
-      find.textContaining('↑100.0%', findRichText: true),
-      findsOneWidget,
-    );
-    expect(find.textContaining('7H', findRichText: true), findsOneWidget);
+    expect(find.textContaining('↑100.0%', findRichText: true), findsOneWidget);
+    // The window is not spelled out. Every move on every tile is over the
+    // same week, so "· 7H" repeated itself down the whole grid while taking
+    // room from the price beside it.
+    expect(find.textContaining('7H', findRichText: true), findsNothing);
   });
 
   testWidgets('a fall reads as one', (tester) async {

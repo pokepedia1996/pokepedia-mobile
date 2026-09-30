@@ -33,10 +33,7 @@ AddressModel _address() => AddressModel(
   isPrimary: true,
 );
 
-Widget _host({
-  List<AddressModel> addresses = const [],
-  StoreProfile? profile,
-}) {
+Widget _host({List<AddressModel> addresses = const [], StoreProfile? profile}) {
   return ProviderScope(
     overrides: [
       authProvider.overrideWith(_FakeAuth.new),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_search_field.dart';
+import '../../../app/tab_reselect.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -29,8 +30,24 @@ import '../usecase/market_notifier.dart';
 /// (`storefront-filter-rail.tsx`), collapsed into two buttons that open
 /// bottom sheets instead of a side rail, matching how the mobile app has
 /// simplified every other filter surface (advanced search, portfolio).
+/// Where Market sits in the nav, so the grids can tell its re-tap from
+/// another tab's. Read off the nav's own list rather than written as a
+/// literal, which would go stale the next time a tab moves.
+final _marketTabIndex = AppBottomNav.tabPaths.indexOf(Routes.market);
+
 class MarketPage extends ConsumerStatefulWidget {
-  const MarketPage({super.key});
+  const MarketPage({super.key, this.initialQuery, this.initialTab});
+
+  /// A query the page was opened on — quick search's "di Market" scope.
+  ///
+  /// Applied once, like the seller page's `?tab=`: after arrival the search
+  /// box owns the query, and a link that kept reasserting it would fight
+  /// whatever the reader typed next.
+  final String? initialQuery;
+
+  /// Which tab to land on. `stores` is the one quick search sends "Cari
+  /// toko" to; anything else leaves the page on its usual tab.
+  final String? initialTab;
 
   @override
   ConsumerState<MarketPage> createState() => _MarketPageState();
@@ -51,6 +68,18 @@ class _MarketPageState extends ConsumerState<MarketPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: _buckets.length, vsync: this);
+    final query = widget.initialQuery?.trim();
+    final wantsStores = widget.initialTab == 'stores';
+    if ((query != null && query.isNotEmpty) || wantsStores) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (query != null && query.isNotEmpty) {
+          ref.read(marketQueryProvider.notifier).state = query;
+        }
+        // The directory is the last tab; the three before it are listings.
+        if (wantsStores) _tabController.index = _buckets.length - 1;
+      });
+    }
     _tabController.addListener(() {
       final next = _buckets[_tabController.index];
       if (ref.read(bucketProvider) != next) {
@@ -543,11 +572,8 @@ const _trainerSubtypeOrder = ['Item', 'Supporter', 'Stadium', 'Pokémon Tool'];
 
 /// Web's `CATEGORY_LABELS` — the only category whose display name differs
 /// from its stored value.
-const _categoryLabels = {
-  CardCategory.pokemon: 'Pokémon',
-  CardCategory.trainer: 'Trainer',
-  CardCategory.energy: 'Energy',
-};
+/// The one card type with something nested under it.
+const _trainerType = 'Trainer';
 
 /// Ports the mobile form of `StorefrontFilterRail` — the `embedded`,
 /// `hideSort` rail web drops into its bottom sheet: section labels over
@@ -604,14 +630,14 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     return next;
   }
 
-  void _toggleCategory(CardCategory category) {
+  void _toggleCategory(String category) {
     setState(() {
       final categories = _toggled(_draft.categories, category);
       _draft = _draft.copyWith(
         categories: categories,
         // Dropping Trainer drops the subtypes hanging off it, the way
         // `handleCategoryChange` clears `tsub` on web.
-        trainerSubtypes: categories.contains(CardCategory.trainer)
+        trainerSubtypes: categories.contains(_trainerType)
             ? _draft.trainerSubtypes
             : const {},
       );
@@ -625,8 +651,8 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     setState(() {
       _draft = _draft.copyWith(
         categories: selected
-            ? ({..._draft.categories}..remove(CardCategory.trainer))
-            : {..._draft.categories, CardCategory.trainer},
+            ? ({..._draft.categories}..remove(_trainerType))
+            : {..._draft.categories, _trainerType},
         trainerSubtypes: selected ? const {} : subtypes.toSet(),
       );
     });
@@ -641,7 +667,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
         trainerSubtypes: subtypes,
         categories: subtypes.isEmpty
             ? _draft.categories
-            : {..._draft.categories, CardCategory.trainer},
+            : {..._draft.categories, _trainerType},
       );
     });
   }
@@ -676,7 +702,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final signedIn = ref.watch(authProvider).valueOrNull != null;
 
     final subtypeOptions = _subtypeOptions(facets);
-    final trainerSelected = _draft.categories.contains(CardCategory.trainer);
+    final trainerSelected = _draft.categories.contains(_trainerType);
     // An empty subtype set means "every Trainer card", so it reads as fully
     // checked; a partial set is the tri-state's mixed mark.
     final trainerMixed =
@@ -732,21 +758,6 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               ),
             ),
           _FilterSection(
-            label: 'Tipe Toko',
-            children: [
-              _FilterCheckRow(
-                label: 'Terverifikasi',
-                checked: _draft.verifiedOnly,
-                icon: LucideIcons.badgeCheck,
-                onTap: () => setState(
-                  () => _draft = _draft.copyWith(
-                    verifiedOnly: !_draft.verifiedOnly,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          _FilterSection(
             label: 'Feeds',
             children: [
               _FilterCheckRow(
@@ -758,27 +769,43 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               ),
             ],
           ),
+          _FacetCheckGroup(
+            label: 'Rarity',
+            options: _rarityOptions(facets),
+            preview: _rarityPreview(facets),
+            selected: _draft.rarities,
+            onToggle: (rarity) => setState(
+              () => _draft = _draft.copyWith(
+                rarities: _toggled(_draft.rarities, rarity),
+              ),
+            ),
+          ),
           _FilterSection(
             label: 'Tipe Kartu',
             children: [
-              for (final category in CardCategory.values) ...[
-                if (category == CardCategory.trainer)
+              // Only the types the feed actually holds, in web's order —
+              // `sortedCategoryFacets`. Listing a type with nothing behind it
+              // offers a filter that can only empty the grid, and reading the
+              // facets rather than an enum is also what lets 'Produk Segel'
+              // appear here at all: `CardCategory` has no member for it.
+              for (final category in _cardTypeOptions(facets)) ...[
+                if (category == _trainerType)
                   _FilterCheckRow(
-                    label: _categoryLabels[category]!,
+                    label: marketCardTypeLabels[category] ?? category,
                     checked: trainerSelected,
                     mixed: trainerMixed,
-                    count: facets.categories.countOf(category.raw),
+                    count: facets.categories.countOf(category),
                     onTap: () =>
                         _toggleTrainerAll(trainerSelected, subtypeOptions),
                   )
                 else
                   _FilterCheckRow(
-                    label: _categoryLabels[category]!,
+                    label: marketCardTypeLabels[category] ?? category,
                     checked: _draft.categories.contains(category),
-                    count: facets.categories.countOf(category.raw),
+                    count: facets.categories.countOf(category),
                     onTap: () => _toggleCategory(category),
                   ),
-                if (category == CardCategory.trainer)
+                if (category == _trainerType)
                   Padding(
                     padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
                     child: Container(
@@ -806,6 +833,21 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
             ],
           ),
           _FilterSection(
+            label: 'Tipe Toko',
+            children: [
+              _FilterCheckRow(
+                label: 'Terverifikasi',
+                checked: _draft.verifiedOnly,
+                icon: LucideIcons.badgeCheck,
+                onTap: () => setState(
+                  () => _draft = _draft.copyWith(
+                    verifiedOnly: !_draft.verifiedOnly,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          _FilterSection(
             label: 'Bahasa',
             children: [
               Row(
@@ -828,17 +870,6 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 ],
               ),
             ],
-          ),
-          _FacetCheckGroup(
-            label: 'Rarity',
-            options: _rarityOptions(facets),
-            preview: _rarityPreview(facets),
-            selected: _draft.rarities,
-            onToggle: (rarity) => setState(
-              () => _draft = _draft.copyWith(
-                rarities: _toggled(_draft.rarities, rarity),
-              ),
-            ),
           ),
           _FilterSection(
             label: 'Kondisi',
@@ -888,6 +919,20 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   /// with anything unlisted after it. Facet values are the strings the cards
   /// were catalogued with ("Pokémon Tool", accent and all), so filtering by
   /// them is what actually matches rows.
+  /// Web's `sortedCategoryFacets`: the types the feed holds, in
+  /// [marketCardTypes] order, with anything unrecognised kept on the end
+  /// rather than dropped — a new catalog category should show up here
+  /// without a release.
+  List<String> _cardTypeOptions(ListingFacets facets) {
+    final present = {for (final item in facets.categories) item.value};
+    return [
+      for (final type in marketCardTypes)
+        if (present.contains(type)) type,
+      for (final item in facets.categories)
+        if (!marketCardTypes.contains(item.value)) item.value,
+    ];
+  }
+
   List<String> _subtypeOptions(ListingFacets facets) {
     if (facets.trainerSubtypes.isEmpty) return _trainerSubtypeOrder;
     final values = facets.trainerSubtypes.map((f) => f.value).toList();
@@ -1226,11 +1271,40 @@ class _PriceField extends StatelessWidget {
   }
 }
 
-class _ListingGrid extends ConsumerWidget {
+class _ListingGrid extends ConsumerStatefulWidget {
   const _ListingGrid();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ListingGrid> createState() => _ListingGridState();
+}
+
+class _ListingGridState extends ConsumerState<_ListingGrid> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Tapping Market while already on Market: back to the top, and re-read.
+    // Listened to here rather than on the page because this is what owns the
+    // scroll position — the page has three of these and a directory, and
+    // only the one on screen has anywhere to scroll to.
+    ref.listen(tabReselectProvider, (_, signal) {
+      if (signal.index != _marketTabIndex) return;
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      ref.read(marketListingsProvider.notifier).retry();
+    });
+
     final state = ref.watch(marketListingsProvider);
 
     if (state.loading) return const PikachuLoader();
@@ -1269,6 +1343,7 @@ class _ListingGrid extends ConsumerWidget {
       // cell the spinner sat in the first column, off to the left. Below the
       // grid it spans the full width and centres properly.
       child: CustomScrollView(
+        controller: _scroll,
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -1302,11 +1377,36 @@ class _ListingGrid extends ConsumerWidget {
   }
 }
 
-class _StoreDirectory extends ConsumerWidget {
+class _StoreDirectory extends ConsumerStatefulWidget {
   const _StoreDirectory();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_StoreDirectory> createState() => _StoreDirectoryState();
+}
+
+class _StoreDirectoryState extends ConsumerState<_StoreDirectory> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(tabReselectProvider, (_, signal) {
+      if (signal.index != _marketTabIndex) return;
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      ref.invalidate(marketStoresProvider);
+    });
+
     final async = ref.watch(marketStoresProvider);
     return async.when(
       data: (stores) {
@@ -1317,6 +1417,7 @@ class _StoreDirectory extends ConsumerWidget {
           );
         }
         return ListView.separated(
+          controller: _scroll,
           padding: EdgeInsets.fromLTRB(
             16,
             12,

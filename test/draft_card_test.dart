@@ -39,7 +39,13 @@ class _FakeRepo extends SellerListingsRepository {
   }
 }
 
-SellerDraft _draft({int? marketPrice}) => SellerDraft(
+SellerDraft _draft({
+  int? marketPrice,
+  bool autoRelist = false,
+  bool acceptsOffers = false,
+}) => SellerDraft(
+  autoRelist: autoRelist,
+  acceptsOffers: acceptsOffers,
   id: 1,
   card: CardModel(
     id: 1,
@@ -259,5 +265,45 @@ void main() {
     expect(find.bySemanticsLabel('Ubah foto kartu'), findsOneWidget);
     expect(find.byIcon(LucideIcons.check), findsOneWidget);
     expect(find.byIcon(LucideIcons.camera), findsNothing);
+  });
+
+  testWidgets('a switch set from the bulk menu shows on the card', (
+    tester,
+  ) async {
+    await _pump(tester, _draft());
+    expect(tester.widgetList<Switch>(find.byType(Switch)).first.value, isFalse);
+
+    // What a bulk apply looks like from here: the list re-reads and hands
+    // the card the same draft with the flag now set. The card kept its own
+    // copy of that value and was ignoring the new one.
+    await _pump(tester, _draft(autoRelist: true));
+
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+    expect(switches.first.value, isTrue);
+    expect(switches.last.value, isFalse);
+  });
+
+  testWidgets('both switches follow, not just the first', (tester) async {
+    await _pump(tester, _draft());
+    await _pump(tester, _draft(acceptsOffers: true));
+
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+    expect(switches.first.value, isFalse);
+    expect(switches.last.value, isTrue);
+  });
+
+  testWidgets('a toggle made here is not undone by the re-read', (
+    tester,
+  ) async {
+    await _pump(tester, _draft());
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pump();
+    expect(tester.widgetList<Switch>(find.byType(Switch)).first.value, isTrue);
+
+    // The list re-reads before the write has landed, so the draft still
+    // says false. The card must not snap back under the seller's finger.
+    await _pump(tester, _draft());
+    expect(tester.widgetList<Switch>(find.byType(Switch)).first.value, isTrue);
   });
 }

@@ -28,7 +28,21 @@ import '../usecase/seller_listings_notifier.dart';
 /// Ports `app/seller/products` — the seller's listings, bucketed, with the
 /// per-listing actions their product table offers.
 class SellerProductsPage extends ConsumerStatefulWidget {
-  const SellerProductsPage({super.key});
+  const SellerProductsPage({
+    super.key,
+    this.initialBucket,
+    this.initialOffersFilter = false,
+  });
+
+  /// Which tab to open on, from `?tab=`.
+  ///
+  /// Applied once on the first frame rather than watched: after that the
+  /// chips own the selection, and a link that kept forcing its tab back
+  /// would make them unusable.
+  final SellerListingBucket? initialBucket;
+
+  /// Whether to arrive with "Dengan penawaran" already on.
+  final bool initialOffersFilter;
 
   @override
   ConsumerState<SellerProductsPage> createState() => _SellerProductsPageState();
@@ -36,6 +50,24 @@ class SellerProductsPage extends ConsumerStatefulWidget {
 
 class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final bucket = widget.initialBucket;
+    if (bucket == null && !widget.initialOffersFilter) return;
+    // After the frame: these are providers, and the tree is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (bucket != null) {
+        ref.read(sellerBucketProvider.notifier).state = bucket;
+      }
+      if (widget.initialOffersFilter) {
+        ref.read(sellerOfferFilterProvider.notifier).state = true;
+      }
+    });
+  }
+
   final _draftSearch = TextEditingController();
   final _workspaceSearch = TextEditingController();
 
@@ -384,15 +416,23 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                         // answer rather than the top of a longer one.
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          // Both ends give way rather than a `Spacer` holding
+                          // them apart: "1-24 dari 24 listing" beside
+                          // "Dengan penawaran 12" is wider than a narrow
+                          // phone, and the row had nowhere to overflow to.
                           child: Row(
                             children: [
-                              Text(
-                                _rangeLabel(async),
-                                style: AppTypography.bodySm(
-                                  context.mutedForeground,
+                              Flexible(
+                                child: Text(
+                                  _rangeLabel(async),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.bodySm(
+                                    context.mutedForeground,
+                                  ),
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(width: 8),
                               _OfferFilterChip(
                                 active: ref.watch(sellerOfferFilterProvider),
                                 count: ref.watch(offerCountsProvider).length,
@@ -1085,9 +1125,15 @@ class _OfferFilterChip extends StatelessWidget {
           children: [
             Icon(LucideIcons.handshake, size: 14, color: foreground),
             const SizedBox(width: 6),
-            Text(
-              'Dengan penawaran',
-              style: AppTypography.captionSemibold(foreground),
+            // Shrinks before it clips: the chip shares its row with a count
+            // that grows as the list does.
+            Flexible(
+              child: Text(
+                'Dengan penawaran',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.captionSemibold(foreground),
+              ),
             ),
             const SizedBox(width: 6),
             Container(

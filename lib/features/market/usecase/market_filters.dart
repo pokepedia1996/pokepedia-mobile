@@ -42,6 +42,24 @@ const marketPopularRarities = ['SAR', 'HR', 'SR', 'AR', 'PROMO'];
 /// `LOKASI_PREVIEW_COUNT` and the length of `POPULAR_RARITIES` on web.
 const marketFacetPreviewCount = 5;
 
+/// The card types the market filters by, in web's `CARD_TYPE_ORDER`.
+///
+/// Raw catalog values rather than [CardCategory], because the enum has no
+/// `sealed` member — 'Sealed' falls through `CardCategoryX.fromRaw` and
+/// arrives as `pokemon`. Filtering by it is what the enum cannot express, so
+/// the facet and the filter both speak the column's own language, exactly as
+/// `p_categories` does.
+const marketCardTypes = ['Pokemon', 'Trainer', 'Energy', 'Sealed'];
+
+/// What each of [marketCardTypes] is called on screen — `CATEGORY_LABELS` in
+/// `lib/cards/category.ts`.
+const marketCardTypeLabels = {
+  'Pokemon': 'Pokémon',
+  'Trainer': 'Trainer',
+  'Energy': 'Energy',
+  'Sealed': 'Produk Segel',
+};
+
 /// `BULK_RARITIES` in `listing-filters.ts` — the commons "exclude bulk"
 /// hides. `__none__` stands in for a card with no rarity recorded.
 const marketBulkRarities = ['C', 'U', 'R', 'Common', 'Uncommon', 'Rare'];
@@ -67,7 +85,10 @@ class MarketFilters {
 
   final Set<CardCondition> conditions;
   final Set<String> rarities;
-  final Set<CardCategory> categories;
+
+  /// Card types as the catalog spells them, so 'Sealed' can be one of them.
+  /// See [marketCardTypes].
+  final Set<String> categories;
 
   /// Trainer subtypes as the catalog spells them ("Pokémon Tool", accent and
   /// all) — the values the facet counts and `cards.details` carry, rather
@@ -118,7 +139,7 @@ class MarketFilters {
   MarketFilters copyWith({
     Set<CardCondition>? conditions,
     Set<String>? rarities,
-    Set<CardCategory>? categories,
+    Set<String>? categories,
     Set<String>? trainerSubtypes,
     Set<CardLanguage>? languages,
     Set<String>? cities,

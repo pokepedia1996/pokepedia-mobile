@@ -46,10 +46,13 @@ void main() {
       expect(_proposal(proposed: 799999, bid: 799999).isAboveBid, isFalse);
     });
 
-    test('above the bid price it is a counter the buyer never committed to', () {
-      // This is what decides whether rejecting should cost the bid.
-      expect(_proposal(proposed: 900000, bid: 799999).isAboveBid, isTrue);
-    });
+    test(
+      'above the bid price it is a counter the buyer never committed to',
+      () {
+        // This is what decides whether rejecting should cost the bid.
+        expect(_proposal(proposed: 900000, bid: 799999).isAboveBid, isTrue);
+      },
+    );
 
     test('below the bid price is not a counter either', () {
       expect(_proposal(proposed: 700000, bid: 799999).isAboveBid, isFalse);

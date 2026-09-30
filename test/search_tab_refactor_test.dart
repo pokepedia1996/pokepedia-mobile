@@ -140,8 +140,11 @@ void main() {
 
       await tester.enterText(find.byType(TextField).first, 'charizard');
       await tester.pump();
-      // Hidden on the keystroke, not on the response — the reader has said
-      // what they are looking at, and it isn't the catalog.
+      // The catalog leaves on a 220ms transition, so it is still on screen
+      // for a moment — fading out, not answering. What matters is that it is
+      // gone before the request goes out, which the 300ms debounce means it
+      // is: this wait is the animation, not the response.
+      await tester.pump(const Duration(milliseconds: 250));
       expect(find.byType(ExpansionsBrowser), findsNothing);
 
       // Debounced: nothing has gone out yet.
@@ -174,7 +177,7 @@ void main() {
 
       await tester.enterText(field, 'charizard');
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.byType(ExpansionsBrowser), findsNothing);
 
       await tester.enterText(field, '');
@@ -195,13 +198,15 @@ void main() {
       // By label, not by position: the expansions underneath are a pile of
       // InkWells too, and "the last one" was one of them.
       await tester.tap(find.bySemanticsLabel('Buka filter pencarian'));
-      await tester.pump();
+      // Settled, not a single frame: the panel drops in over 220ms and the
+      // catalog fades out under it, so both are briefly on screen together.
+      await tester.pumpAndSettle();
       expect(find.text('Filter Pencarian'), findsOneWidget);
       // The panel takes the body, so the catalog is not behind it.
       expect(find.byType(ExpansionsBrowser), findsNothing);
 
       await tester.tap(find.byTooltip('Tutup'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.text('Filter Pencarian'), findsNothing);
       expect(find.byType(ExpansionsBrowser), findsOneWidget);
     });

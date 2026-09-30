@@ -9,6 +9,15 @@ class Routes {
   static const decks = '/portfolio/deck';
   static const inventory = '/portfolio/inventory';
   static const market = '/market';
+
+  /// The marketplace opened on a query — the "di Market" scope in quick
+  /// search. Stock someone is selling right now, as opposed to the catalog.
+  static String marketSearch(String query) =>
+      '/market?q=${Uri.encodeQueryComponent(query)}';
+
+  /// The marketplace's shop directory, filtered by name — "Cari toko".
+  static String marketStoreSearch(String query) =>
+      '/market?tab=stores&q=${Uri.encodeQueryComponent(query)}';
   static const account = '/account';
 
   // Search (opened from AppTopBar, not a bottom-nav tab).
@@ -79,6 +88,20 @@ class Routes {
 
   /// The numbers behind the dashboard's headline — opened from it.
   static const sellerPerformance = '/seller/performance';
+
+  /// Kelola Listing opened on one tab.
+  ///
+  /// The tab is in the link rather than left to whatever the page was last
+  /// showing: tapping "DRAFT" on the dashboard and landing on Aktif reads as
+  /// the tap having gone somewhere else. Same reasoning as the orders
+  /// counters below, and a deep link carries it too.
+  static String sellerProductsTab(String bucketKey) =>
+      '/seller/products?tab=$bucketKey';
+
+  /// Kelola Listing with the offers filter already on — the dashboard's
+  /// "Ada penawaran masuk" row counts exactly these.
+  static String sellerProductsWithOffers() =>
+      '/seller/products?tab=active&offers=1';
 
   /// The orders list opened on one tab — web's `?filter=` links, which the
   /// dashboard's counters carry so a number opens the list it counted.

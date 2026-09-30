@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../app/router/routes.dart';
+import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/widgets/listing_card.dart';
@@ -29,29 +30,7 @@ class MarketplaceFeedSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text('Marketplace', style: AppTypography.h3(colors.onSurface)),
-              const Spacer(),
-              InkWell(
-                onTap: () => context.go(Routes.market),
-                child: Row(
-                  children: [
-                    Text(
-                      'Lihat semua',
-                      style: AppTypography.captionSemibold(colors.primary),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      LucideIcons.arrowUpRight,
-                      size: 13,
-                      color: colors.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          Text('Marketplace', style: AppTypography.h3(colors.onSurface)),
           const SizedBox(height: 6),
           _SortRow(
             sort: sort,
@@ -104,7 +83,54 @@ class MarketplaceFeedSection extends ConsumerWidget {
               );
             },
           ),
+
+          // The way through to the full market reads as the step after the
+          // feed rather than a corner of its heading: it is what someone
+          // wants once these listings have run out, and that is where their
+          // eye already is. Held back while loading, when there is not yet
+          // anything to have finished looking at.
+          if (!async.isLoading)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: _SeeAllButton(onTap: () => context.go(Routes.market)),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Lihat semua" as the section's closing action.
+///
+/// A full-width outlined button rather than the bare link the heading used to
+/// carry: at the foot of the section it is the only thing to press, and a
+/// link floating in open space reads as a caption until you try to tap it.
+/// Its label stays centred within that width.
+class _SeeAllButton extends StatelessWidget {
+  const _SeeAllButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+      // The arrow reads as "onward" only after the words it applies to.
+      iconAlignment: IconAlignment.end,
+      label: const Text('Lihat semua'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: colors.primary,
+        side: BorderSide(color: context.borderColor),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        textStyle: AppTypography.captionSemibold(colors.primary),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
       ),
     );
   }

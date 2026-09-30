@@ -199,18 +199,11 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                   Positioned(
                     right: 6,
                     top: 6,
-                    // How many, then what grade — the count qualifies the
-                    // grade beside it ("two, both Near Mint"), so it leads.
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (listing.quantity > 1) ...[
-                          _QuantityChip(quantity: listing.quantity),
-                          const SizedBox(width: 4),
-                        ],
-                        ConditionBadge(condition: listing.condition),
-                      ],
-                    ),
+                    // The grade alone. A count chip used to sit beside it,
+                    // but the row under the price already says how many are
+                    // available — in words, and in the place a buyer looks
+                    // for stock.
+                    child: ConditionBadge(condition: listing.condition),
                   ),
                   if (listing.isFeatured)
                     Positioned(
@@ -533,30 +526,6 @@ class _WishlistBadge extends StatelessWidget {
                 color: wishlisted ? Colors.white : context.mutedForeground,
               ),
       ),
-    );
-  }
-}
-
-/// The `x2` chip over the artwork: how many copies this listing covers.
-///
-/// Monochrome for the same reason [ConditionBadge] is — it sits on card art
-/// of every colour, and black on white is the one pairing that reads over all
-/// of it. Only drawn past one: "x1" is the default every listing would carry,
-/// and a badge every tile wears tells the reader nothing.
-class _QuantityChip extends StatelessWidget {
-  const _QuantityChip({required this.quantity});
-
-  final int quantity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      child: Text('\u00d7$quantity', style: AppTypography.badge(Colors.black)),
     );
   }
 }

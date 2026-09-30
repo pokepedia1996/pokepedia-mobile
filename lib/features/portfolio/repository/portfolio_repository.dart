@@ -50,6 +50,39 @@ String generateShareCode() {
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
 /// `fetchUserDecks` / `lib/products/wishlist.ts` / the web's collection API.
+/// How many cards a collection may carry into the app.
+///
+/// PostgREST answers at most a page at a time — Supabase's "Max rows" is
+/// 1000 by default — and a query with no `range` silently stops there rather
+/// than erroring. That is why a 8,495-card collection reported "1000 kartu
+/// unik": not a chart limit, a truncated read that every total downstream
+/// then agreed on.
+const maxCollectionRows = 15000;
+
+/// One page of a PostgREST read.
+const _collectionPageSize = 1000;
+
+/// Reads every row [page] describes, a page at a time, up to [max].
+///
+/// Client-side paging rather than a bigger `limit`: the server cap wins over
+/// whatever the client asks for, so the only way past it is to ask again.
+Future<List<Map<String, dynamic>>> _pagedRows(
+  Future<dynamic> Function(int from, int to) page, {
+  int max = maxCollectionRows,
+}) async {
+  final all = <Map<String, dynamic>>[];
+  for (var from = 0; from < max; from += _collectionPageSize) {
+    final to = min(from + _collectionPageSize, max) - 1;
+    final rows = await page(from, to);
+    if (rows is! List || rows.isEmpty) break;
+    all.addAll(rows.cast<Map<String, dynamic>>());
+    // A short page is the last page — asking again would spend a round trip
+    // to be told the same thing.
+    if (rows.length < to - from + 1) break;
+  }
+  return all;
+}
+
 class PortfolioRepository {
   PortfolioRepository(this._client);
 
@@ -62,11 +95,17 @@ class PortfolioRepository {
   Future<List<CardModel>> fetchCollection(String userId) async {
     final collectionId = await primaryCollectionId(_client, userId);
     if (collectionId == null) return const [];
-    final rows = await _client
-        .from('collection_cards')
-        .select('quantity, cards!inner($_cardColumns)')
-        .eq('collection_id', collectionId)
-        .gt('quantity', 0);
+    final rows = await _pagedRows(
+      (from, to) => _client
+          .from('collection_cards')
+          .select('quantity, cards!inner($_cardColumns)')
+          .eq('collection_id', collectionId)
+          .gt('quantity', 0)
+          // Ordered, because paging without one lets the server return the
+          // same row twice across two pages and drop another entirely.
+          .order('card_id', ascending: true)
+          .range(from, to),
+    );
     final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       return card.copyWith(owned: r['quantity'] as int);
@@ -253,7 +292,8 @@ class PortfolioRepository {
     final rows = await _client
         .from('cards')
         .select(_cardColumns)
-        .inFilter('id', cardIds.toList());
+        .inFilter('id', cardIds.toList())
+        .range(0, maxCollectionRows - 1);
     // The wishlist draws the same tiles as the collection, so it prices the
     // same way — otherwise half the app's cards show a value and half don't.
     return priceCards(_client, rows.map(CardModel.fromRow).toList());
@@ -454,15 +494,22 @@ class PortfolioRepository {
 
   /// Ports `searchCardsPicker` — the catalog search used by "Tambahkan" to
   /// find a card to stage into inventory.
-  Future<List<CardModel>> searchCardsPicker(String query) async {
+  Future<List<CardModel>> searchCardsPicker(
+    String query, {
+    CardLanguage? language,
+  }) async {
     if (query.trim().length < 2) return const [];
     final rows =
         await _client.rpc(
               'search_cards_picker',
               params: {
                 'search_query': query,
-                'p_limit': 20,
-                'p_languages': null,
+                'p_limit': 40,
+                // Narrowed in SQL rather than after the fact: the RPC
+                // returns one capped page, so filtering the page here would
+                // answer "Pikachu in EN" with whatever few English prints
+                // happened to make the mixed-language cut.
+                'p_languages': language == null ? null : [language.raw],
                 'p_regulation_marks': null,
               },
             )
@@ -504,7 +551,9 @@ class PortfolioRepository {
         .from('collection_cards')
         .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
         .eq('collection_id', listId)
-        .order('created_at', ascending: true);
+        .order('created_at', ascending: true)
+        // A list is a collection too, and hits the same page ceiling.
+        .range(0, maxCollectionRows - 1);
     final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       // The list's own quantity, not an ownership count — the detail grid
