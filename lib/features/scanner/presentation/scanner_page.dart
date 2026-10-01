@@ -3,7 +3,6 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,20 +32,19 @@ import 'widgets/scanner_top_bar.dart';
 ///
 /// ## What's the same, and what deliberately isn't
 ///
-/// The web runs a corner-detection model over the live feed and fires capture
-/// automatically once a detected quad holds still. That whole tier is replaced
-/// here by a drawn guide box the user aligns against and a shutter they press
-/// — see the header comment in `utils/card_capture.dart` for why. Everything
-/// downstream of the capture is a faithful port: the same endpoint, the same
-/// confidence recomputation, the same batch semantics, the same two terminal
-/// actions.
+/// Like the web, a corner-detection model runs over the live feed and capture
+/// fires automatically once a detected quad holds still — there is no shutter.
+/// The same bundled `.tflite` weights, the same gates and lock timing, the
+/// same endpoint, the same batch semantics, the same two terminal actions.
+/// What differs is plumbing: frames are decoded and tensors built on
+/// [DetectorWorker]'s isolate, and inference runs on [CornerModel]'s.
 ///
-/// The pieces of ScannerView that *are* carried over verbatim are the ones
-/// that stop a fast scanning run from corrupting itself:
+/// The pieces of ScannerView that stop a fast scanning run from corrupting
+/// itself are carried over verbatim:
 ///
 ///  * a **generation guard** (in `ScannerNotifier`) so a slow earlier response
 ///    can't overwrite a newer scan's result;
-///  * a **single-flight gate** so a double-tap can't put two captures in
+///  * a **single-flight gate** so two locks can't put two captures in
 ///    flight against one card;
 ///  * a **settle delay** after each result, long enough to read the price
 ///    before the next capture is allowed.
@@ -145,7 +143,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
           }
         })
         .catchError((Object e) {
-          if (kDebugMode) debugPrint('[scan] worker spawn failed: $e');
+          debugPrint('[scan] worker spawn failed: $e');
           // Said out loud. Without the worker the tick returns early on
           // every frame, so the scanner is alive, streaming, and incapable
           // of ever detecting anything — which looks like a camera that
@@ -166,7 +164,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
           }
         })
         .catchError((Object e) {
-          if (kDebugMode) debugPrint('[scan] model load failed: $e');
+          debugPrint('[scan] model load failed: $e');
+          // Same reasoning as the worker: without the model `_tick` returns
+          // early forever, and a scanner that streams but never detects
+          // reads as a camera problem rather than the fault it is.
+          if (mounted) {
+            setState(() {
+              _cameraError = 'Pemindai gagal disiapkan. Tutup dan buka lagi.';
+            });
+          }
         });
   }
 
@@ -288,12 +294,24 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     try {
       await controller.startImageStream((frame) => _latestFrame = frame);
     } on CameraException catch (e) {
-      if (kDebugMode) debugPrint('[scan] image stream failed: $e');
+      debugPrint('[scan] image stream failed: $e');
       return;
     }
     _tickTimer?.cancel();
     _tickTimer = Timer.periodic(_tickInterval, (_) => _tick());
   }
+
+  /// Clockwise turns that bring a streamed frame upright.
+  ///
+  /// Android streams in sensor orientation, so the sensor's mounting angle is
+  /// the rotation. iOS does not: `lockCaptureOrientation` sets the video
+  /// output connection to portrait, so AVFoundation hands over buffers that
+  /// are already upright — while `camera_avfoundation` still reports a
+  /// hardcoded `sensorOrientation` of 90. Rotating by it turned every iOS
+  /// frame sideways, far past the ±30° the corner model was trained on, so
+  /// nothing ever passed the gates and no scan was ever sent.
+  int _frameRotation(CameraController controller) =>
+      Platform.isIOS ? 0 : controller.description.sensorOrientation;
 
   Future<void> _tick() async {
     if (!mounted || _detecting || _capturing) return;
@@ -309,7 +327,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       // This is the pixel work that used to block the UI thread every tick.
       final prep = await _worker?.prepareFrame(
         frame,
-        controller.description.sensorOrientation,
+        _frameRotation(controller),
       );
       if (prep == null || !mounted) return;
 
@@ -419,7 +437,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       final controller = _controller;
       if (worker == null || controller == null) return;
 
-      final orientation = controller.description.sensorOrientation;
+      final orientation = _frameRotation(controller);
 
       // The burst: two frames a gap apart, sharpest kept. A hand is never
       // still, and one grab lands on the blurred half of that wobble often

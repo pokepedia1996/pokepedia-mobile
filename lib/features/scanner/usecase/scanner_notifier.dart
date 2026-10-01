@@ -126,7 +126,7 @@ class ScannerNotifier extends Notifier<ScanState> {
       // message beats anything invented here.
       next = ScanFailed(e.message);
     } catch (e) {
-      if (kDebugMode) debugPrint('[scan] unexpected failure: $e');
+      debugPrint('[scan] unexpected failure: $e');
       next = ScanFailed('Gagal menghubungi server, periksa koneksi');
     }
 

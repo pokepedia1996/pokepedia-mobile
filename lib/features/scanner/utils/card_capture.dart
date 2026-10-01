@@ -20,28 +20,13 @@ import 'warp_quad.dart';
 /// degrade gracefully: it shifts the query vector away from every catalog
 /// entry at once and the scan reads as "not recognized".
 ///
-/// ## How this differs from the web, deliberately
+/// ## Where the crop comes from
 ///
-/// The web finds the card itself, running a two-stage ONNX corner regressor
-/// over the live feed (`utils/card-detector.ts`) and perspective-warping the
-/// detected quad (`utils/warp-quad.ts`). That path costs a ~5.7 MB model and a
-/// ~2.7 MB WASM runtime, both of which a browser fetches once and caches.
-///
-/// This port instead makes the *user* the detector: a fixed card-aspect guide
-/// box is drawn on the preview, the user fills it, and capture crops exactly
-/// that rectangle. The trade is deliberate — it gives up automatic detection
-/// (and with it perspective correction for a tilted card) in exchange for no
-/// model download, no inference budget per frame, and a crop whose geometry is
-/// known exactly rather than predicted. It lands in the same framing the web's
-/// own detector was tuned around: `card-detector.ts` notes stage 2 exists to
-/// reproduce "the same near-filling framing the original guide-box model was
-/// good at". A device-side corner model can be slotted in later behind
-/// [cropCardFromFrame]'s signature without the rest of the feature changing.
-///
-/// The cost of that trade is real and worth naming: a card held at a steep
-/// angle is never straightened here, so it embeds worse than it would on the
-/// web. The guide box is what keeps that from mattering in practice — a card
-/// aligned to a drawn rectangle is close to frontal by construction.
+/// Like the web, the scanner finds the card itself: the bundled corner model
+/// (`corner_model.dart`, the same `.tflite` weights as `utils/card-detector.ts`)
+/// locates it, and [captureFromQuad] perspective-warps the detected quad.
+/// The guide-box path ([guideRectInImageSpace], [cropCardFromFrame]) predates
+/// the model and is no longer what the scanner uses.
 
 /// JPEG quality for the upload. Matches the web's 0.92 WebP — high enough that
 /// compression artifacts don't perturb the embedding, low enough to keep the
