@@ -99,9 +99,26 @@ class Point2 {
   }
 }
 
-/// Long side ceiling for the warped output. Matches `captureMaxSide` — the
-/// server downscales to a 1000px working side regardless.
-const _warpMaxWidth = 1400;
+/// Long side of the uploaded crop.
+///
+/// `scan.server.ts` resizes to **512** before the embedder sees it, so every
+/// pixel above that is upload cost thrown away on arrival. This said 1000 and
+/// sent 1400 — about three times the pixels web sends, over mobile data, for
+/// an embedder that never saw them.
+///
+/// 768, matching web's `CAPTURE_MAX_SIDE`: comfortably above 512 so the final
+/// downscale is done by the server's Lanczos rather than by this one, and no
+/// higher than it has to be.
+const captureMaxSide = 768;
+
+/// Long side ceiling for the warped output.
+///
+/// The same number, deliberately: the warp is a per-pixel homography, so
+/// every pixel above the size that will actually be uploaded is sampled,
+/// interpolated and then thrown away by the resize that follows. Two
+/// constants that must agree is how the stale "1000px" comment survived, so
+/// there is only one.
+const _warpMaxWidth = captureMaxSide;
 
 /// Whether the quad describes a card lying on its side.
 ///

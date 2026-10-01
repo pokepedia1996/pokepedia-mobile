@@ -66,8 +66,29 @@ class CornerModel {
       address: interpreter.address,
     );
     final model = CornerModel._(interpreter, isolate);
+    await model._warm();
     _instance = model;
     return model;
+  }
+
+  /// One inference on an empty tensor, before any real frame.
+  ///
+  /// Loading the model is not the same as running it: TFLite allocates and
+  /// first-touches its kernels on the first run, and without this that cost
+  /// lands on the first live tick — the moment the user has just pointed the
+  /// camera at a card and is waiting to see the outline. Ports
+  /// `warmCardDetector`, which exists on web for the same reason.
+  ///
+  /// The result is discarded and a failure is swallowed: this is a timing
+  /// optimisation, and a scanner that refused to start because a dummy
+  /// inference failed would be strictly worse than one that starts cold.
+  Future<void> _warm() async {
+    try {
+      final blank = Float32List(3 * modelInputSize * modelInputSize);
+      await run(blank, wholeFrame(modelInputSize, modelInputSize));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[scan] model warmup failed: $e');
+    }
   }
 
   /// Runs the model over [region] of [frame] and decodes the result.
