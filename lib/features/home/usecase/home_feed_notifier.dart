@@ -16,8 +16,14 @@ final homeFeedSortProvider = StateProvider<MarketSort>(
 /// Recent marketplace listings for the Beranda feed.
 final homeFeedProvider = FutureProvider<List<ListingModel>>((ref) async {
   final sort = ref.watch(homeFeedSortProvider);
-  final listings = await ref
+  // One page is plenty: Beranda shows [_feedLimit] rows and hands the rest
+  // to the Market tab, so the page's cursor is deliberately dropped here.
+  final page = await ref
       .read(marketRepositoryProvider)
-      .fetchListings(bucket: MarketBucket.listing, sort: sort);
-  return listings.take(_feedLimit).toList();
+      .fetchListings(
+        bucket: MarketBucket.listing,
+        sort: sort,
+        limit: _feedLimit,
+      );
+  return page.listings.take(_feedLimit).toList();
 });

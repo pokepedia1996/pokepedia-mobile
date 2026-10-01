@@ -1,12 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/providers/supabase_provider.dart';
 import 'models/portfolio_value.dart';
 
 /// The collection-worth history behind the Beranda chart.
 ///
-/// Reads `portfolio_value_snapshots`, one row per user per day, written by the
-/// `snapshot_portfolio_values` cron at 00:20 UTC.
+/// Reads `collection_value_snapshots`, one row per collection per day, written
+/// by the `snapshot_collection_values` cron at 00:20 UTC.
+///
+/// A collection holding no cards gets no row at all, so a gap in the series
+/// means "no snapshot", never "unchanged" — which is why a missing day is
+/// left as a gap rather than carried forward from the day before.
 ///
 /// This used to be derived on the device from `price_history`: pull every
 /// daily close for every held card, carry the last known price across days a
@@ -17,8 +22,10 @@ import 'models/portfolio_value.dart';
 /// buying a card retroactively rewrote last month's chart. A snapshot records
 /// what the user actually held that day.
 ///
-/// `portfolio_value_snapshots_select_own` scopes the table to its owner, so
-/// this runs on the user's own session and needs no user id passed in.
+/// `collection_value_snapshots_select_own` scopes the table to its owner, so
+/// this runs on the user's own session and needs no user id passed in — but
+/// the collection does have to be named, since the owner now has a line per
+/// collection rather than one for the account.
 class PortfolioValueRepository {
   PortfolioValueRepository(this._client);
 
@@ -36,11 +43,15 @@ class PortfolioValueRepository {
   /// "your collection is worthless".
   Future<List<PortfolioValuePoint>> fetchValueSeries({
     required PortfolioRange range,
+    required String collectionId,
   }) async {
     final days = range.days;
     var query = _client
-        .from('portfolio_value_snapshots')
-        .select('snapshot_on, total_value');
+        .from('collection_value_snapshots')
+        .select('snapshot_on, total_value')
+        // Without this the series interleaves every collection's rows and
+        // `_maxDays` truncates a long range partway through one of them.
+        .eq('collection_id', collectionId);
 
     if (days != null) {
       final from = DateTime.now().toUtc().subtract(Duration(days: days));
@@ -70,5 +81,5 @@ class PortfolioValueRepository {
 }
 
 final portfolioValueRepositoryProvider = Provider(
-  (ref) => PortfolioValueRepository(Supabase.instance.client),
+  (ref) => PortfolioValueRepository(ref.watch(supabaseClientProvider)),
 );

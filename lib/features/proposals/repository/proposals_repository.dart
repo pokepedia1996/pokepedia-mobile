@@ -3,11 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/utils/seller_identity.dart';
 import 'models/bid_proposal_model.dart';
 import 'models/listing_offer_model.dart';
 import 'models/my_bid.dart';
 import 'models/sent_proposal.dart';
 import 'models/proposals_summary.dart';
+import '../../../core/errors/user_message.dart';
 
 /// The `cards` columns these rows embed — same list the other repositories
 /// hand to [CardModel.fromRow].
@@ -24,7 +26,7 @@ seller_id, listing:ask_order_id(slug), card:cards!inner($_cardColumns)
 
 const _proposalColumns =
     '''
-slug, status, proposed_quantity, proposed_price, condition, message,
+slug, status, proposed_quantity, proposed_price, condition, message, photos,
 created_at, expires_at, seen_at, seller_id,
 bid:listings!inner(id, price, user_id, card:cards!inner($_cardColumns))
 ''';
@@ -426,12 +428,23 @@ class ProposalsRepository {
         card: card,
         condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
         proposedQuantity: (row['proposed_quantity'] as num?)?.toInt() ?? 1,
-        sellerStoreName: storeNames[row['seller_id'] as String] ?? 'Penjual',
+        sellerStoreName:
+            storeNames[row['seller_id'] as String] ?? sellerDisplayFallback,
         status: BidProposalStatusX.fromRaw(row['status'] as String?),
         createdAt: _date(row['created_at']),
         expiresAt: _date(row['expires_at']),
         seenAt: _date(row['seen_at']),
         message: row['message'] as String?,
+        // Both were already on the row — the price was selected and dropped,
+        // the photos never asked for. A buyer deciding on a proposal is
+        // deciding on a specific copy at a specific price, and the list
+        // showed neither.
+        proposedPrice: (row['proposed_price'] as num?)?.toInt(),
+        photos: [
+          for (final url in (row['photos'] as List?) ?? const [])
+            if (url is String && url.isNotEmpty) url,
+        ],
+        bidPrice: (bid['price'] as num?)?.toInt(),
       );
     }).toList();
   }
@@ -464,7 +477,7 @@ class ProposalsRepository {
       }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -542,20 +555,53 @@ class ProposalsRepository {
     }
   }
 
+  /// What to call each of [sellerIds]: their shop name where they have one,
+  /// otherwise their username — a seller who never opened a storefront has
+  /// no `seller_profiles` name at all, and naming them "Toko" throws away
+  /// the handle the profile row is carrying.
   Future<Map<String, String>> _storeNamesFor(Set<String> sellerIds) async {
     if (sellerIds.isEmpty) return const {};
-    try {
-      final rows = await _client
-          .from('seller_profiles')
-          .select('user_id, store_name')
-          .inFilter('user_id', sellerIds.toList());
-      return {
-        for (final row in rows)
-          row['user_id'] as String: row['store_name'] as String? ?? 'Toko',
-      };
-    } catch (_) {
-      return const {};
+    final ids = sellerIds.toList();
+
+    Future<List<Map<String, dynamic>>> read(
+      String table,
+      String columns,
+      String key,
+    ) async {
+      try {
+        final rows = await _client
+            .from(table)
+            .select(columns)
+            .inFilter(key, ids);
+        return rows.cast<Map<String, dynamic>>();
+      } catch (_) {
+        return const [];
+      }
     }
+
+    final storeRows = await read(
+      'seller_profiles',
+      'user_id, store_name',
+      'user_id',
+    );
+    final profileRows = await read('profiles', 'id, username', 'id');
+
+    final storeNameBy = {
+      for (final row in storeRows)
+        row['user_id'] as String: row['store_name'] as String?,
+    };
+    final usernameBy = {
+      for (final row in profileRows)
+        row['id'] as String: row['username'] as String?,
+    };
+
+    return {
+      for (final id in ids)
+        id: resolveSellerName(
+          storeName: storeNameBy[id],
+          username: usernameBy[id],
+        ),
+    };
   }
 
   ListingOfferModel _mapOffer(Map<String, dynamic> row, String? storeName) {
@@ -570,7 +616,7 @@ class ProposalsRepository {
           ? OfferActor.seller
           : OfferActor.buyer,
       status: _offerStatus(row['status'] as String?),
-      storeName: storeName ?? 'Toko',
+      storeName: storeName ?? sellerDisplayFallback,
       createdAt: _date(row['created_at']),
       expiresAt: _date(row['expires_at']),
       buyerCounterCount: (row['buyer_counter_count'] as num?)?.toInt() ?? 0,

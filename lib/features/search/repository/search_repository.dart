@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/image_url.dart';
@@ -8,7 +7,7 @@ import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
 import '../../../shared/models/pokemon_type.dart';
 import 'models/advanced_search_query.dart';
-import 'dart:convert';
+import '../../../core/errors/user_message.dart';
 
 /// Mirrors `MIN_SEARCH_LEN` in `pokepedia-web/lib/utils/constants.ts`.
 const minSearchLen = 2;
@@ -92,10 +91,6 @@ SearchFilterOptions resolveFilterOptions({
     if (derived.isNotEmpty) return derived;
     return vocabulary;
   }
-
-  const encoder = JsonEncoder.withIndent('  ');
-  final pretty = encoder.convert(fromServer?.categories);
-  debugPrint(pretty);
 
   return SearchFilterOptions(
     categories: pick(
@@ -240,9 +235,8 @@ class SearchRepository {
     } on PostgrestException catch (e) {
       errors.add(
         _isUnpopulatedCache(e)
-            ? 'Daftar filter belum disiapkan di server '
-                  '(filter_options_cache belum di-refresh)'
-            : 'Filter: ${e.message}',
+            ? 'Daftar filter belum siap. Coba lagi sebentar lagi.'
+            : 'Filter: ${userFacingError(e)}',
       );
       return const {};
     } catch (e) {
@@ -327,12 +321,8 @@ class SearchRepository {
     }
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return error.message;
-    }
-    return error.toString();
-  }
+  static String _describe(Object error) =>
+      userFacingError(error, fallback: 'tidak bisa dimuat');
 
   /// Ports `loadAdvancedSearchPage` — one call to `advanced_search_cards`,
   /// which applies every facet, the ownership filter, the sort and the

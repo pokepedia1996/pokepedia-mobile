@@ -39,7 +39,7 @@ class CardPriceNote extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4),
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        alignment: Alignment.centerRight,
+        alignment: Alignment.centerLeft,
         child: content,
       ),
     );
@@ -73,7 +73,11 @@ class CardPriceNote extends StatelessWidget {
   }
 }
 
-/// "↑100.0% · 7H" — web's `pricePct` span.
+/// "↑100.0%" — web's `pricePct` span.
+///
+/// The window used to be spelled out beside it as "· 7H". Every move on
+/// every tile is measured over the same week, so the suffix repeated itself
+/// on every row of the grid while competing with the price for the space.
 class _Trend extends StatelessWidget {
   const _Trend({required this.pct});
 
@@ -93,23 +97,11 @@ class _Trend extends StatelessWidget {
         ? context.appColors.error
         : muted;
 
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '$arrow${pct.abs().toStringAsFixed(1)}%',
-            style: AppTypography.captionSemibold(tone),
-          ),
-          // The window the move is measured over, in the same shorthand the
-          // portfolio chart's range chips use.
-          TextSpan(
-            text: ' · 7H',
-            style: AppTypography.caption(muted.withValues(alpha: 0.7)),
-          ),
-        ],
-      ),
+    return Text(
+      '$arrow${pct.abs().toStringAsFixed(1)}%',
       maxLines: 1,
       softWrap: false,
+      style: AppTypography.captionSemibold(tone),
     );
   }
 }

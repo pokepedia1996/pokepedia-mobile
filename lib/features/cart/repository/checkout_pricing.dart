@@ -26,6 +26,37 @@ List<PaymentChannel> availablePaymentChannels(int grandTotalIdr) {
 bool isChannelAllowedForAmount(PaymentChannel channel, int grandTotalIdr) =>
     availablePaymentChannels(grandTotalIdr).contains(channel);
 
+/// What checkout preselects for a buyer who hasn't chosen for themselves.
+///
+/// 1. Saldo, whenever it covers the bill — it settles instantly and pays no
+///    gateway fee.
+/// 2. Otherwise the gateway. Which channels exist is decided by the amount,
+///    not here: under [qrisMaxIdr] only QRIS is offered, at or above it only
+///    the VA banks. So "fall back to QRIS" and "a big bill goes to VA" turn
+///    out to be the same rule read from opposite ends.
+/// 3. Among the VA banks, [lastPaidChannel] — what the buyer actually paid
+///    with last time — in preference to whichever heads the list.
+///
+/// [holdsFeeWaiver] blocks the jump to Saldo: a coupon that waives the
+/// gateway fee is worth nothing on a method that never charged one, and
+/// voiding a coupon the buyer just applied is not a default's job.
+({PaymentMethod method, PaymentChannel? channel}) autoSelectPayment({
+  required int grandTotalIdr,
+  required int walletBalance,
+  PaymentChannel? lastPaidChannel,
+  bool holdsFeeWaiver = false,
+}) {
+  if (walletBalance >= grandTotalIdr && !holdsFeeWaiver) {
+    return (method: PaymentMethod.wallet, channel: null);
+  }
+
+  final available = availablePaymentChannels(grandTotalIdr);
+  final channel = lastPaidChannel != null && available.contains(lastPaidChannel)
+      ? lastPaidChannel
+      : available.first;
+  return (method: PaymentMethod.xendit, channel: channel);
+}
+
 class CheckoutTotals {
   const CheckoutTotals({
     required this.grandTotalBeforeFee,

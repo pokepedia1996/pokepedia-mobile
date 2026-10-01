@@ -8,15 +8,16 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/card_art.dart';
 import '../../repository/models/portfolio_value.dart';
 import '../../usecase/portfolio_value_notifier.dart';
 
 /// "Nilai Tertinggi" — the selected portfolio's most valuable holdings.
 class TopHoldingsSection extends ConsumerWidget {
-  const TopHoldingsSection({super.key, this.limit = 3});
+  const TopHoldingsSection({super.key, this.limit = 2});
 
-  /// How many rows before "Lihat semua" takes over.
+  /// How many rows before "Lihat semua" takes over. Two: the snippet is a
+  /// glance at what the collection is worth, and the page has a marketplace
+  /// under it that people are scrolling for.
   final int limit;
 
   @override
@@ -97,14 +98,6 @@ class _HoldingRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
-            SizedBox(
-              width: 34,
-              child: CardArt(
-                imageUrl: holding.imageUrl,
-                borderRadius: AppRadius.sm,
-              ),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,7 +117,14 @@ class _HoldingRow extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
+            // How many of this card are held, in its own column between the
+            // name and the money rather than tucked under the price.
+            Text(
+              '${holding.quantity}pcs',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -132,10 +132,15 @@ class _HoldingRow extends StatelessWidget {
                   formatRupiah(holding.value),
                   style: AppTypography.bodySmSemibold(colors.onSurface),
                 ),
-                if (holding.quantity > 1)
+                // The week's move, where the card has a confirmed price to
+                // draw one from. Silent otherwise — an ask or a bid is one
+                // person's number, and a trend through it would be invented.
+                if (holding.priceChangePct case final pct?)
                   Text(
-                    '×${holding.quantity}',
-                    style: AppTypography.caption(context.mutedForeground),
+                    '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                    style: AppTypography.caption(
+                      pct >= 0 ? context.appSemantic.success : colors.error,
+                    ),
                   ),
               ],
             ),

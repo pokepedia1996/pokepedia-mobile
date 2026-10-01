@@ -31,7 +31,8 @@
 			<string>google-sign-in</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.432953151230-apilpmrt9i10lgmeetth90qmr84c98g9</string>
+				<!-- <string>com.googleusercontent.apps.432953151230-apilpmrt9i10lgmeetth90qmr84c98g9</string> -->
+				<string>com.googleusercontent.apps.413418907689-7l52s25r9rgaod1t02c65o2sl0rk14fm</string>
 			</array>
 		</dict>
 		<dict>

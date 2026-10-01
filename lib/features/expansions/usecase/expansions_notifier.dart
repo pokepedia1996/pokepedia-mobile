@@ -7,6 +7,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
+import '../../home/usecase/portfolio_value_notifier.dart';
 import '../repository/expansions_repository.dart';
 import '../repository/models/market_models.dart';
 
@@ -97,9 +98,16 @@ final packOwnedQuantitiesProvider =
       final user = ref.watch(authProvider).valueOrNull;
       if (user == null) return const {};
       final cards = await ref.watch(packCardsProvider(slug).future);
+      // The portfolio the page is pointed at, so the owned badges and the
+      // "Dimiliki" count answer for the same shelf the switcher names.
+      final collectionId = await ref.watch(selectedCollectionIdProvider.future);
       return ref
           .read(expansionsRepositoryProvider)
-          .fetchOwnedQuantities(user.id, cards.map((c) => c.id).toList());
+          .fetchOwnedQuantities(
+            user.id,
+            cards.map((c) => c.id).toList(),
+            collectionId: collectionId,
+          );
     });
 
 final cardDetailProvider = FutureProvider.family<CardModel?, int>((ref, id) {

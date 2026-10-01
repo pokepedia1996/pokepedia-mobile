@@ -27,7 +27,7 @@ enum PortfolioRange {
 
 /// Which set of cards the header is valuing.
 ///
-/// "Portofolio Utama" is the whole collection (`user_cards`); the rest are
+/// "Portofolio Utama" is the primary collection; the rest are
 /// the user's saved lists, which is what the app already has that answers to
 /// "portofolio yang dimau".
 class PortfolioTarget {
@@ -62,6 +62,7 @@ class PortfolioHolding {
     required this.quantity,
     required this.unitPrice,
     this.imageUrl,
+    this.priceChangePct,
   });
 
   final int cardId;
@@ -73,6 +74,11 @@ class PortfolioHolding {
   final int quantity;
   final int unitPrice;
   final String? imageUrl;
+
+  /// The card's week-on-week move, from [CardModel.priceChangePct]. Null
+  /// where there is nothing honest to say — the price has to be a confirmed
+  /// one, built from actual sales, before a trend can be drawn through it.
+  final double? priceChangePct;
 
   /// What this line is worth — the number the row shows on the right.
   int get value => unitPrice * quantity;

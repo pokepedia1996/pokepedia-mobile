@@ -162,6 +162,8 @@ class ChatThreadState {
     this.hasMore = false,
     this.loadingMore = false,
     this.othersReadUpTo,
+    this.previewContext,
+    this.openedListingId,
   });
 
   final String title;
@@ -180,6 +182,38 @@ class ChatThreadState {
   /// your own ticks green. Null in a room with nobody else in it yet.
   final int? othersReadUpTo;
 
+  /// The listing this conversation was opened about, while nothing in the
+  /// thread says so yet.
+  ///
+  /// Rooms are created lazily: tapping "Hubungi" on a listing writes nothing
+  /// until the first message, so the thread would otherwise open on an empty
+  /// screen with no sign of which card it is about. Dropped the moment the
+  /// real `listing_context` message lands.
+  final ChatListingContext? previewContext;
+
+  /// The listing the thread was *opened* about, if it was opened from one.
+  ///
+  /// Null for a conversation reached any other way — the inbox, a profile's
+  /// chat button, a notification.
+  final int? openedListingId;
+
+  /// What the pinned banner names.
+  ///
+  /// Only ever the listing this thread was opened about: a long-running
+  /// conversation can hold cards for half a dozen listings, and pinning the
+  /// newest of those to a chat someone opened from a profile would announce
+  /// a card they hadn't asked about. Those older cards still sit in the
+  /// timeline, where they read as the history they are.
+  ChatListingContext? get pinnedListing {
+    final opened = openedListingId;
+    if (opened == null) return null;
+    for (final message in messages.reversed) {
+      final listing = message.listingContext;
+      if (listing != null && listing.listingOrderId == opened) return listing;
+    }
+    return previewContext;
+  }
+
   /// Whether [id] has been read by every other participant.
   bool isReadByOthers(int id) =>
       id > 0 && othersReadUpTo != null && othersReadUpTo! >= id;
@@ -193,6 +227,9 @@ class ChatThreadState {
     bool? hasMore,
     bool? loadingMore,
     int? othersReadUpTo,
+    ChatListingContext? previewContext,
+    bool clearPreview = false,
+    int? openedListingId,
   }) => ChatThreadState(
     title: title ?? this.title,
     room: room ?? this.room,
@@ -202,6 +239,10 @@ class ChatThreadState {
     hasMore: hasMore ?? this.hasMore,
     loadingMore: loadingMore ?? this.loadingMore,
     othersReadUpTo: othersReadUpTo ?? this.othersReadUpTo,
+    previewContext: clearPreview
+        ? null
+        : (previewContext ?? this.previewContext),
+    openedListingId: openedListingId ?? this.openedListingId,
   );
 }
 
@@ -223,15 +264,31 @@ class ChatThreadNotifier
 
   @override
   Future<ChatThreadState> build(ChatThreadArg arg) async {
+    // Held rather than read again inside `onDispose`: when the whole
+    // container goes down the repository provider may already be gone by the
+    // time this runs, and reading it there throws.
+    final repo = _repo;
     ref.onDispose(() {
       final channel = _channel;
-      if (channel != null) _repo.unsubscribe(channel);
+      if (channel != null) repo.unsubscribe(channel);
     });
+
+    // Which listing this was opened about, when it was opened from one. The
+    // room may not exist yet, so this is the only thing that knows.
+    final listingId = arg.listingId;
+    final preview = listingId == null
+        ? null
+        : (await _repo.fetchListingChat(listingId)).context;
 
     final slug = arg.slug;
     if (slug == null) {
-      // Nothing said yet — the room appears with the first message.
-      return ChatThreadState(title: arg.title);
+      // Nothing said yet — the room appears with the first message, and
+      // until then the listing's card is what the thread has to show.
+      return ChatThreadState(
+        title: arg.title,
+        previewContext: preview,
+        openedListingId: listingId,
+      );
     }
 
     final room = await _repo.fetchRoom(slug);
@@ -265,9 +322,48 @@ class ChatThreadNotifier
       title: room.title,
       room: room,
       messages: messages,
+      // Suppressed once the conversation carries the card itself — the real
+      // message says the same thing, with a timestamp.
+      previewContext: _introduces(messages, preview) ? null : preview,
+      openedListingId: listingId,
       // A short first page means the room's whole history is already here.
       hasMore: messages.length >= ChatRepository.messagesPerPage,
       othersReadUpTo: othersReadUpTo,
+    );
+  }
+
+  /// Re-reads the room after something was written into it server-side.
+  ///
+  /// `ensure_direct_room` writes the `listing_context` message itself, and
+  /// for a room that has just been created it does so before this client is
+  /// subscribed — so the contents are fetched rather than waited for.
+  Future<void> _seedFromRoom(ChatRoom room) async {
+    final seeded = await _repo.fetchMessages(room.id, table: _messageTable);
+    final latest = state.valueOrNull;
+    if (latest == null || seeded.isEmpty) return;
+
+    final known = {for (final m in seeded) m.id};
+    state = AsyncData(
+      latest.copyWith(
+        // Anything local — the optimistic bubble — keeps its place at the
+        // end, where it was sent.
+        messages: [
+          ...seeded,
+          ...latest.messages.where((m) => m.id < 0 || !known.contains(m.id)),
+        ],
+        clearPreview: _introduces(seeded, latest.previewContext),
+      ),
+    );
+  }
+
+  /// Whether the loaded messages already introduce [preview]'s listing.
+  static bool _introduces(
+    List<ChatMessage> messages,
+    ChatListingContext? preview,
+  ) {
+    if (preview == null) return true;
+    return messages.any(
+      (m) => m.listingContext?.listingOrderId == preview.listingOrderId,
     );
   }
 
@@ -336,7 +432,12 @@ class ChatThreadNotifier
 
     final merged = [...latest.messages, resolved]
       ..sort((a, b) => a.id.compareTo(b.id));
-    state = AsyncData(latest.copyWith(messages: merged));
+    state = AsyncData(
+      latest.copyWith(
+        messages: merged,
+        clearPreview: _introduces(merged, latest.previewContext),
+      ),
+    );
     final room = latest.room;
     if (room == null) return;
     if (!resolved.fromMe) _markRead(room, merged);
@@ -421,6 +522,13 @@ class ChatThreadNotifier
 
     try {
       var room = current.room;
+      // A thread opened about a listing that nothing in it has named yet —
+      // which is exactly what `previewContext` means. The card goes in ahead
+      // of the message, so the seller sees what this is about before they
+      // read it.
+      final introduceListing =
+          arg.listingId != null && current.previewContext != null;
+
       if (room == null) {
         final otherUserId = arg.otherUserId;
         if (otherUserId == null) {
@@ -432,6 +540,21 @@ class ChatThreadNotifier
           title: arg.title,
         );
         _listen(room.id);
+        await _seedFromRoom(room);
+      } else if (introduceListing) {
+        // The room already existed, so nothing has attached this listing to
+        // it. The same RPC does that: it is a get-or-create, and the card is
+        // deduped per listing inside the room, so this is safe on a
+        // conversation that has been running for months.
+        final otherUserId = arg.otherUserId ?? room.otherUserId;
+        if (otherUserId != null) {
+          await _repo.ensureDirectRoom(
+            otherUserId: otherUserId,
+            listingId: arg.listingId,
+            title: arg.title,
+          );
+          await _seedFromRoom(room);
+        }
       }
 
       ChatMediaUpload? media;

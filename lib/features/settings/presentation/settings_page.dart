@@ -1,20 +1,27 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/routes.dart';
+import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/widgets/labeled_field.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../user/repository/models/profile_models.dart';
 import '../../user/usecase/user_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Handles accepted by web's `handleSaveSocial` — plain usernames only.
 final _handleRe = RegExp(r'^[a-zA-Z0-9_.]{0,30}$');
@@ -276,16 +283,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required void Function(bool) setSaving,
   }) async {
     setState(() => setSaving(true));
-    final error = await ref.read(userRepositoryProvider).updateProfile(userId, {
-      column: value,
-    });
+    final error = await ref
+        .read(userRepositoryProvider)
+        .updateCollectionVisibility(userId, {column: value});
     if (!mounted) return;
     setState(() => setSaving(false));
     if (error != null) {
       _toast('Gagal menyimpan pengaturan');
       return;
     }
-    ref.invalidate(myProfileProvider);
+    ref.invalidate(myCollectionVisibilityProvider);
     _toast(value ? onLabel : offLabel);
   }
 
@@ -294,6 +301,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final user = ref.watch(authProvider).valueOrNull;
     final profileAsync = ref.watch(myProfileProvider);
     final privateAsync = ref.watch(privateProfileProvider);
+    final visibilityAsync = ref.watch(myCollectionVisibilityProvider);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -318,6 +326,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         style: AppTypography.h2(context.appColors.onSurface),
                       ),
                       const SizedBox(height: 16),
+                      _IdentityCard(
+                        // Web's own fallback: someone who has not chosen a
+                        // username yet is shown by their email's local part.
+                        name: (profile?.username ?? '').isNotEmpty
+                            ? profile!.username
+                            : user.email.split('@').first,
+                        email: user.email,
+                        avatarUrl: profile?.avatarUrl,
+                      ),
+                      const SizedBox(height: 12),
+                      // Profil is where this page already is, so it reads as
+                      // the current tab rather than a link.
+                      const _NavItem(
+                        icon: LucideIcons.userCog,
+                        label: 'Profil',
+                        active: true,
+                      ),
+                      const SizedBox(height: 4),
+                      _NavItem(
+                        icon: LucideIcons.mapPin,
+                        label: 'Alamat',
+                        onTap: () => context.push(Routes.addresses),
+                      ),
+                      const SizedBox(height: 12),
+                      const _LegalLinks(),
+                      const SizedBox(height: 20),
                       _PhotoSection(user: user),
                       const SizedBox(height: 16),
                       _usernameSection(user.id, profile?.username ?? ''),
@@ -326,7 +360,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       const SizedBox(height: 16),
                       _passwordSection(user.email),
                       const SizedBox(height: 16),
-                      _privacySections(user.id, profile),
+                      _privacySections(user.id, visibilityAsync.valueOrNull),
                       const SizedBox(height: 16),
                       _bioSection(user.id),
                       const SizedBox(height: 16),
@@ -416,11 +450,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Verifikasi OTP lewat WhatsApp masih dilakukan di pokepedia.id.',
-          style: AppTypography.caption(context.mutedForeground),
-        ),
+        // A verified number is changed by verifying another one, so the form
+        // stays available either way — as it does on the web.
+        const SizedBox(height: 14),
+        _PhoneVerifySection(verified: private.phoneVerified),
       ],
     );
   }
@@ -458,8 +491,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Widget _privacySections(String userId, PublicProfile? profile) {
-    final isPublic = profile?.isCollectionPublic ?? false;
+  Widget _privacySections(String userId, CollectionVisibility? visibility) {
+    final isPublic = visibility?.isPublic ?? false;
     return Column(
       children: [
         SettingsSection(
@@ -467,11 +500,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           description: 'Izinkan pengguna lain melihat koleksi kartu kamu.',
           trailing: Switch.adaptive(
             value: isPublic,
-            onChanged: _savingVisibility || profile == null
+            onChanged: _savingVisibility || visibility == null
                 ? null
                 : (next) => _toggleFlag(
                     userId: userId,
-                    column: 'is_collection_public',
+                    column: 'is_public',
                     value: next,
                     onLabel: 'Koleksi sekarang publik',
                     offLabel: 'Koleksi sekarang privat',
@@ -486,12 +519,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             description:
                 'Tampilkan jumlah duplikat kartu di koleksi publik kamu.',
             trailing: Switch.adaptive(
-              value: profile?.showCollectionQuantity ?? true,
+              value: visibility?.showQuantity ?? true,
               onChanged: _savingQuantity
                   ? null
                   : (next) => _toggleFlag(
                       userId: userId,
-                      column: 'show_collection_quantity',
+                      column: 'show_quantity',
                       value: next,
                       onLabel: 'Jumlah kartu ditampilkan',
                       offLabel: 'Jumlah kartu disembunyikan',
@@ -569,30 +602,260 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
-class _PhotoSection extends StatelessWidget {
+/// The signed-in user, as web's sidebar heads its nav with. Ports the
+/// `bg-secondary/60` identity card: avatar, then the username over the
+/// email — falling back to the email's local part when no username has been
+/// chosen, exactly as web does.
+class _IdentityCard extends StatelessWidget {
+  const _IdentityCard({
+    required this.name,
+    required this.email,
+    this.avatarUrl,
+  });
+
+  final String name;
+  final String email;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colors.secondary.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        children: [
+          UserAvatar(username: name, imageUrl: avatarUrl, size: 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One row of web's settings nav. The active one is filled and takes the
+/// foreground colour; the rest stay muted until tapped.
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    this.active = false,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final foreground = active ? colors.onSurface : context.mutedForeground;
+
+    return Material(
+      color: active ? colors.secondary : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: foreground),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: active
+                      ? AppTypography.bodySmSemibold(foreground)
+                      : AppTypography.bodySm(foreground),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Web's "Legal" group, under its own rule and overline.
+class _LegalLinks extends StatelessWidget {
+  const _LegalLinks();
+
+  static const _links = <({String label, String slug})>[
+    (label: 'Syarat & Ketentuan', slug: 'syarat-dan-ketentuan'),
+    (label: 'Kebijakan Privasi', slug: 'kebijakan-privasi'),
+    (label: 'Panduan Kondisi Kartu', slug: 'kondisi-kartu'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, color: context.borderColor),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'LEGAL',
+            style: AppTypography.caption(
+              context.mutedForeground.withValues(alpha: 0.6),
+            ).copyWith(letterSpacing: 0.8),
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final link in _links)
+          _NavItem(
+            icon: LucideIcons.fileText,
+            label: link.label,
+            onTap: () => context.push(Routes.terms(link.slug)),
+          ),
+      ],
+    );
+  }
+}
+
+/// Ports web's `handleAvatarUpload`. The app has an image picker after all —
+/// the seller storefront has used one for its logo all along; this section
+/// just never got wired to it and told the user to go to the website.
+class _PhotoSection extends ConsumerStatefulWidget {
   const _PhotoSection({required this.user});
 
   final AppUser user;
 
   @override
+  ConsumerState<_PhotoSection> createState() => _PhotoSectionState();
+}
+
+class _PhotoSectionState extends ConsumerState<_PhotoSection> {
+  bool _uploading = false;
+
+  Future<void> _pick() async {
+    if (_uploading) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      // Web takes the file as-is under a 2MB cap, which rejects most phone
+      // photos outright. Downscaling on the way in keeps the same cap while
+      // letting a normal camera roll through; an avatar never renders above
+      // 80px, so 1024 is already generous.
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploading = true);
+    final bytes = await File(picked.path).readAsBytes();
+    if (!mounted) return;
+
+    final extension = picked.path.toLowerCase().endsWith('.png')
+        ? 'png'
+        : 'jpg';
+    final error = await ref
+        .read(userRepositoryProvider)
+        .uploadAvatar(bytes: bytes, extension: extension);
+    if (!mounted) return;
+
+    setState(() => _uploading = false);
+    if (error == null) {
+      // The header, the profile page and this section all read the avatar
+      // off their own provider, so all three have to be told.
+      ref.invalidate(myProfileProvider);
+      // Re-reads `profiles`, so the account header picks the new face up too.
+      ref.invalidate(authProvider);
+    }
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(error ?? 'Foto profil diperbarui')),
+      );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = widget.user;
     return SettingsSection(
       title: 'Foto Profil',
       description: 'Foto ini ditampilkan di profil dan daftar pengguna.',
       children: [
         Row(
           children: [
-            UserAvatar(
-              username: user.username ?? user.email,
-              imageUrl: user.avatarUrl,
-              size: 64,
+            Stack(
+              children: [
+                UserAvatar(
+                  username: user.username ?? user.email,
+                  imageUrl: user.avatarUrl,
+                  size: 64,
+                ),
+                if (_uploading)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                'Ubah foto profil lewat pokepedia.id — aplikasi belum punya '
-                'pemilih gambar.',
-                style: AppTypography.caption(context.mutedForeground),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Format: JPG, PNG, WebP',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                  Text(
+                    'Maksimal 2MB',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _uploading ? null : _pick,
+                    icon: const Icon(LucideIcons.camera, size: 16),
+                    label: Text(_uploading ? 'Mengunggah...' : 'Ubah Foto'),
+                  ),
+                ],
               ),
             ),
           ],
@@ -755,6 +1018,153 @@ class _SaveButton extends StatelessWidget {
               )
             : Text(label),
       ),
+    );
+  }
+}
+
+/// Ports web's OTP box: type a number, receive a WhatsApp code, type it back.
+///
+/// Both halves go through `/api/otp/*` rather than Supabase — sending needs
+/// the server's Fazpass key and verifying finishes with a `service_role`
+/// RPC, so neither can run from the client.
+class _PhoneVerifySection extends ConsumerStatefulWidget {
+  const _PhoneVerifySection({required this.verified});
+
+  final bool verified;
+
+  @override
+  ConsumerState<_PhoneVerifySection> createState() =>
+      _PhoneVerifySectionState();
+}
+
+class _PhoneVerifySectionState extends ConsumerState<_PhoneVerifySection> {
+  final _phone = TextEditingController();
+  final _code = TextEditingController();
+
+  /// The number the server normalised and actually sent to — verifying has
+  /// to quote that, not whatever is still in the input.
+  String? _sentTo;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await action();
+    } on ApiException catch (e) {
+      // The route's own Indonesian message — rate limits, a taken number, a
+      // wrong code — is better than anything restated here.
+      if (mounted) setState(() => _error = userFacingError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _send() => _run(() async {
+    final normalised = await ref
+        .read(phoneOtpRepositoryProvider)
+        .send(_phone.text);
+    if (!mounted) return;
+    setState(() => _sentTo = normalised);
+    _toast('Kode dikirim ke $normalised');
+  });
+
+  Future<void> _verify() => _run(() async {
+    await ref
+        .read(phoneOtpRepositoryProvider)
+        .verify(phone: _sentTo!, code: _code.text);
+    if (!mounted) return;
+    setState(() {
+      _sentTo = null;
+      _code.clear();
+    });
+    ref.invalidate(privateProfileProvider);
+    _toast('Nomor HP terverifikasi');
+  });
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message), persist: false));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final awaitingCode = _sentTo != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!awaitingCode) ...[
+          LabeledField(
+            label: widget.verified ? 'Ganti nomor HP' : 'Nomor HP',
+            child: TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              enabled: !_busy,
+              // The send button reads this controller, which does not rebuild
+              // on its own.
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: '08xxxxxxxxx',
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _SaveButton(
+            label: 'Kirim Kode OTP',
+            loading: _busy,
+            onPressed: _phone.text.trim().isEmpty ? null : _send,
+          ),
+        ] else ...[
+          LabeledField(
+            label: 'Kode OTP',
+            child: TextField(
+              controller: _code,
+              keyboardType: TextInputType.number,
+              enabled: !_busy,
+              maxLength: 6,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: '6 digit',
+                counterText: '',
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Kode dikirim lewat WhatsApp ke $_sentTo.',
+            style: AppTypography.caption(context.mutedForeground),
+          ),
+          const SizedBox(height: 10),
+          _SaveButton(
+            label: 'Verifikasi',
+            loading: _busy,
+            onPressed: _code.text.trim().length == 6 ? _verify : null,
+          ),
+          TextButton(
+            onPressed: _busy ? null : () => setState(() => _sentTo = null),
+            child: const Text('Ganti nomor'),
+          ),
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: AppTypography.bodySm(context.appColors.error)),
+        ],
+      ],
     );
   }
 }

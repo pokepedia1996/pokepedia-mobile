@@ -7,6 +7,10 @@ final _compactFormat = NumberFormat.decimalPattern('id_ID')
 /// Mirrors `formatRupiah` from `lib/utils.ts` on the web.
 String formatRupiah(int amount) => 'Rp${_rupiahFormat.format(amount)}';
 
+/// A plain count, grouped the Indonesian way — "1.696" rather than "1696".
+/// Same separator as the money format, since they sit beside each other.
+String formatCountId(int value) => _rupiahFormat.format(value);
+
 /// Mirrors `formatRupiahCompact` from `lib/utils/money.ts` — the axis-label
 /// form ("Rp12,5rb"), including its two promotion thresholds so 999.950 reads
 /// as "Rp1jt" rather than "Rp1.000rb".

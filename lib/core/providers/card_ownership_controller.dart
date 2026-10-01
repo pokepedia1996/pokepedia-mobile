@@ -25,10 +25,9 @@ class CardOwnershipController {
 
   final Ref _ref;
 
-  /// [listId] names the portfolio the caller picked. Each list is a shelf of
-  /// its own, so copies filed into one stay there and the main collection —
-  /// `user_cards` — is only written when the main collection is what was
-  /// chosen.
+  /// [listId] names the collection the caller picked. Each one is a shelf of
+  /// its own, so copies filed into one stay there and the primary collection
+  /// is only written when the main collection is what was chosen.
   ///
   /// The destination only applies on the way in. A negative [delta] is always
   /// the main collection's, since that's the count the card-detail stepper
@@ -55,7 +54,7 @@ class CardOwnershipController {
   /// Returns the cards that didn't land, so a caller can keep them and let
   /// the user retry rather than losing them. A list takes the whole batch in
   /// one write, so it all lands or none of it does; the main collection is a
-  /// call per card, which is the only shape `upsert_user_card` offers.
+  /// call per card, which is the only shape `upsert_collection_card` offers.
   Future<Set<int>> addCopies({
     required String userId,
     required Map<int, int> quantityByCardId,
@@ -139,9 +138,10 @@ class CardOwnershipController {
     _ref.invalidate(listsProvider);
   }
 
-  /// Ports `handleBulkRemove`. `bulk_remove_user_cards` also clears the
-  /// matching `user_inventory` rows and logs an `out` activity row for each,
-  /// so this revalidates inventory on top of ownership.
+  /// Ports `handleBulkRemove`. Because the target is the primary collection,
+  /// `bulk_remove_collection_cards` also clears the matching `user_inventory`
+  /// rows and logs an `out` activity row for each, so this revalidates
+  /// inventory on top of ownership.
   Future<({int count, String? error})> bulkRemoveFromCollection({
     required String userId,
     required List<int> cardIds,
@@ -173,8 +173,8 @@ class CardOwnershipController {
   }
 
   /// Confirms an inventory draft (`user_inventory.is_draft` → false) and
-  /// syncs the quantity into `user_cards` — the RPC only does the former,
-  /// mirroring the web's `handleSaveDraft` making both calls itself.
+  /// syncs the quantity into the primary collection — the RPC only does the
+  /// former, mirroring the web's `handleSaveDraft` making both calls itself.
   Future<String?> confirmInventoryDraft({
     required String userId,
     required int recordId,
@@ -199,8 +199,8 @@ class CardOwnershipController {
   }
 
   /// Bulk-removes inventory records. `bulk_remove_inventory` already
-  /// decrements `user_cards` and logs the activity row server-side, so
-  /// this only needs to revalidate — no follow-up quantity call.
+  /// decrements the primary collection and logs the activity row
+  /// server-side, so this only needs to revalidate — no follow-up call.
   Future<String?> removeInventory({
     required String userId,
     required List<({int recordId, int delQty, int cardId})> items,

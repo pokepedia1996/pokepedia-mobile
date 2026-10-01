@@ -1,19 +1,26 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/image_url.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
+import '../../../shared/utils/primary_collection.dart';
 import 'models/profile_models.dart';
+import '../../../core/errors/user_message.dart';
 
-/// The `user_cards` → `cards` → `expansions` embed web's
-/// `fetchPublicCollection` selects, plus the pack image (the web reads that
-/// from its client-side pack cache, which the app doesn't have here).
+/// The owner's own `collection_cards` → `cards` embed.
+///
+/// Mirrors the `cards` object `get_public_collection_cards` builds for
+/// visitors, so both paths hand [CardModel.fromRow] the same shape. The
+/// `expansions` join the old `user_cards` select carried is gone: the mapper
+/// never read it, so it was a wasted join on every profile open.
 const _collectionColumns = '''
 card_id,
 quantity,
 variant_key,
 cards!inner (
+  id,
   name_id,
   image_url,
   collector_number,
@@ -21,7 +28,10 @@ cards!inner (
   category,
   expansion_code,
   language,
-  expansions!inner ( name_id, total_cards, released_at, pack_image_url )
+  illustrator,
+  regulation_mark,
+  variant,
+  details
 )
 ''';
 
@@ -73,25 +83,27 @@ class UserRepository {
   /// Flat rather than grouped by expansion: the profile shows a portfolio
   /// now, the same grid the Koleksi page draws, and a portfolio is a pile of
   /// cards with a value rather than a shelf per set.
+  /// The owner reads their own primary collection straight off the table —
+  /// RLS already scopes it to them, and it stays visible even while private.
+  /// Everyone else goes through `get_public_collection_cards`, which gates on
+  /// `collections.is_public` server-side and honours `show_quantity`; that
+  /// replaces the account-wide `profiles.is_collection_public` flag the
+  /// unification dropped, so visibility is now per collection.
   Future<List<CardModel>> fetchPublicCollection(
-    String userId, {
-    required bool canView,
+    String username, {
+    required String userId,
+    required bool isOwner,
   }) async {
-    if (!canView) return const [];
-
-    final rows = await _client
-        .from('user_cards')
-        .select(_collectionColumns)
-        .eq('user_id', userId)
-        .gt('quantity', 0)
-        .order('card_id', ascending: true);
+    final rows = isOwner
+        ? await _ownCollectionRows(userId)
+        : await _publicCollectionRows(username);
 
     final cards = <CardModel>[];
     for (final row in rows) {
       final joined = row['cards'] as Map<String, dynamic>?;
       if (joined == null) continue;
-      // `user_cards` carries the id; the join carries everything else the
-      // catalog model reads, and defaults cover what it doesn't select.
+      // The row carries the id; the join carries everything else the catalog
+      // model reads, and defaults cover what it doesn't select.
       cards.add(
         CardModel.fromRow({
           ...joined,
@@ -104,6 +116,31 @@ class UserRepository {
       await priceCards(_client, cards),
       CardSortOption.priceDesc,
     );
+  }
+
+  Future<List<Map<String, dynamic>>> _ownCollectionRows(String userId) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return const [];
+    final rows = await _client
+        .from('collection_cards')
+        .select(_collectionColumns)
+        .eq('collection_id', collectionId)
+        .gt('quantity', 0)
+        .order('card_id', ascending: true);
+    return rows.cast<Map<String, dynamic>>();
+  }
+
+  /// `p_slug` null means "whichever collection is primary" — the same
+  /// default the web's `/u/<username>` route uses.
+  Future<List<Map<String, dynamic>>> _publicCollectionRows(
+    String username,
+  ) async {
+    final rows = await _client.rpc(
+      'get_public_collection_cards',
+      params: {'p_username': username, 'p_slug': null},
+    );
+    if (rows is! List) return const [];
+    return rows.cast<Map<String, dynamic>>();
   }
 
   /// Ports `fetchPublicContributionsAsList` — approved image submissions,
@@ -215,7 +252,7 @@ class UserRepository {
       await _client.rpc('follow_shop', params: {'p_shop_user_id': shopUserId});
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -227,7 +264,7 @@ class UserRepository {
       );
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -259,15 +296,87 @@ class UserRepository {
   }
 
   /// `is_username_available` — the same RPC the web's settings form debounces.
+  ///
+  /// Null means the question could not be asked, which is not the same answer
+  /// as "taken" and callers must not render it as one. Bounded because an
+  /// unanswered request otherwise leaves the caller's spinner turning
+  /// forever: the onboarding modal cannot be dismissed, so a stalled check
+  /// there locks the whole app.
   Future<bool?> isUsernameAvailable(String username) async {
     try {
-      final value = await _client.rpc(
-        'is_username_available',
-        params: {'requested_username': username},
-      );
+      final value = await _client
+          .rpc(
+            'is_username_available',
+            params: {'requested_username': username},
+          )
+          .timeout(const Duration(seconds: 10));
       return value as bool?;
-    } catch (_) {
+    } catch (error, stack) {
+      // Swallowed for the caller, but not silently: this used to discard the
+      // reason entirely, which made a failing check indistinguishable from a
+      // taken name.
+      debugPrint('is_username_available failed for "$username": $error');
+      debugPrintStack(stackTrace: stack, maxFrames: 6);
       return null;
+    }
+  }
+
+  /// Web's `MAX_FILE_SIZE` for an avatar.
+  static const maxAvatarBytes = 2 * 1024 * 1024;
+
+  /// Replaces the signed-in user's avatar, porting `handleAvatarUpload`.
+  ///
+  /// Written straight to Storage from the client, as web does: the `avatars`
+  /// bucket's insert/update policies are keyed on
+  /// `(storage.foldername(name))[1] = auth.uid()`, which is exactly the path
+  /// built here, so no server route is involved.
+  ///
+  /// Returns an error message, or null on success.
+  Future<String?> uploadAvatar({
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return 'Sesi berakhir. Masuk lagi untuk mengubah foto.';
+    if (bytes.lengthInBytes > maxAvatarBytes) {
+      return 'Ukuran file maksimal 2MB';
+    }
+
+    final bucket = _client.storage.from('avatars');
+    final path = '$userId/avatar.$extension';
+    try {
+      // Clear the folder first, as web does: the name carries the old
+      // extension, so a .png would otherwise outlive the .jpg replacing it
+      // and keep being served.
+      final existing = await bucket.list(path: userId);
+      if (existing.isNotEmpty) {
+        await bucket.remove([for (final f in existing) '$userId/${f.name}']);
+      }
+
+      await bucket.uploadBinary(
+        path,
+        bytes,
+        fileOptions: FileOptions(
+          upsert: true,
+          contentType: extension == 'png' ? 'image/png' : 'image/jpeg',
+        ),
+      );
+
+      // The cache-buster is web's too — the path never changes, so without it
+      // the CDN keeps handing back the previous face.
+      final url =
+          '${bucket.getPublicUrl(path)}'
+          '?t=${DateTime.now().millisecondsSinceEpoch}';
+
+      await _client
+          .from('profiles')
+          .update({'avatar_url': url})
+          .eq('id', userId);
+      return null;
+    } on StorageException catch (e) {
+      return userFacingError(e);
+    } on PostgrestException catch (e) {
+      return userFacingError(e);
     }
   }
 
@@ -281,8 +390,52 @@ class UserRepository {
       await _client.from('profiles').update(values).eq('id', userId);
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
+  }
+
+  /// The owner's primary-collection visibility settings — what the two
+  /// privacy switches read. Own-row under RLS, so no server route.
+  Future<CollectionVisibility?> fetchCollectionVisibility(String userId) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return null;
+    final row = await _client
+        .from('collections')
+        .select('id, is_public, show_quantity')
+        .eq('id', collectionId)
+        .maybeSingle();
+    return row == null ? null : CollectionVisibility.fromRow(row);
+  }
+
+  /// Writes one of those switches. Takes the same `{column: value}` shape as
+  /// [updateProfile] did when these lived on `profiles`, so the screens that
+  /// call it only had to change which method they name — the columns are
+  /// `is_public` and `show_quantity` now.
+  Future<String?> updateCollectionVisibility(
+    String userId,
+    Map<String, dynamic> values,
+  ) async {
+    final collectionId = await primaryCollectionId(_client, userId);
+    if (collectionId == null) return 'Koleksi utama tidak ditemukan';
+    try {
+      await _client.from('collections').update(values).eq('id', collectionId);
+      return null;
+    } on PostgrestException catch (e) {
+      return userFacingError(e);
+    }
+  }
+
+  /// Whether a stranger can see this user's primary collection.
+  ///
+  /// `get_public_collection` returns the row only when it is public, so a
+  /// null answer is the "this collection is private" signal the profile page
+  /// used to get from `profiles.is_collection_public`.
+  Future<bool> isCollectionPublic(String username) async {
+    final row = await _client.rpc(
+      'get_public_collection',
+      params: {'p_username': username, 'p_slug': null},
+    );
+    return row is Map && row['id'] != null;
   }
 
   /// Writes the WhatsApp number onto `profiles_private` through the same
@@ -298,7 +451,7 @@ class UserRepository {
       }
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 }

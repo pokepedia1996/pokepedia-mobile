@@ -19,6 +19,31 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="id.pokepedia.app" android:host="login-callback"/>
             </intent-filter>
+            <!-- App Link for the emailed confirmation/recovery links. Verified
+                 against https://www.pokepedia.id/.well-known/assetlinks.json,
+                 which is what lets these open the app instead of the browser —
+                 and what stops another app claiming them, unlike the custom
+                 scheme above.
+
+                 Scoped to /auth/confirm on purpose: claiming the whole host
+                 would send every pokepedia.id link in the OS to the app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <!-- Both hosts: App Links do not follow redirects, so an
+                     apex link would silently open the browser if only www
+                     were claimed. `NEXT_PUBLIC_APP_URL` falls back to the
+                     apex and the emails observed use www. -->
+                <data
+                    android:scheme="https"
+                    android:host="www.pokepedia.id"
+                    android:pathPrefix="/auth/confirm"/>
+                <data
+                    android:scheme="https"
+                    android:host="pokepedia.id"
+                    android:pathPrefix="/auth/confirm"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

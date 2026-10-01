@@ -45,6 +45,7 @@ import '../../proposals/repository/models/listing_offer_model.dart';
 import '../../proposals/usecase/proposals_notifier.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 const _monthNamesIdFull = [
   'Januari',
@@ -112,7 +113,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       await ref.read(cartProvider.notifier).add(listing.id, quantity);
     } on CartException catch (e) {
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(userFacingError(e))));
       return;
     }
     if (!mounted) return;
@@ -196,18 +197,34 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
         );
     if (!mounted) return;
 
+    // What the thread pins at the top. Built here rather than fetched there:
+    // this page is holding the listing already.
+    final target = ChatTarget(
+      otherUserId: sellerId,
+      title: store.storeName,
+      listingId: listing.id,
+      listingContext: ChatListingContext(
+        listingOrderId: listing.id,
+        cardId: listing.card.id,
+        priceIdr: listing.price,
+        cardName: listing.card.name,
+        cardImage: listing.card.imageUrl,
+        packSlug: listing.card.packSlug,
+        variantKey: listing.variantKey,
+        condition: listing.condition.raw,
+      ),
+    );
+
     final slug = arg.slug;
     if (slug != null) {
-      context.push(Routes.chatThread(slug));
-    } else {
+      // The listing rides in the query so a deep link keeps it, and in
+      // `extra` so the card is drawn before anything is fetched.
       context.push(
-        Routes.chatNew,
-        extra: ChatTarget(
-          otherUserId: sellerId,
-          title: store.storeName,
-          listingId: listing.id,
-        ),
+        Routes.chatThread(slug, listingId: listing.id),
+        extra: target,
       );
+    } else {
+      context.push(Routes.chatNew, extra: target);
     }
   }
 
@@ -361,7 +378,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                 // rather than the breadcrumb that used to sit here: the app
                 // bar already carries the way back, so this is context, not
                 // navigation.
-                _TitleLine(store: store, card: card),
+                // _TitleLine(store: store, card: card),
                 // const SizedBox(height: 10),
                 // _PackRow(pack: pack, card: card),
                 const SizedBox(height: 16),

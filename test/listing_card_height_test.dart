@@ -18,7 +18,7 @@ import 'package:pokepedia_mobile/shared/widgets/listing_card.dart';
 /// whose glyphs are square, so strings measure far wider than they do on a
 /// device; below ~170pt that fake width overflows the card horizontally and
 /// swamps the vertical measurement this is actually about.
-ListingModel _listing() => ListingModel(
+ListingModel _listing({bool acceptsOffers = false}) => ListingModel(
   id: 1,
   sellerId: 's',
   slug: 'l',
@@ -26,6 +26,7 @@ ListingModel _listing() => ListingModel(
   price: 385000,
   condition: CardCondition.nm,
   quantity: 3,
+  acceptsOffers: acceptsOffers,
   card: const CardModel(
     id: 1,
     category: CardCategory.pokemon,
@@ -47,6 +48,7 @@ Future<bool> _overflows(
   double width,
   double height, {
   required bool showSeller,
+  bool acceptsOffers = false,
 }) async {
   // A blank frame first: pumping the identical tree twice repaints nothing,
   // so no fresh overflow error is reported and every size after the first
@@ -69,7 +71,10 @@ Future<bool> _overflows(
             child: SizedBox(
               width: width,
               height: height,
-              child: ListingCard(listing: _listing(), showSeller: showSeller),
+              child: ListingCard(
+                listing: _listing(acceptsOffers: acceptsOffers),
+                showSeller: showSeller,
+              ),
             ),
           ),
         ),
@@ -114,6 +119,39 @@ void main() {
     );
   });
 
+  /// The constants are measurements, and a measurement taken here cannot be
+  /// exact on a device: this harness draws a fallback font, the device draws
+  /// Urbanist, and the reader's text-size setting scales it again. So the
+  /// card must not depend on the constant being generous enough — the
+  /// artwork is `Flexible` and gives up its own pixels instead. A cell a few
+  /// points short of the measurement is the case that used to overflow.
+  for (final short in [1.2, 4.0, 10.0]) {
+    testWidgets('a cell ${short}pt short of the measurement still fits', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1170, 3000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      for (final showSeller in [true, false]) {
+        for (final cell in [173.0, 260.0]) {
+          final extent = _extentFor(cell, showSeller: showSeller) - short;
+          expect(
+            await _overflows(
+              tester,
+              cell,
+              extent,
+              showSeller: showSeller,
+              acceptsOffers: true,
+            ),
+            isFalse,
+            reason: 'cell $cell short by $short (showSeller: $showSeller)',
+          );
+        }
+      }
+    });
+  }
+
   testWidgets('the harness can see an overflow at all', (tester) async {
     // Without this the numbers below would be meaningless: a harness that
     // never reports overflow reports every height as fine.
@@ -125,21 +163,38 @@ void main() {
   });
 
   for (final showSeller in [true, false]) {
-    testWidgets('the computed cell fits a card (showSeller: $showSeller)', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1170, 3000);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
+    // Both branches, because the cell is one height for every tile in the
+    // grid and the taller branch is the one that decides it. `acceptsOffers`
+    // adds a pill row, and leaving it out of this fixture is exactly how the
+    // constants came to sit *under* what the card needed: 165 against a real
+    // need of 166.6, overflowing by a point or two on any seller listing
+    // that happened to accept offers.
+    for (final acceptsOffers in [false, true]) {
+      testWidgets('the computed cell fits a card '
+          '(showSeller: $showSeller, acceptsOffers: $acceptsOffers)', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1170, 3000);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
 
-      for (final cell in [173.0, 210.0, 260.0]) {
-        final extent = _extentFor(cell, showSeller: showSeller);
-        expect(
-          await _overflows(tester, cell, extent, showSeller: showSeller),
-          isFalse,
-          reason: 'cell ${cell}x$extent overflows with showSeller=$showSeller',
-        );
-      }
-    });
+        for (final cell in [173.0, 210.0, 260.0]) {
+          final extent = _extentFor(cell, showSeller: showSeller);
+          expect(
+            await _overflows(
+              tester,
+              cell,
+              extent,
+              showSeller: showSeller,
+              acceptsOffers: acceptsOffers,
+            ),
+            isFalse,
+            reason:
+                'cell ${cell}x$extent overflows with '
+                'showSeller=$showSeller acceptsOffers=$acceptsOffers',
+          );
+        }
+      });
+    }
   }
 }

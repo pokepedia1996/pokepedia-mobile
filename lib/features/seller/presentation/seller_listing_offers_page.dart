@@ -19,6 +19,7 @@ import '../repository/offers_repository.dart';
 import '../usecase/offers_notifier.dart';
 import 'widgets/counter_offer_sheet.dart';
 import 'widgets/reject_offer_sheet.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Ports `/seller/products/offers/[slug]` — every offer a buyer has made on
 /// one listing, and the three answers the seller can give.
@@ -70,7 +71,13 @@ class _SellerListingOffersPageState
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(receivedOffersProvider),
+        onRefresh: () async {
+          ref.invalidate(receivedOffersProvider);
+          // Awaited, or the spinner ends on the invalidate rather than on the
+          // data, and a refresh that fetched nothing looks the same as one
+          // that worked.
+          await ref.read(receivedOffersProvider.future);
+        },
         child: async.isLoading && offers.isEmpty
             ? const Center(child: PikachuLoader())
             : ListView(
@@ -205,7 +212,7 @@ class _SellerListingOffersPageState
       ref.invalidate(receivedOffersProvider);
       _toast(success);
     } on OfferActionException catch (e) {
-      _toast(e.message);
+      _toast(userFacingError(e));
     } catch (_) {
       _toast('Gagal memproses penawaran');
     } finally {

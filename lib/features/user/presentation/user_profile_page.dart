@@ -58,10 +58,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     setState(() => setSaving(true));
-    final error = await ref.read(userRepositoryProvider).updateProfile(
-      user.id,
-      {column: value},
-    );
+    final error = await ref
+        .read(userRepositoryProvider)
+        .updateCollectionVisibility(user.id, {column: value});
     if (!mounted) return;
     setState(() => setSaving(false));
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
@@ -71,7 +70,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
       );
       return;
     }
-    ref.invalidate(userProfileProvider(widget.username));
+    ref.invalidate(collectionVisibilityProvider(widget.username));
+    ref.invalidate(myCollectionVisibilityProvider);
     messenger.showSnackBar(SnackBar(content: Text(value ? onLabel : offLabel)));
   }
 
@@ -104,6 +104,11 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
             final collectionAsync = ref.watch(
               userCollectionProvider(widget.username),
             );
+            final isCollectionPublic =
+                ref
+                    .watch(collectionVisibilityProvider(widget.username))
+                    .valueOrNull ??
+                false;
             final contributionsAsync = ref.watch(
               userContributionsProvider(widget.username),
             );
@@ -129,14 +134,14 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                 if (isOwner) ...[
                   const SizedBox(height: 14),
                   _PrivacyToggle(
-                    icon: profile.isCollectionPublic
+                    icon: isCollectionPublic
                         ? LucideIcons.eye
                         : LucideIcons.eyeOff,
                     label: 'Koleksi Publik',
-                    value: profile.isCollectionPublic,
+                    value: isCollectionPublic,
                     disabled: _savingVisibility,
                     onChanged: (next) => _toggleProfileFlag(
-                      column: 'is_collection_public',
+                      column: 'is_public',
                       value: next,
                       onLabel: 'Koleksi sekarang publik',
                       offLabel: 'Koleksi sekarang privat',
@@ -149,7 +154,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                 // The portfolio block: what the collection is worth, then
                 // the same browser and grid the Koleksi page uses, so one
                 // person's shelf reads the same wherever it is opened.
-                if (!profile.isCollectionPublic && !isOwner)
+                if (!isCollectionPublic && !isOwner)
                   const _NoticeBox(
                     icon: LucideIcons.lock,
                     message: 'Koleksi pengguna ini bersifat privat',

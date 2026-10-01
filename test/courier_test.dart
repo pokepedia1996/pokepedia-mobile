@@ -31,10 +31,13 @@ void main() {
       expect(r.url, 'https://www.sapx.id/id/cek-awb/SAP123456');
     });
 
-    test('a direct courier with no resi falls back to the universal tracker', () {
-      expect(getTrackingUrl('sap', null).mode, TrackingMode.manual);
-      expect(getTrackingUrl('sap', '  ').url, 'https://cekresi.com/');
-    });
+    test(
+      'a direct courier with no resi falls back to the universal tracker',
+      () {
+        expect(getTrackingUrl('sap', null).mode, TrackingMode.manual);
+        expect(getTrackingUrl('sap', '  ').url, 'https://cekresi.com/');
+      },
+    );
 
     test('couriers with only a form get their landing page', () {
       final r = getTrackingUrl('jne', 'JNE0001');
@@ -45,7 +48,10 @@ void main() {
     test('Biteship\'s "id" is ID Express', () {
       // `normalizeCourierCode`: the alias has to resolve or the lookup misses.
       expect(normalizeCourierCode('id'), 'idexpress');
-      expect(getTrackingUrl('id', 'X1').url, 'https://idexpress.com/lacak-paket');
+      expect(
+        getTrackingUrl('id', 'X1').url,
+        'https://idexpress.com/lacak-paket',
+      );
     });
 
     test('an unknown courier lands on cekresi rather than nowhere', () {

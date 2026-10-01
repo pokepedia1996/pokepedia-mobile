@@ -10,6 +10,7 @@ import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/auth/presentation/signup_page.dart';
 import '../../features/cart/presentation/cart_page.dart';
 import '../../features/cart/presentation/checkout_page.dart';
+import '../../features/cart/presentation/checkout_thankyou_page.dart';
 import '../../features/chat/presentation/chat_inbox_page.dart';
 import '../../features/chat/presentation/chat_thread_page.dart';
 import '../../features/chat/repository/models/chat_models.dart';
@@ -17,7 +18,6 @@ import '../../features/content/presentation/support_page.dart';
 import '../../features/content/presentation/terms_page.dart';
 import '../../features/content/presentation/tutorial_page.dart';
 import '../../features/expansions/presentation/card_detail_page.dart';
-import '../../features/expansions/presentation/expansions_page.dart';
 import '../../features/expansions/presentation/pack_detail_page.dart';
 import '../../features/home/presentation/home_page.dart';
 import '../../features/market/presentation/market_page.dart';
@@ -58,6 +58,7 @@ import '../../features/wallet/presentation/wallet_page.dart';
 import '../app_shell.dart';
 import 'go_router_refresh_stream.dart';
 import 'routes.dart';
+import '../../features/seller/repository/models/seller_listing.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -94,40 +95,6 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: Routes.expansions,
-              builder: (_, __) => const ExpansionsPage(),
-              routes: [
-                // On the root navigator, not the branch's: these are leaf
-                // pages the whole app links to — a notification, an order,
-                // a chat event card — and pushing a branch route from a
-                // route that sits *above* the shell duplicates a page key,
-                // which trips Navigator's `!keyReservation.contains(key)`
-                // assertion and takes the screen down. They already hide
-                // the bottom nav, so nothing changes visually.
-                GoRoute(
-                  path: ':packSlug',
-                  parentNavigatorKey: rootNavigatorKey,
-                  builder: (_, state) => PackDetailPage(
-                    packSlug: state.pathParameters['packSlug']!,
-                  ),
-                  routes: [
-                    GoRoute(
-                      path: ':cardId',
-                      parentNavigatorKey: rootNavigatorKey,
-                      builder: (_, state) => CardDetailPage(
-                        packSlug: state.pathParameters['packSlug']!,
-                        cardId: int.parse(state.pathParameters['cardId']!),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
               path: Routes.search,
               // `?q=` arrives from the results page's filter button, which
               // hands the form the query already typed.
@@ -149,7 +116,10 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: Routes.market,
-              builder: (_, __) => const MarketPage(),
+              builder: (_, state) => MarketPage(
+                initialQuery: state.uri.queryParameters['q'],
+                initialTab: state.uri.queryParameters['tab'],
+              ),
               routes: [
                 GoRoute(
                   path: ':handle',
@@ -181,6 +151,41 @@ final appRouter = GoRouter(
             ),
           ],
         ),
+        // Jual. A branch rather than a pushed page now that it is a tab: the
+        // dashboard guards itself — signed out and not-yet-a-seller each land
+        // on their own empty state — so nothing here has to.
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: Routes.seller,
+              builder: (_, __) => const SellerDashboardPage(),
+              routes: [
+                // Inside the branch, so the nav pill stays put: Kelola
+                // Listing is somewhere a seller works, not a detour off the
+                // dashboard, and losing the tabs on arrival made getting
+                // back out a Back button instead of a destination.
+                GoRoute(
+                  path: 'products',
+                  builder: (_, state) => SellerProductsPage(
+                    initialBucket: switch (state.uri.queryParameters['tab']) {
+                      'active' => SellerListingBucket.active,
+                      'inactive' => SellerListingBucket.inactive,
+                      'archived' => SellerListingBucket.archived,
+                      'draft' => SellerListingBucket.draft,
+                      'preferences' => SellerListingBucket.preferences,
+                      // An unknown tab leaves the page as it was rather than
+                      // guessing — a typo in a link should not silently move
+                      // the seller somewhere.
+                      _ => null,
+                    },
+                    initialOffersFilter:
+                        state.uri.queryParameters['offers'] == '1',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -188,6 +193,26 @@ final appRouter = GoRouter(
               builder: (_, __) => const AccountPage(),
             ),
           ],
+        ),
+      ],
+    ),
+
+    // The expansions browser is part of Pencarian now, so the bare path has
+    // nowhere of its own to land — but everything below it still does.
+    // `/expansions/:packSlug` is what a notification, a chat card and every
+    // saved link point at, and those must keep resolving.
+    GoRoute(path: Routes.expansions, redirect: (_, __) => Routes.search),
+    GoRoute(
+      path: '${Routes.expansions}/:packSlug',
+      builder: (_, state) =>
+          PackDetailPage(packSlug: state.pathParameters['packSlug']!),
+      routes: [
+        GoRoute(
+          path: ':cardId',
+          builder: (_, state) => CardDetailPage(
+            packSlug: state.pathParameters['packSlug']!,
+            cardId: int.parse(state.pathParameters['cardId']!),
+          ),
         ),
       ],
     ),
@@ -223,10 +248,19 @@ final appRouter = GoRouter(
     GoRoute(path: Routes.cart, builder: (_, __) => const CartPage()),
     // Review, delivery address and promo code are native; the page itself
     // pushes the WebView for courier choice and payment, which need the
-    // Biteship and Xendit secrets plus `service_role` RPCs. The web app's
-    // own `/cart/checkout/success` redirect happens inside that WebView, so
-    // there's no separate native success route to register.
+    // Biteship and Xendit secrets plus `service_role` RPCs. A card payment's
+    // `/cart/checkout/success` redirect happens inside that WebView, which is
+    // why the route below is only ever reached by a saldo checkout — that one
+    // never opens a WebView at all.
     GoRoute(path: Routes.checkout, builder: (_, __) => const CheckoutPage()),
+    GoRoute(
+      path: Routes.checkoutSuccess,
+      builder: (_, state) => CheckoutThankYouPage(
+        cardCount: int.tryParse(state.uri.queryParameters['cards'] ?? '') ?? 0,
+        totalAmount:
+            int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
+      ),
+    ),
     GoRoute(
       path: Routes.orders,
       builder: (_, __) => const OrdersPage(),
@@ -271,14 +305,13 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
 
-    // Seller.
-    GoRoute(
-      path: Routes.seller,
-      builder: (_, __) => const SellerDashboardPage(),
-    ),
+    // Seller. The dashboard is the Jual tab and lives in the shell above;
+    // the rest stay pushed pages.
+    // `/seller/products` itself is a branch route above; its offers page
+    // stays a pushed leaf.
     GoRoute(
       path: Routes.sellerProducts,
-      builder: (_, __) => const SellerProductsPage(),
+      redirect: (_, __) => null,
       routes: [
         GoRoute(
           path: 'offers/:slug',
@@ -287,6 +320,10 @@ final appRouter = GoRouter(
           ),
         ),
       ],
+    ),
+    GoRoute(
+      path: Routes.sellerPerformance,
+      builder: (_, __) => const SellerPerformancePage(),
     ),
     GoRoute(
       path: Routes.sellerOrders,
@@ -327,10 +364,20 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: ':slug',
-          builder: (_, state) => ChatThreadPage(
-            slug: state.pathParameters['slug']!,
-            titleHint: state.extra as String?,
-          ),
+          // `extra` is a bare title from most callers, and the full target
+          // from a listing — which carries the card to pin.
+          builder: (_, state) {
+            final extra = state.extra;
+            final target = extra is ChatTarget ? extra : null;
+            return ChatThreadPage(
+              slug: state.pathParameters['slug']!,
+              titleHint: target?.title ?? (extra is String ? extra : null),
+              seedContext: target?.listingContext,
+              listingId:
+                  target?.listingId ??
+                  int.tryParse(state.uri.queryParameters['listing'] ?? ''),
+            );
+          },
         ),
       ],
     ),

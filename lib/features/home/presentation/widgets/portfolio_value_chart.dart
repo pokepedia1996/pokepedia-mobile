@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,12 +7,14 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../repository/models/portfolio_value.dart';
 import '../../usecase/portfolio_value_notifier.dart';
+import '../../../../core/errors/user_message.dart';
 
 /// The collection-worth history line.
 ///
-/// Draws whatever `price_history` supports for the selected range. When that
-/// yields nothing the chart says so plainly instead of drawing a flat line
-/// at zero, which would read as a portfolio that lost all its value.
+/// Draws the selected collection's own `collection_value_snapshots` series for
+/// the chosen range. When that yields nothing the chart says so plainly
+/// instead of drawing a flat line at zero, which would read as a portfolio
+/// that lost all its value.
 class PortfolioValueChart extends ConsumerWidget {
   const PortfolioValueChart({super.key, this.height = 140});
 
@@ -32,9 +35,16 @@ class PortfolioValueChart extends ConsumerWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
-        error: (_, __) => _ChartMessage(
+        error: (error, __) => _ChartMessage(
           title: 'Grafik tidak bisa dimuat',
-          detail: 'Coba tarik untuk memuat ulang.',
+          // The reason goes to the log, not the chart. It used to be shown
+          // in debug builds, which is where it was most likely to be seen by
+          // someone who was not a developer — the app is demoed and tested
+          // in debug far more often than it is read in a console.
+          detail: userFacingError(
+            error,
+            fallback: 'Coba tarik untuk memuat ulang.',
+          ),
         ),
         data: (series) {
           // Only genuinely *nothing* gets a message. A single day is a value
@@ -42,20 +52,17 @@ class PortfolioValueChart extends ConsumerWidget {
           // come back tomorrow for a number that is on screen above the
           // chart would be silly.
           if (series.isEmpty) {
+            // Every collection has its own history now, so there is no
+            // "main collection only" case left — an empty series means either
+            // no cards or no nightly run yet.
             final empty = holdings?.isEmpty ?? true;
-            final onList = !ref.watch(selectedPortfolioProvider).isPrimary;
             return _ChartMessage(
               title: empty
                   ? 'Belum ada kartu di portofolio ini'
-                  : onList
-                  ? 'Grafik hanya untuk Portofolio Utama'
                   : 'Riwayat nilai belum tersedia',
               detail: empty
                   ? 'Tambahkan kartu ke koleksi untuk mulai melacak nilainya.'
-                  : onList
-                  ? 'Nilai harian dicatat untuk seluruh koleksi, belum per '
-                        'list.'
-                  : 'Tarik untuk memuat ulang.',
+                  : 'Nilai harian mulai dicatat malam ini.',
             );
           }
           // A single reading has nothing to put on an axis — see
@@ -241,11 +248,7 @@ class _PortfolioLineChartState extends State<_PortfolioLineChart> {
     return LayoutBuilder(
       builder: (context, constraints) {
         void select(Offset local) {
-          final index = _indexAt(
-            local.dx,
-            constraints.maxWidth,
-            series.length,
-          );
+          final index = _indexAt(local.dx, constraints.maxWidth, series.length);
           if (index != _selected) setState(() => _selected = index);
         }
 
@@ -441,17 +444,17 @@ class _PortfolioChartPainter extends CustomPainter {
         ..strokeWidth = 1,
     );
     canvas
-      ..drawCircle(Offset(x, y), 5, Paint()..color = line.withValues(alpha: 0.25))
+      ..drawCircle(
+        Offset(x, y),
+        5,
+        Paint()..color = line.withValues(alpha: 0.25),
+      )
       ..drawCircle(Offset(x, y), 3, Paint()..color = line);
 
     // Date above value, the same order the sparkline's own tooltip-free
     // neighbor — the market price chart's crosshair — uses.
     final dateLabel = _text(formatShortDateId(point.day), labelColor);
-    final valueLabel = _text(
-      formatRupiah(point.value),
-      foreground,
-      bold: true,
-    );
+    final valueLabel = _text(formatRupiah(point.value), foreground, bold: true);
     final width =
         [dateLabel.width, valueLabel.width].reduce((a, b) => a > b ? a : b) +
         20;

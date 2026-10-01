@@ -27,7 +27,13 @@ class ChatEventCard extends StatelessWidget {
     required this.message,
     this.viewerId,
     this.isLatestOffer = false,
+    this.stamp,
   });
+
+  /// Overrides the message's own clock. The listing preview — the card shown
+  /// before anything has been said — passes an empty string, since nothing
+  /// has happened at a time yet.
+  final String? stamp;
 
   final ChatMessage message;
 
@@ -41,13 +47,20 @@ class ChatEventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A card is aligned by who posted it: the listing you opened the chat
+    // about and the offer you sent are yours, so they sit on your side. Web
+    // picks its `align` off `sender_id` in the same way.
+    final alignment = message.fromMe
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
     final listing = message.listingContext;
     if (listing != null) {
       final condition = listing.condition;
       return _EventShell(
         icon: LucideIcons.tag,
         label: 'Tentang Listing',
-        stamp: message.eventStamp,
+        stamp: stamp ?? message.eventStamp,
+        alignment: alignment,
         imageUrl: listing.cardImage,
         title: listing.cardName ?? 'Kartu',
         subtitle: [
@@ -70,6 +83,7 @@ class ChatEventCard extends StatelessWidget {
         icon: LucideIcons.package,
         label: order.label,
         stamp: message.eventStamp,
+        alignment: alignment,
         imageUrl: order.cardImage,
         title: order.cardName ?? 'Kartu',
         subtitle: 'x${order.quantity} · ${formatRupiah(order.amountIdr)}',
@@ -84,6 +98,7 @@ class ChatEventCard extends StatelessWidget {
         icon: LucideIcons.handCoins,
         label: offer.label,
         stamp: message.eventStamp,
+        alignment: alignment,
         imageUrl: offer.cardImage,
         title: offer.cardName ?? 'Kartu',
         // The listing price is struck through only when the offer sits under
@@ -143,6 +158,7 @@ class _EventShell extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.stamp,
+    required this.alignment,
     required this.imageUrl,
     required this.title,
     this.footer,
@@ -156,6 +172,10 @@ class _EventShell extends StatelessWidget {
   final IconData icon;
   final String label;
   final String stamp;
+
+  /// Which side the card sits on — its sender's, the same as speech.
+  final Alignment alignment;
+
   final String? imageUrl;
   final String title;
 
@@ -182,7 +202,7 @@ class _EventShell extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment: alignment,
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: MediaQuery.sizeOf(context).width * 0.82,

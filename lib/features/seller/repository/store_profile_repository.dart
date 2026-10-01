@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
 import 'models/store_profile.dart';
+import '../../../core/errors/user_message.dart';
 
 /// The seller's store settings — web's `/seller/settings` and
 /// `/seller/couriers`.
@@ -89,7 +90,7 @@ class StoreProfileRepository {
       if (e.code == '23505') {
         return 'URL toko itu baru saja dipakai orang lain. Coba lagi.';
       }
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -104,7 +105,7 @@ class StoreProfileRepository {
       }, onConflict: 'user_id');
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -147,7 +148,7 @@ class StoreProfileRepository {
       }, onConflict: 'user_id');
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -184,7 +185,7 @@ class StoreProfileRepository {
         _ => 'Gagal menyimpan pengaturan libur.',
       };
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -240,9 +241,9 @@ class StoreProfileRepository {
       }
       return null;
     } on StorageException catch (e) {
-      return e.message;
+      return userFacingError(e);
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 
@@ -267,7 +268,7 @@ class StoreProfileRepository {
       }, onConflict: 'user_id');
       return null;
     } on PostgrestException catch (e) {
-      return e.message;
+      return userFacingError(e);
     }
   }
 }

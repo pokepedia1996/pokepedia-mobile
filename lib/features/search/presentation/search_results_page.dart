@@ -7,11 +7,13 @@ import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/quick_search_field.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/quick_search_notifier.dart';
 
@@ -51,151 +53,186 @@ class SearchResultsPage extends ConsumerWidget {
           style: AppTypography.bodySemibold(colors.onSurface),
         ),
       ),
-      body: trimmed.length < QuickSearchRepository.minQueryLength
-          ? _Placeholder(
-              message:
-                  'Ketik minimal ${QuickSearchRepository.minQueryLength} '
-                  'huruf untuk mencari kartu.',
-            )
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Hasil pencarian '$trimmed'",
-                          style: AppTypography.h2(colors.onSurface),
+      // The bar rides above both branches: a query that came back with
+      // nothing, or one too short to run, is exactly when the next thing
+      // wanted is to change it — and going back to the previous page to do
+      // that loses this one's place.
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: QuickSearchField(
+              initialQuery: trimmed,
+              onScan: () => context.push(Routes.scan),
+            ),
+          ),
+          Expanded(
+            child: _body(
+              context,
+              ref,
+              trimmed,
+              state,
+              notifier,
+              visible,
+              signedIn,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    String trimmed,
+    FullSearchState state,
+    FullSearchNotifier notifier,
+    List<CardModel> visible,
+    bool signedIn,
+  ) {
+    final colors = context.appColors;
+    return trimmed.length < QuickSearchRepository.minQueryLength
+        ? _Placeholder(
+            message:
+                'Ketik minimal ${QuickSearchRepository.minQueryLength} '
+                'huruf untuk mencari kartu.',
+          )
+        : CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Hasil pencarian '$trimmed'",
+                        style: AppTypography.h2(colors.onSurface),
+                      ),
+                      const SizedBox(height: 2),
+                      _Subtitle(state: state, query: trimmed),
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: CardFilterBar(
+                    // Facets derived from the results themselves, and
+                    // applied over them — the expansion detail page's
+                    // arrangement, so the two card lists filter alike.
+                    cards: state.cards,
+                    filters: state.filters,
+                    onFiltersChanged: notifier.setFilters,
+                    ownershipFilter: signedIn ? state.ownership : null,
+                    onOwnershipChanged: signedIn ? notifier.setOwnership : null,
+                    // Results span every expansion, so this list keeps the
+                    // two sorts a single pack has no use for.
+                    sortOptions: CardSortOption.values,
+                    sortBy: state.sort,
+                    onSortChanged: notifier.setSort,
+                    viewMode: state.viewMode,
+                    onViewModeChanged: notifier.setViewMode,
+                    // The query is already in the heading above.
+                    showSearch: false,
+                  ),
+                ),
+              ),
+              if (state.loading)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: PikachuLoader(),
+                )
+              else if (state.failed)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _Placeholder(
+                    message: 'Gagal memuat hasil pencarian. Coba lagi nanti.',
+                    onRetry: notifier.retry,
+                  ),
+                )
+              else if (visible.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: state.cards.isEmpty
+                      ? _Placeholder(
+                          message:
+                              "Tidak ada kartu yang cocok dengan '$trimmed'.",
+                        )
+                      : _Placeholder(
+                          // The query matched; the facets then excluded
+                          // everything it matched.
+                          message: 'Tidak ada kartu yang sesuai filter.',
+                          onRetry: () {
+                            notifier.setFilters(const CardFilters());
+                            notifier.setOwnership(OwnershipFilter.all);
+                          },
+                          retryLabel: 'Hapus filter',
                         ),
-                        const SizedBox(height: 2),
-                        _Subtitle(state: state, query: trimmed),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: CardFilterBar(
-                      // Facets derived from the results themselves, and
-                      // applied over them — the expansion detail page's
-                      // arrangement, so the two card lists filter alike.
-                      cards: state.cards,
-                      filters: state.filters,
-                      onFiltersChanged: notifier.setFilters,
-                      ownershipFilter: signedIn ? state.ownership : null,
-                      onOwnershipChanged: signedIn
-                          ? notifier.setOwnership
-                          : null,
-                      // Results span every expansion, so this list keeps the
-                      // two sorts a single pack has no use for.
-                      sortOptions: CardSortOption.values,
-                      sortBy: state.sort,
-                      onSortChanged: notifier.setSort,
-                      viewMode: state.viewMode,
-                      onViewModeChanged: notifier.setViewMode,
-                      // The query is already in the heading above.
-                      showSearch: false,
-                    ),
-                  ),
-                ),
-                if (state.loading)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: PikachuLoader(),
-                  )
-                else if (state.failed)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _Placeholder(
-                      message: 'Gagal memuat hasil pencarian. Coba lagi nanti.',
-                      onRetry: notifier.retry,
-                    ),
-                  )
-                else if (visible.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: state.cards.isEmpty
-                        ? _Placeholder(
-                            message:
-                                "Tidak ada kartu yang cocok dengan '$trimmed'.",
-                          )
-                        : _Placeholder(
-                            // The query matched; the facets then excluded
-                            // everything it matched.
-                            message: 'Tidak ada kartu yang sesuai filter.',
-                            onRetry: () {
-                              notifier.setFilters(const CardFilters());
-                              notifier.setOwnership(OwnershipFilter.all);
-                            },
-                            retryLabel: 'Hapus filter',
-                          ),
-                  )
-                else ...[
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    sliver: state.viewMode == CardViewMode.grid
-                        ? SliverGrid(
-                            gridDelegate:
-                                cardGridDelegate(context),
-                            delegate: SliverChildBuilderDelegate((context, i) {
-                              final card = visible[i];
-                              return CardGridItem(
+                )
+              else ...[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  sliver: state.viewMode == CardViewMode.grid
+                      ? SliverGrid(
+                          gridDelegate: cardGridDelegate(context),
+                          delegate: SliverChildBuilderDelegate((context, i) {
+                            final card = visible[i];
+                            return CardGridItem(
+                              card: card,
+                              onTap: () => context.push(
+                                Routes.cardDetail(card.packSlug, card.id),
+                              ),
+                            );
+                          }, childCount: visible.length),
+                        )
+                      : SliverList(
+                          delegate: SliverChildBuilderDelegate((context, i) {
+                            final card = visible[i];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: CardListItem(
                                 card: card,
                                 onTap: () => context.push(
                                   Routes.cardDetail(card.packSlug, card.id),
                                 ),
-                              );
-                            }, childCount: visible.length),
-                          )
-                        : SliverList(
-                            delegate: SliverChildBuilderDelegate((context, i) {
-                              final card = visible[i];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: CardListItem(
-                                  card: card,
-                                  onTap: () => context.push(
-                                    Routes.cardDetail(card.packSlug, card.id),
-                                  ),
-                                ),
-                              );
-                            }, childCount: visible.length),
-                          ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                      child: state.hasNext
-                          ? SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: state.loadingMore
-                                    ? null
-                                    : notifier.loadMore,
-                                child: Text(
-                                  state.loadingMore
-                                      ? 'Memuat...'
-                                      : 'Muat lebih banyak',
-                                ),
                               ),
-                            )
-                          : Center(
+                            );
+                          }, childCount: visible.length),
+                        ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                    child: state.hasNext
+                        ? SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: state.loadingMore
+                                  ? null
+                                  : notifier.loadMore,
                               child: Text(
-                                'Menampilkan semua ${visible.length} kartu',
-                                style: AppTypography.caption(
-                                  context.mutedForeground,
-                                ),
+                                state.loadingMore
+                                    ? 'Memuat...'
+                                    : 'Muat lebih banyak',
                               ),
                             ),
-                    ),
+                          )
+                        : Center(
+                            child: Text(
+                              'Menampilkan semua ${visible.length} kartu',
+                              style: AppTypography.caption(
+                                context.mutedForeground,
+                              ),
+                            ),
+                          ),
                   ),
-                ],
+                ),
               ],
-            ),
-    );
+            ],
+          );
   }
 }
 

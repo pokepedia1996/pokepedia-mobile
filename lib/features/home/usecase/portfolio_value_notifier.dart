@@ -1,49 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/utils/primary_collection.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../repository/models/portfolio_value.dart';
 import '../repository/portfolio_value_repository.dart';
 
-/// Which portfolio Beranda opens on, as the user set it with the star in the
-/// picker. Held as a list id (null = the whole collection).
-///
-/// Local rather than server-side: `lists` has no default flag, and this is a
-/// per-person view preference rather than data about the list.
-class DefaultPortfolioNotifier extends Notifier<String?> {
-  static const _key = 'default_portfolio_list_id';
-
-  @override
-  String? build() {
-    _load();
-    return null;
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString(_key);
-    if (id != null && id.isNotEmpty) state = id;
-  }
-
-  Future<void> set(String? listId) async {
-    state = listId;
-    final prefs = await SharedPreferences.getInstance();
-    if (listId == null) {
-      await prefs.remove(_key);
-    } else {
-      await prefs.setString(_key, listId);
-    }
-  }
-}
-
-final defaultPortfolioIdProvider =
-    NotifierProvider<DefaultPortfolioNotifier, String?>(
-      DefaultPortfolioNotifier.new,
-    );
-
 /// Which portfolio the Beranda header is valuing: what the user picked this
-/// session, otherwise their starred default, otherwise the whole collection.
+/// session, otherwise the whole collection.
+///
+/// There is no stored default any more — the star that set one read as a
+/// second, invisible kind of selection, and a portfolio quietly deciding
+/// what Beranda opens on is worse than picking it each time.
 class SelectedPortfolioNotifier extends Notifier<PortfolioTarget> {
   /// This session's explicit pick, which outranks the stored default until
   /// the target stops existing (a deleted list).
@@ -54,12 +24,7 @@ class SelectedPortfolioNotifier extends Notifier<PortfolioTarget> {
     final targets = ref.watch(portfolioTargetsProvider);
     final picked = _picked;
     if (picked != null && targets.contains(picked)) return picked;
-
-    final defaultId = ref.watch(defaultPortfolioIdProvider);
-    return targets.firstWhere(
-      (target) => target.listId == defaultId,
-      orElse: () => PortfolioTarget.primary,
-    );
+    return PortfolioTarget.primary;
   }
 
   void select(PortfolioTarget target) {
@@ -92,7 +57,7 @@ final portfolioTargetsProvider = Provider<List<PortfolioTarget>>((ref) {
 /// chosen list holds. What the Koleksi page lists.
 ///
 /// Each list keeps its own cards at its own quantities rather than pointing
-/// into `user_cards`, so this reads the list itself. Intersecting the two
+/// into the primary collection, so this reads the list itself. Intersecting the two
 /// would hide every card that was filed into a list instead of the main
 /// collection, which is most of them.
 final selectedPortfolioCardsProvider = FutureProvider<List<CardModel>>((ref) {
@@ -123,6 +88,7 @@ final portfolioHoldingsProvider = FutureProvider<List<PortfolioHolding>>((
           quantity: card.owned,
           unitPrice: card.marketPrice ?? 0,
           imageUrl: card.imageUrl,
+          priceChangePct: card.priceChangePct,
         ),
   ];
 });
@@ -142,9 +108,22 @@ final topHoldingsProvider = Provider<List<PortfolioHolding>>((ref) {
   return holdings;
 });
 
+/// The collection id behind the selected target.
+///
+/// A non-primary target already carries one; "Utama" doesn't, because it is
+/// whichever collection `is_primary` happens to be, so that one is resolved.
+/// Null only when signed out or when the account somehow has no primary row.
+final selectedCollectionIdProvider = FutureProvider<String?>((ref) async {
+  final target = ref.watch(selectedPortfolioProvider);
+  if (!target.isPrimary) return target.listId;
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return null;
+  return primaryCollectionId(ref.read(supabaseClientProvider), user.id);
+});
+
 /// The chart series for the selected portfolio and range.
 ///
-/// Yesterday and earlier come from `portfolio_value_snapshots`; **today is
+/// Yesterday and earlier come from `collection_value_snapshots`; **today is
 /// always computed live** from the priced holdings.
 ///
 /// Today is deliberately not read from the table. The snapshot is taken once
@@ -154,20 +133,20 @@ final topHoldingsProvider = Provider<List<PortfolioHolding>>((ref) {
 /// [portfolioValueProvider] already shows as the headline, so the chart's
 /// last point and the number above it can never disagree either.
 ///
-/// `portfolio_value_snapshots` records the whole collection, which is what
-/// "Portofolio Utama" is. A single list has no snapshot of its own, so the
-/// chart says so there rather than drawing the collection's line under a
-/// list's name — a wrong number rather than a missing one.
+/// `collection_value_snapshots` keeps a row per collection per day, so every
+/// portfolio in the switcher has its own line. A collection created today has
+/// no history behind it yet — the cron starts recording it tonight — so the
+/// series is just today's live point until then.
 final portfolioValueSeriesProvider = FutureProvider<List<PortfolioValuePoint>>((
   ref,
 ) async {
-  final target = ref.watch(selectedPortfolioProvider);
-  if (!target.isPrimary) return const [];
+  final collectionId = await ref.watch(selectedCollectionIdProvider.future);
+  if (collectionId == null) return const [];
 
   final range = ref.watch(portfolioRangeProvider);
   final history = await ref
       .read(portfolioValueRepositoryProvider)
-      .fetchValueSeries(range: range);
+      .fetchValueSeries(range: range, collectionId: collectionId);
 
   final holdings = await ref.watch(portfolioHoldingsProvider.future);
   if (holdings.isEmpty) return history;

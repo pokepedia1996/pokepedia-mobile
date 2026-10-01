@@ -12,6 +12,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/listing_model.dart';
+import '../../../../shared/utils/price_input_formatter.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/proposals_notifier.dart';
 
@@ -54,9 +55,11 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
   @override
   void initState() {
     super.initState();
-    // Seeded a notch under the asking price, like the web form.
-    final suggested = (widget.listing.price * 0.9).round();
-    _price = TextEditingController(text: '$suggested');
+    // Empty, not seeded: a number already in the box is the one most people
+    // send, so suggesting 90% of the asking price was quietly making the
+    // offer for them. The listing price is stated just above the field for
+    // anyone who wants to work from it.
+    _price = TextEditingController();
   }
 
   @override
@@ -179,11 +182,15 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
             TextField(
               controller: _price,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                const PriceInputFormatter(),
+              ],
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 prefixText: 'Rp ',
-                hintText: '0',
+                // What the field wants, in the shape it will take.
+                hintText: formatCountId(listing.price),
               ),
             ),
             const SizedBox(height: 14),
@@ -218,7 +225,9 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
             ],
             const SizedBox(height: 14),
             ElevatedButton(
-              onPressed: _submitting ? null : _submit,
+              // Nothing typed yet is not an offer of nothing: the button
+              // waits rather than promising "Tawar Rp0".
+              onPressed: _submitting || _priceValue <= 0 ? null : _submit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: context.appSemantic.success,
                 minimumSize: const Size.fromHeight(48),
@@ -232,7 +241,11 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
                         color: Colors.white,
                       ),
                     )
-                  : Text('Tawar ${formatRupiah(_priceValue)}'),
+                  : Text(
+                      _priceValue <= 0
+                          ? 'Tawar'
+                          : 'Tawar ${formatRupiah(_priceValue)}',
+                    ),
             ),
           ],
         ],

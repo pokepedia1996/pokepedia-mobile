@@ -65,8 +65,10 @@ class SellerOrderDetailPage extends ConsumerWidget {
             );
           }
           return RefreshIndicator(
-            onRefresh: () async =>
-                ref.invalidate(sellerOrderDetailProvider(orderSlug)),
+            onRefresh: () async {
+              ref.invalidate(sellerOrderDetailProvider(orderSlug));
+              await ref.read(sellerOrderDetailProvider(orderSlug).future);
+            },
             child: _Body(detail: detail),
           );
         },

@@ -9,6 +9,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -34,6 +35,21 @@ class CardProposalsPage extends ConsumerStatefulWidget {
   ConsumerState<CardProposalsPage> createState() => _CardProposalsPageState();
 }
 
+/// Ports `FILTERS` in `sent-proposals-list.tsx` — the sent list's own status
+/// filter. No "Menunggu" here, unlike the received side: what a seller looks
+/// for in their own outbox is what came of it.
+enum _SentFilter {
+  all('Semua', null),
+  accepted('Diterima', BidProposalStatus.accepted),
+  rejected('Ditolak', BidProposalStatus.rejected),
+  expired('Expired', BidProposalStatus.expired);
+
+  const _SentFilter(this.label, this.status);
+
+  final String label;
+  final BidProposalStatus? status;
+}
+
 /// Ports `SUB_TABS` — the received list's own status filter.
 enum _ReceivedFilter {
   all('Semua', null),
@@ -51,6 +67,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   _ReceivedFilter _receivedFilter = _ReceivedFilter.all;
+  _SentFilter _sentFilter = _SentFilter.all;
 
   /// Slugs already reported read this session, so a rebuild doesn't re-post.
   final _marked = <String>{};
@@ -120,7 +137,10 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
                   if (data.bids.isEmpty)
                     _Placeholder(
                       text: 'Belum ada bid aktif',
-                      icon: LucideIcons.gavel,
+                      description:
+                          'Bid yang kamu pasang di marketplace akan muncul '
+                          'di sini.',
+                      icon: LucideIcons.messageSquare,
                     )
                   else
                     for (final bid in data.bids) ...[
@@ -301,8 +321,35 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
         ),
       ];
     }
+
+    final visible = _sentFilter.status == null
+        ? sent
+        : sent.where((p) => p.status == _sentFilter.status).toList();
+
     return [
-      for (final proposal in sent) ...[
+      SizedBox(
+        height: 34,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final filter in _SentFilter.values) ...[
+              _Chip(
+                label: filter.label,
+                selected: _sentFilter == filter,
+                onTap: () => setState(() => _sentFilter = filter),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 10),
+      if (visible.isEmpty)
+        _Placeholder(
+          text: 'Belum ada proposal dengan status ini.',
+          icon: LucideIcons.inbox,
+        ),
+      for (final proposal in visible) ...[
         _SentRow(
           proposal: proposal,
           busy: _busySlug == proposal.slug,
@@ -502,7 +549,15 @@ class _ReceivedRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The copy being offered. A proposal is an offer of one
+              // specific card, and "Near Mint" is a word until you can see
+              // it — the photos were on the row all along, unasked for.
+              if (proposal.photos.isNotEmpty) ...[
+                _ProposalPhotos(urls: proposal.photos),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,6 +573,10 @@ class _ReceivedRow extends StatelessWidget {
                       '${proposal.proposedQuantity} pcs',
                       style: AppTypography.caption(context.mutedForeground),
                     ),
+                    if (proposal.proposedPrice != null) ...[
+                      const SizedBox(height: 4),
+                      _ProposedPrice(proposal: proposal),
+                    ],
                   ],
                 ),
               ),
@@ -606,23 +665,48 @@ class _SentRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Bid dari @${proposal.buyerUsername ?? "pembeli"}',
+                      // What this row is: the offer *you* sent, and who to.
+                      // It used to lead with "Bid dari @x", which names the
+                      // bid being answered and reads as something received.
+                      'Proposal ke @${proposal.buyerUsername ?? "pembeli"}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodySmSemibold(colors.onSurface),
                     ),
-                    Text(
-                      [
-                        formatRupiah(proposal.effectivePrice),
-                        '${proposal.proposedQuantity} pcs',
-                        if (proposal.createdAt case final at?)
-                          formatRelativeId(at),
-                        // Only while it can still be answered — a settled
-                        // proposal's clock is history.
-                        if (proposal.remaining case final left?)
-                          'Expired dalam ${formatCountdownId(left)}',
-                      ].join(' · '),
-                      style: AppTypography.caption(context.mutedForeground),
+                    // Web's row: the price asked, the bid it answers struck
+                    // through when they differ, then the grade and the rest.
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 5,
+                      runSpacing: 2,
+                      children: [
+                        Text(
+                          formatRupiah(proposal.effectivePrice),
+                          style: AppTypography.bodySmSemibold(colors.onSurface),
+                        ),
+                        if (proposal.effectivePrice != proposal.bidPrice)
+                          Text(
+                            formatRupiah(proposal.bidPrice),
+                            style: AppTypography.caption(
+                              context.mutedForeground,
+                            ).copyWith(decoration: TextDecoration.lineThrough),
+                          ),
+                        ConditionBadge(
+                          condition: proposal.condition,
+                          dense: true,
+                        ),
+                        Text(
+                          [
+                            '${proposal.proposedQuantity} pcs',
+                            // Said out loud: a bare "23 jam lalu" in a run
+                            // of dot-separated facts doesn't say which of
+                            // them it is timing.
+                            if (proposal.createdAt case final at?)
+                              'dikirim ${formatRelativeId(at).toLowerCase()}',
+                          ].join(' · '),
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -657,6 +741,41 @@ class _SentRow extends StatelessWidget {
                 ),
             ],
           ),
+
+          // The clock, on a line of its own: it's the one fact here that
+          // changes by itself, and it was the easiest to miss at the end of
+          // a run of dot-separated ones. Only while the proposal can still
+          // be answered — a settled one's clock is history.
+          if (proposal.remaining case final left?) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  LucideIcons.clock,
+                  size: 13,
+                  color: context.mutedForeground,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    // "Waktu habis" once it has run out, as web's countdown
+                    // says — a clock that reads "Expired dalam kurang dari 1
+                    // menit" for a week is telling the wrong story.
+                    left == Duration.zero
+                        ? 'Waktu habis'
+                        : 'Expired dalam ${formatCountdownId(left)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(
+                      left == Duration.zero
+                          ? colors.error
+                          : context.mutedForeground,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
 
           // Whether the buyer has actually opened it. Web shows this only
           // while pending: once answered, being seen is implied.
@@ -785,10 +904,18 @@ class _Chip extends StatelessWidget {
 /// A section-sized empty state — the page stacks several, so the full
 /// [EmptyState] would dominate it.
 class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.text, required this.icon});
+  const _Placeholder({
+    required this.text,
+    required this.icon,
+    this.description,
+  });
 
   final String text;
   final IconData icon;
+
+  /// The line under it, where there is something worth saying about how the
+  /// box gets filled.
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -806,10 +933,118 @@ class _Placeholder extends StatelessWidget {
           Text(
             text,
             textAlign: TextAlign.center,
-            style: AppTypography.caption(context.mutedForeground),
+            style: AppTypography.bodySm(context.appColors.onSurface),
           ),
+          if (description != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              description!,
+              textAlign: TextAlign.center,
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// The photos the seller attached, as thumbnails.
+class _ProposalPhotos extends StatelessWidget {
+  const _ProposalPhotos({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    // Two at most on the row: a strip long enough to scroll competes with
+    // the decision the row exists for. Tapping opens the rest.
+    final shown = urls.take(2).toList();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final url in shown)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: GestureDetector(
+              onTap: () => _open(context, urls.indexOf(url)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: SizedBox(
+                  width: 40,
+                  height: 56,
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, _, __) => ColoredBox(
+                      color: context.mutedForeground.withValues(alpha: 0.10),
+                      child: Icon(
+                        LucideIcons.imageOff,
+                        size: 14,
+                        color: context.mutedForeground,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (urls.length > shown.length)
+          Text(
+            '+${urls.length - shown.length}',
+            style: AppTypography.caption(context.mutedForeground),
+          ),
+      ],
+    );
+  }
+
+  void _open(BuildContext context, int index) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: InteractiveViewer(
+          child: Image.network(urls[index.clamp(0, urls.length - 1)]),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the seller is asking, and how it sits against the bid.
+class _ProposedPrice extends StatelessWidget {
+  const _ProposedPrice({required this.proposal});
+
+  final BidProposalModel proposal;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final above = proposal.isAboveBid;
+
+    return Row(
+      children: [
+        Text(
+          formatRupiah(proposal.proposedPrice!),
+          style: AppTypography.bodySmSemibold(colors.onSurface),
+        ),
+        if (above) ...[
+          const SizedBox(width: 6),
+          // Said plainly, because it changes what rejecting costs: a
+          // proposal at the bid price is the buyer's own offer taken up, and
+          // turning it down cancels the bid. This one is a counter.
+          Flexible(
+            child: Text(
+              'di atas bid',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(context.appSemantic.gold),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

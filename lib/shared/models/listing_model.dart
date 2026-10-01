@@ -1,4 +1,5 @@
 import '../../core/utils/image_url.dart';
+import '../utils/seller_identity.dart';
 import 'card_condition.dart';
 import 'card_model.dart';
 
@@ -66,6 +67,7 @@ class ListingModel {
     this.sellerFeedbackScore = 0,
     this.photoUrls = const [],
     this.sellerId = '',
+    this.sellerUsername,
   });
 
   final int id;
@@ -84,6 +86,13 @@ class ListingModel {
   final CardModel card;
   final String storeSlug;
   final String storeName;
+
+  /// `profiles.username`. Kept alongside the shop fields because a seller
+  /// who never set a storefront up has no `store_name`/`store_slug` at all,
+  /// and this is the name to show and the handle to link by instead — see
+  /// [resolveSellerName] and [resolveSellerHandle].
+  final String? sellerUsername;
+
   final bool isVerified;
   final String cityName;
   final DateTime createdAt;
@@ -124,13 +133,20 @@ class ListingModel {
   /// store info (fetched separately since `listings.user_id` and
   /// `seller_profiles.user_id` both reference `auth.users` rather than one
   /// another directly, so PostgREST can't embed them in one query).
+  ///
+  /// [storeSlug]/[storeName] are the raw `seller_profiles` columns and may
+  /// be null: a seller who never opened a storefront has neither. Pass their
+  /// [sellerUsername] and the shop name/handle are resolved from it the way
+  /// web's `resolveSellerDisplay` does.
   factory ListingModel.fromRow(
     Map<String, dynamic> row, {
     required CardModel card,
-    required String storeSlug,
-    required String storeName,
+    required String? storeSlug,
+    required String? storeName,
     required bool isVerified,
     required String cityName,
+    String? sellerUsername,
+    String nameFallback = sellerDisplayFallback,
     String? sellerAvatarUrl,
     String? storeLogoUrl,
     int sellerFeedbackScore = 0,
@@ -147,8 +163,16 @@ class ListingModel {
       quantity: row['quantity'] as int? ?? 0,
       qtyLocked: row['qty_locked'] as int? ?? 0,
       card: card,
-      storeSlug: storeSlug,
-      storeName: storeName,
+      storeSlug: resolveSellerHandle(
+        storeSlug: storeSlug,
+        username: sellerUsername,
+      ),
+      storeName: resolveSellerName(
+        storeName: storeName,
+        username: sellerUsername,
+        fallback: nameFallback,
+      ),
+      sellerUsername: sellerUsername,
       isVerified: isVerified,
       cityName: cityName,
       createdAt:
@@ -205,8 +229,19 @@ class ListingModel {
       quantity: row['quantity'] as int? ?? 0,
       qtyLocked: row['qty_locked'] as int? ?? 0,
       card: card,
-      storeSlug: row['store_slug'] as String? ?? '',
-      storeName: row['store_name'] as String? ?? 'Toko',
+      // A seller without a storefront has neither of these, and the RPC
+      // returns their `username` for exactly that case — so the tile shows
+      // their handle and still links somewhere, rather than reading "Toko"
+      // and going nowhere.
+      storeSlug: resolveSellerHandle(
+        storeSlug: row['store_slug'] as String?,
+        username: row['username'] as String?,
+      ),
+      storeName: resolveSellerName(
+        storeName: row['store_name'] as String?,
+        username: row['username'] as String?,
+      ),
+      sellerUsername: row['username'] as String?,
       isVerified: row['is_verified'] as bool? ?? false,
       cityName: row['city_name'] as String? ?? '',
       createdAt:

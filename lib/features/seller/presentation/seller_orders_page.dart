@@ -20,6 +20,7 @@ import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/pending_checkout.dart';
 import '../../orders/repository/models/seller_order.dart';
 import '../../orders/usecase/orders_notifier.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Ports `app/seller/orders` — the seller's side of Pesanan.
 ///
@@ -60,9 +61,13 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
     super.dispose();
   }
 
-  void _reload() {
+  /// Returns a future so `RefreshIndicator` holds its spinner until the list
+  /// has actually come back. Invalidating alone completes instantly, which
+  /// made a pull-to-refresh look like it had failed to do anything.
+  Future<void> _reload() async {
     ref.invalidate(sellerOrdersProvider);
     ref.invalidate(sellerPendingCheckoutsProvider);
+    await ref.read(sellerOrdersProvider.future);
   }
 
   /// Order number, card, buyer and tracking number — what web's box covers.
@@ -90,10 +95,13 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
   }
 
   String _describe(Object error) {
-    final text = error is PostgrestException
-        ? '${error.message}${error.code == null ? '' : ' (${error.code})'}'
-        : error.toString();
-    return text.length > 240 ? '${text.substring(0, 240)}...' : text;
+    // Was the driver's message plus its SQLSTATE — "(42501)" on screen to
+    // someone trying to look at their orders. The code is worth keeping, so
+    // it goes to the log instead.
+    return userFacingError(
+      error,
+      fallback: 'Pesanan tidak bisa dimuat. Coba lagi ya.',
+    );
   }
 
   @override

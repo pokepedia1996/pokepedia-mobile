@@ -43,15 +43,6 @@ import 'warp_quad.dart';
 /// web. The guide box is what keeps that from mattering in practice — a card
 /// aligned to a drawn rectangle is close to frontal by construction.
 
-/// Long side of the uploaded crop.
-///
-/// The server resizes to a 1000px working side before the embedder sees it
-/// (`scan.server.ts`), so anything above that is upload cost the embedder
-/// immediately discards. Kept a little above 1000, like the web's own
-/// `CAPTURE_MAX_SIDE`, so the final downscale is done by the server's Lanczos
-/// resize rather than this one.
-const captureMaxSide = 1400;
-
 /// JPEG quality for the upload. Matches the web's 0.92 WebP — high enough that
 /// compression artifacts don't perturb the embedding, low enough to keep the
 /// request well under `/api/scan`'s 4.5 MB cap.
@@ -284,6 +275,14 @@ img.Image _snapToCardAspect(img.Image source) {
 
 /// Laplacian variance as a cheap focus score, with mean luma riding the same
 /// grayscale pass. Ports `laplacianVarianceAndLuma`.
+/// The focus score and mean brightness of [source].
+///
+/// Public because the capture burst picks between frames on it before any of
+/// them is cropped — web scores each burst candidate the same way
+/// (`captureBurstFrame`) and keeps the sharpest.
+({double variance, double luma}) scoreFrame(img.Image source) =>
+    _laplacianVarianceAndLuma(source);
+
 ({double variance, double luma}) _laplacianVarianceAndLuma(img.Image source) {
   final sample = img.copyResize(
     source,

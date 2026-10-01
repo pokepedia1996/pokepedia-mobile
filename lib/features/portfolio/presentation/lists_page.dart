@@ -158,10 +158,21 @@ class _ListsPageState extends ConsumerState<ListsPage> {
   }
 
   Future<void> _copyShareLink(WantlistModel list) async {
-    // Same URL the web copies: the share code resolves for anyone, which is
-    // what `Public read via share_code` on `lists` is for.
+    // Same URL the web copies. Share codes are gone: a collection is reached
+    // at /user/<username>/<slug>, and it resolves for a stranger only while
+    // `is_public` is set — so a private one is worth saying no to here rather
+    // than handing over a link that 404s for whoever receives it.
+    if (!list.isPublic) {
+      _toast('Jadikan koleksi ini publik dulu untuk membagikannya');
+      return;
+    }
+    final username = ref.read(authProvider).valueOrNull?.username;
+    if (username == null) {
+      _toast('Gagal menyalin link');
+      return;
+    }
     await Clipboard.setData(
-      ClipboardData(text: '${AppConfig.appUrl}/list/${list.shareCode}'),
+      ClipboardData(text: '${AppConfig.appUrl}/user/$username/${list.slug}'),
     );
     _toast('Link disalin ke clipboard');
   }

@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
+import '../providers/supabase_provider.dart';
+import 'session_cookie.dart';
 
 /// Authenticated transport for the handful of pokepedia.id routes a mobile
 /// client legitimately needs.
@@ -448,6 +450,9 @@ class PokepediaApi {
   /// under: `sb-` + the first label of the Supabase host + `-auth-token`,
   /// which is how supabase-js derives its `storageKey` and therefore what
   /// `createServerClient` looks for.
+  ///
+  /// Which host, though, is the whole question — see [_sessionCookie]. This
+  /// only spells the rule; it does not decide what to spell it from.
   static String sessionCookieName(String supabaseUrl) {
     final host = Uri.parse(supabaseUrl).host;
     final label = host.split('.').first;
@@ -496,11 +501,28 @@ class PokepediaApi {
     return chunks.join('; ');
   }
 
+  /// The session as a `Cookie:` header, named the way the *server* names it.
+  ///
+  /// Not from [AppConfig.supabaseUrl]. This build reaches Supabase through
+  /// `auth.pokepedia.id`, a custom domain in front of the project, so that
+  /// spelled `sb-auth-auth-token` — while pokepedia-web is configured with
+  /// the project URL and reads `sb-<project-ref>-auth-token`
+  /// (`docs/security/firewall.md` names it outright). `@supabase/ssr` found
+  /// no cookie under the name it knows, so every request arrived anonymous
+  /// and `/api/scan` answered 401 with a valid bearer token sitting unread
+  /// beside it — that route authenticates from the cookie and never looks at
+  /// the header.
+  ///
+  /// The token settles which host to use: `iss` is the project that issued
+  /// it, and that is necessarily the project the server validates against,
+  /// whatever hostname this build happens to dial. It is also what the WAF
+  /// keys "is this request logged in?" on, so the wrong name cost the app
+  /// its rate-limit bypass as well as its session.
   String? _sessionCookie(String accessToken) {
     final session = _auth.currentSession;
     if (session == null) return null;
     return buildSessionCookie(
-      sessionCookieName(AppConfig.supabaseUrl),
+      supabaseAuthCookieNameForToken(accessToken),
       session,
       accessToken,
     );
@@ -571,8 +593,7 @@ class _MultipartBody {
 const _bypassHeader = 'x-pokepedia-client';
 
 const _edgeUnreachable = ApiUnreachableException(
-  'Layanan pengiriman & pembayaran sedang tidak bisa diakses dari '
-  'aplikasi. Lanjutkan lewat halaman web.',
+  'Layanan sedang tidak bisa dijangkau nih. Coba beberapa saat lagi ya..',
 );
 
 /// How long to wait before retrying a 429, from whichever of the two shapes
@@ -661,5 +682,5 @@ class ApiAuthRefusedException extends ApiAuthException {
 }
 
 final pokepediaApiProvider = Provider(
-  (ref) => PokepediaApi(Supabase.instance.client),
+  (ref) => PokepediaApi(ref.watch(supabaseClientProvider)),
 );

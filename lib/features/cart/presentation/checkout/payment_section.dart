@@ -20,7 +20,7 @@ class PaymentSection extends StatelessWidget {
   final int grandTotalBeforeFee;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
-  final int walletBalance;
+  final int? walletBalance;
   final ValueChanged<PaymentPick> onPick;
 
   @override

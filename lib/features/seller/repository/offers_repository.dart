@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
 import 'models/listing_offer.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Raised when an offer RPC answers with a business error rather than
 /// throwing — the RPCs return `{error: '<code>'}` instead of failing, so the
@@ -139,7 +140,7 @@ class OffersRepository {
     try {
       data = await _client.rpc(fn, params: params);
     } on PostgrestException catch (e) {
-      throw OfferActionException(e.message);
+      throw OfferActionException(userFacingError(e));
     } catch (_) {
       throw OfferActionException(fallback);
     }

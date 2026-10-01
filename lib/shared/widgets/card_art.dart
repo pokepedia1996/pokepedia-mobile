@@ -69,11 +69,22 @@ class CardArt extends StatelessWidget {
   /// The width to decode at, in device pixels — null when the box has no
   /// bounded width to measure, in which case the full image is the only safe
   /// answer.
+  ///
+  /// Rounded up to a multiple of [_decodeBucket] because the decoded bitmap
+  /// is cached under its size: a tile 186px wide and the same card 190px wide
+  /// in another grid are two entries for one picture, decoded twice and held
+  /// twice. Two-column and three-column grids land in different buckets, so
+  /// the sizes that actually differ still get their own decode.
   static int? _decodeWidth(BuildContext context, double logicalWidth) {
     if (!logicalWidth.isFinite || logicalWidth <= 0) return null;
     final ratio = MediaQuery.devicePixelRatioOf(context);
-    return (logicalWidth * ratio).round();
+    final pixels = logicalWidth * ratio;
+    return (pixels / _decodeBucket).ceil() * _decodeBucket;
   }
+
+  /// Rounding up never costs detail — the bitmap is only ever drawn smaller
+  /// than it was decoded.
+  static const _decodeBucket = 64;
 }
 
 class _CardBack extends StatelessWidget {

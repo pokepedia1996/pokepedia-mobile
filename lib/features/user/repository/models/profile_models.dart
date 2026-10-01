@@ -2,12 +2,15 @@ import '../../../../core/utils/image_url.dart';
 
 /// A public collector profile, ported from `PublicProfile` in
 /// `pokepedia-web/lib/user/profile.ts` (the `get_public_profile` RPC).
+///
+/// Collection visibility no longer lives here. It used to be two account-wide
+/// columns on `profiles`; the collections unification dropped both and moved
+/// the decision onto each collection row, so it is its own thing now —
+/// [CollectionVisibility].
 class PublicProfile {
   const PublicProfile({
     required this.userId,
     required this.username,
-    required this.isCollectionPublic,
-    required this.showCollectionQuantity,
     required this.contributionCount,
     this.avatarUrl,
     this.bio,
@@ -20,8 +23,6 @@ class PublicProfile {
 
   final String userId;
   final String username;
-  final bool isCollectionPublic;
-  final bool showCollectionQuantity;
   final int contributionCount;
   final String? avatarUrl;
   final String? bio;
@@ -41,17 +42,10 @@ class PublicProfile {
       socialTiktok != null ||
       socialX != null;
 
-  PublicProfile copyWith({
-    String? Function()? socialWhatsapp,
-    bool? isCollectionPublic,
-    bool? showCollectionQuantity,
-  }) {
+  PublicProfile copyWith({String? Function()? socialWhatsapp}) {
     return PublicProfile(
       userId: userId,
       username: username,
-      isCollectionPublic: isCollectionPublic ?? this.isCollectionPublic,
-      showCollectionQuantity:
-          showCollectionQuantity ?? this.showCollectionQuantity,
       contributionCount: contributionCount,
       avatarUrl: avatarUrl,
       bio: bio,
@@ -74,8 +68,6 @@ class PublicProfile {
     return PublicProfile(
       userId: row['id'] as String? ?? '',
       username: row['username'] as String? ?? '',
-      isCollectionPublic: row['is_collection_public'] as bool? ?? false,
-      showCollectionQuantity: row['show_collection_quantity'] as bool? ?? true,
       contributionCount: (row['contribution_count'] as num?)?.toInt() ?? 0,
       avatarUrl: proxyImageUrl(row['avatar_url'] as String?),
       bio: _blankToNull(row['bio']),
@@ -85,6 +77,32 @@ class PublicProfile {
       socialX: _blankToNull(row['social_x']),
     );
   }
+}
+
+/// Whether a collection is visible to strangers, and whether it shows how
+/// many copies of each card it holds.
+///
+/// Replaces `profiles.is_collection_public` / `profiles.show_collection_quantity`,
+/// which were one setting for the whole account. These are per collection —
+/// the screens that toggle them act on the user's primary collection, which is
+/// the one a profile page shows.
+class CollectionVisibility {
+  const CollectionVisibility({
+    required this.collectionId,
+    required this.isPublic,
+    required this.showQuantity,
+  });
+
+  final String collectionId;
+  final bool isPublic;
+  final bool showQuantity;
+
+  factory CollectionVisibility.fromRow(Map<String, dynamic> row) =>
+      CollectionVisibility(
+        collectionId: row['id'] as String? ?? '',
+        isPublic: row['is_public'] as bool? ?? false,
+        showQuantity: row['show_quantity'] as bool? ?? true,
+      );
 }
 
 /// The signed-in user's own private contact row (`profiles_private`), read

@@ -5,6 +5,16 @@ import 'pokemon_type.dart';
 /// `cards.category` check constraint.
 enum CardCategory { pokemon, trainer, energy }
 
+/// Sealed products — booster boxes, packs, gift sets — live in `cards` like
+/// everything else, marked by this category. Ports `SEALED_CATEGORY` from
+/// `pokepedia-web/lib/sealed/keys.ts`.
+///
+/// It is not a [CardCategory] member: 'Sealed' falls through
+/// [CardCategoryX.fromRaw]'s default and arrives as [CardCategory.pokemon].
+/// The catalog queries filter it out in SQL before a row ever becomes a
+/// [CardModel], which is where web draws the same line.
+const sealedCategory = 'Sealed';
+
 extension CardCategoryX on CardCategory {
   String get raw {
     switch (this) {

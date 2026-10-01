@@ -142,8 +142,11 @@ class SellerDraft {
     required this.condition,
     required this.quantity,
     required this.photoCount,
+    this.photoUrls = const [],
     this.price,
     this.updatedAt,
+    this.autoRelist = false,
+    this.acceptsOffers = false,
   });
 
   factory SellerDraft.fromRow(Map<String, dynamic> row) {
@@ -153,8 +156,14 @@ class SellerDraft {
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: (row['quantity'] as num?)?.toInt() ?? 1,
       photoCount: ((row['photo_urls'] as List?) ?? const []).length,
+      photoUrls: [
+        for (final url in (row['photo_urls'] as List?) ?? const [])
+          if (url is String) url,
+      ],
       price: (row['price'] as num?)?.toInt(),
       updatedAt: DateTime.tryParse(row['updated_at'] as String? ?? ''),
+      autoRelist: row['auto_relist'] as bool? ?? false,
+      acceptsOffers: row['accepts_offers'] as bool? ?? false,
     );
   }
 
@@ -164,9 +173,62 @@ class SellerDraft {
   final int quantity;
   final int photoCount;
 
+  /// The photos themselves, so the editor can show and remove them rather
+  /// than only report a count.
+  final List<String> photoUrls;
+
   /// Nullable in the table: a draft can exist before a price is decided.
   final int? price;
   final DateTime? updatedAt;
+
+  /// The two switches the draft carries to the listing it becomes.
+  ///
+  /// They live on `listing_drafts` and always have — the app simply wasn't
+  /// reading them, so a draft edited here lost whichever way they were set
+  /// and fell back to the column defaults on posting.
+  final bool autoRelist;
+  final bool acceptsOffers;
+
+  /// Whether the draft has everything a listing needs. A price is the only
+  /// thing that can be missing: quantity and condition are `NOT NULL` with
+  /// defaults, so a draft always has both.
+  bool get isReady => price != null && price! > 0;
+
+  /// The same draft against a re-read card — used to stamp the market price
+  /// on after the catalog row has been through the price cache.
+  SellerDraft withCard(CardModel next) => SellerDraft(
+    id: id,
+    card: next,
+    condition: condition,
+    quantity: quantity,
+    photoCount: photoCount,
+    photoUrls: photoUrls,
+    price: price,
+    updatedAt: updatedAt,
+    autoRelist: autoRelist,
+    acceptsOffers: acceptsOffers,
+  );
+
+  SellerDraft copyWith({
+    int? quantity,
+    int? price,
+    bool clearPrice = false,
+    bool? autoRelist,
+    bool? acceptsOffers,
+  }) {
+    return SellerDraft(
+      id: id,
+      card: card,
+      condition: condition,
+      quantity: quantity ?? this.quantity,
+      photoCount: photoCount,
+      photoUrls: photoUrls,
+      price: clearPrice ? null : (price ?? this.price),
+      updatedAt: updatedAt,
+      autoRelist: autoRelist ?? this.autoRelist,
+      acceptsOffers: acceptsOffers ?? this.acceptsOffers,
+    );
+  }
 }
 
 /// Web's Preferensi tab — the defaults stamped onto a seller's new listings.

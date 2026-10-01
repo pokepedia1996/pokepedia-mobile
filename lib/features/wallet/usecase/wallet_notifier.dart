@@ -17,7 +17,16 @@ final walletRepositoryProvider = Provider(
 
 /// All three follow the session: a signed-out wallet is empty, and signing in
 /// refetches rather than showing the previous account's figures.
-final walletBalanceProvider = FutureProvider<int>((ref) {
+///
+/// `autoDispose` on the balance specifically: it is the one figure that money
+/// moves out from under, and a cached copy outliving the spend is how the
+/// wallet came to read Rp5.000.000 on a wallet that had just paid for an
+/// order. Dropping it when nothing is watching means every screen that asks
+/// gets the real number instead of relying on each mutation to remember to
+/// invalidate. Callers must handle the loading gap that comes with it —
+/// `CheckoutState.walletBalance` is nullable for exactly that reason, since
+/// treating "not known yet" as zero is what greyed saldo out as insufficient.
+final walletBalanceProvider = FutureProvider.autoDispose<int>((ref) {
   if (ref.watch(authProvider).valueOrNull == null) return Future.value(0);
   return ref.read(walletRepositoryProvider).fetchBalance();
 });

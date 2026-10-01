@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
 import 'models/checkout_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// What checkout needs to know about the buyer before it can start.
 class CheckoutContext {
@@ -150,7 +151,7 @@ class CheckoutGateway {
           .maybeSingle();
       return CheckoutContext(phoneVerified: row?['phone_verified_at'] != null);
     } on PostgrestException catch (e) {
-      throw ApiException(e.message);
+      throw ApiException(userFacingError(e));
     }
   }
 
@@ -254,7 +255,6 @@ class CheckoutGateway {
     });
 
     final dropped = json['droppedItems'];
-    print('WKWKWK ${json.toString()}');
     return CheckoutResult(
       invoiceUrl: json['invoiceUrl'] as String?,
       redirect: json['redirect'] as String?,
@@ -317,6 +317,36 @@ class CheckoutGateway {
   /// their own row, and that keeps the one query that decides "did my money
   /// arrive" off an endpoint the edge currently challenges.
   ///
+  /// The gateway channel the buyer last actually paid with, or null if they
+  /// have never paid, paid from saldo, or the row isn't readable.
+  ///
+  /// `carts.payment_channel` is stamped by `/api/cart/checkout` with the
+  /// uppercase channel code, or the literal "WALLET" for a saldo payment —
+  /// which maps to null here, since saldo is a [PaymentMethod], not a
+  /// channel. Keyed off `paid_at` for the same reason [fetchProgress] is:
+  /// an abandoned cart carries the channel the buyer *chose*, and that is
+  /// not evidence of what they use.
+  Future<PaymentChannel?> fetchLastPaidChannel() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    final row = await _client
+        .from('carts')
+        .select('payment_channel')
+        .eq('user_id', userId)
+        .not('paid_at', 'is', null)
+        .order('paid_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+
+    final code = (row?['payment_channel'] as String?)?.toUpperCase();
+    if (code == null || code == 'WALLET') return null;
+    for (final channel in PaymentChannel.values) {
+      if (channel.code == code) return channel;
+    }
+    return null;
+  }
+
   /// Success is keyed off `paid_at` rather than a status spelling — the
   /// webhook stamps it, and the cancelled vocabulary is the part that's
   /// enumerated.

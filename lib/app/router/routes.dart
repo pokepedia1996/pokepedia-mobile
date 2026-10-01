@@ -9,6 +9,15 @@ class Routes {
   static const decks = '/portfolio/deck';
   static const inventory = '/portfolio/inventory';
   static const market = '/market';
+
+  /// The marketplace opened on a query — the "di Market" scope in quick
+  /// search. Stock someone is selling right now, as opposed to the catalog.
+  static String marketSearch(String query) =>
+      '/market?q=${Uri.encodeQueryComponent(query)}';
+
+  /// The marketplace's shop directory, filtered by name — "Cari toko".
+  static String marketStoreSearch(String query) =>
+      '/market?tab=stores&q=${Uri.encodeQueryComponent(query)}';
   static const account = '/account';
 
   // Search (opened from AppTopBar, not a bottom-nav tab).
@@ -40,6 +49,12 @@ class Routes {
   static const cart = '/cart';
   static const checkout = '/cart/checkout';
   static const checkoutSuccess = '/cart/checkout/success';
+
+  /// The saldo thank-you screen, carrying what it needs to state the outcome.
+  /// Query params rather than `extra` so the destination survives the
+  /// `go(home)` + `push` that `goHomeThen` performs.
+  static String checkoutSuccessFor({required int cards, required int total}) =>
+      '$checkoutSuccess?cards=$cards&total=$total';
   static const orders = '/orders';
   static const proposals = '/proposals';
 
@@ -70,6 +85,23 @@ class Routes {
   static const seller = '/seller';
   static const sellerProducts = '/seller/products';
   static const sellerOrders = '/seller/orders';
+
+  /// The numbers behind the dashboard's headline — opened from it.
+  static const sellerPerformance = '/seller/performance';
+
+  /// Kelola Listing opened on one tab.
+  ///
+  /// The tab is in the link rather than left to whatever the page was last
+  /// showing: tapping "DRAFT" on the dashboard and landing on Aktif reads as
+  /// the tap having gone somewhere else. Same reasoning as the orders
+  /// counters below, and a deep link carries it too.
+  static String sellerProductsTab(String bucketKey) =>
+      '/seller/products?tab=$bucketKey';
+
+  /// Kelola Listing with the offers filter already on — the dashboard's
+  /// "Ada penawaran masuk" row counts exactly these.
+  static String sellerProductsWithOffers() =>
+      '/seller/products?tab=active&offers=1';
 
   /// The orders list opened on one tab — web's `?filter=` links, which the
   /// dashboard's counters carry so a number opens the list it counted.
@@ -123,7 +155,14 @@ class Routes {
 
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
-  static String chatThread(String slug) => '/chat/$slug';
+
+  /// A room, optionally naming the listing it was opened about.
+  ///
+  /// The listing rides in the query rather than in `extra`: that slot
+  /// already carries the title hint here, and a query parameter survives a
+  /// deep link and a process restart, which `extra` does not.
+  static String chatThread(String slug, {int? listingId}) =>
+      listingId == null ? '/chat/$slug' : '/chat/$slug?listing=$listingId';
 
   /// A conversation with no room yet — the recipient rides along in
   /// `extra` as a [ChatTarget], and the room is created on the first send.

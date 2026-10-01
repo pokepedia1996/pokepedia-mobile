@@ -61,21 +61,33 @@ SliverGridDelegate listingGridDelegate(
   );
 }
 
-/// Everything in the card that isn't artwork: the four text rows, the
+/// Everything in the card that isn't artwork: the three text rows, the
 /// card's padding, and the seller strip.
 ///
-/// Measured, not guessed — `listing_card_height_test` binary-searches the
-/// shortest cell the card fits in and fails the build when this drifts under
+/// Measured, not guessed — `listing_card_height_test` measures where the
+/// card's content actually ends and fails the build when this drifts under
 /// it. It went 149 -> 165 when the verified badge and reputation star moved
-/// out of the seller row and became their own lines in the column.
-const listingCardChrome = 165.0;
+/// out of the seller row and became their own lines in the column, then
+/// 165 -> 142 when the side badge, the available count and the offers pill
+/// all stopped needing rows of their own.
+///
+/// **A grid cell is one height for every tile in it**, so this fits the
+/// tallest — which means anything only *some* listings carry is a row every
+/// listing pays for, and the ones without it wear the difference as white
+/// space. That is why the offers pill sits on the artwork now: as its own
+/// row it cost every cell in the grid ~29pt to serve a minority of them.
+/// Measured need is 137.3, and it is the same whether or not the listing
+/// accepts offers or names a city.
+const listingCardChrome = 142.0;
 
 /// The same without the seller strip (`showSeller: false`).
 ///
-/// 123, not 119: the measured need is 122.2, and at 119 the card overflowed
-/// by three points — little enough that the harness only caught it on some
-/// runs, which is worse than catching it on none.
-const listingCardChromeNoSeller = 123.0;
+/// 101 against a measured 96.3 — the price row plus the gap that trails it,
+/// which a first measurement read as 92.3 by stopping at the last glyph
+/// instead of the last box. The margin is deliberate: an earlier value sat
+/// 0.8pt above its measurement and overflowed by three points on some runs
+/// only, which is worse than failing on all of them.
+const listingCardChromeNoSeller = 101.0;
 
 class ListingCard extends ConsumerStatefulWidget {
   const ListingCard({
@@ -167,53 +179,104 @@ class _ListingCardState extends ConsumerState<ListingCard> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.max,
           children: [
-            Stack(
-              children: [
-                CardArt(imageUrl: listing.card.imageUrl),
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: ConditionBadge(condition: listing.condition),
-                ),
-                if (listing.isFeatured)
+            // Loose, so the artwork yields rather than the card overflowing.
+            //
+            // [listingCardChrome] is a measurement, and a measurement taken
+            // in a test harness cannot be exact on a device: the harness
+            // draws a fallback font, the device draws Urbanist, and the
+            // reader's own text-size setting scales all of it afterwards.
+            // Every version of this constant has eventually been a point or
+            // two short of some real tile, and each bump bought that back by
+            // padding every cell in the grid with white space.
+            //
+            // So the text block takes what it needs and the artwork absorbs
+            // the remainder. Losing a pixel off a card image nobody is
+            // measuring is invisible; a yellow overflow bar is not.
+            Flexible(
+              child: Stack(
+                children: [
+                  CardArt(imageUrl: listing.card.imageUrl),
                   Positioned(
-                    left: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.primary.withValues(alpha: 0.12),
-                        border: Border.all(
-                          color: colors.primary.withValues(alpha: 0.3),
+                    right: 6,
+                    top: 6,
+                    // The grade alone. A count chip used to sit beside it,
+                    // but the row under the price already says how many are
+                    // available — in words, and in the place a buyer looks
+                    // for stock.
+                    child: ConditionBadge(condition: listing.condition),
+                  ),
+                  if (listing.isFeatured)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        borderRadius: BorderRadius.circular(AppRadius.full),
-                      ),
-                      child: Text(
-                        'Unggulan',
-                        style: AppTypography.badge(colors.primary),
+                        decoration: BoxDecoration(
+                          color: colors.primary.withValues(alpha: 0.12),
+                          border: Border.all(
+                            color: colors.primary.withValues(alpha: 0.3),
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                        child: Text(
+                          'Unggulan',
+                          style: AppTypography.badge(colors.primary),
+                        ),
                       ),
                     ),
+                  Positioned(
+                    // Flush with the artwork's corner, which is where web's
+                    // `left-2 top-2` puts it: that offset is measured from the
+                    // card, whose 8px padding is exactly where the image
+                    // starts. Dropping to the image's own corner instead of
+                    // insetting again is what closes the gap.
+                    left: 0,
+                    top: listing.isFeatured ? 36 : 0,
+                    child: _WishlistBadge(
+                      wishlisted: wishlisted,
+                      loading: _wishlistToggling,
+                      onTap: _wishlistToggling
+                          ? null
+                          : () => _toggleWishlist(wishlisted),
+                    ),
                   ),
-                Positioned(
-                  // Flush with the artwork's corner, which is where web's
-                  // `left-2 top-2` puts it: that offset is measured from the
-                  // card, whose 8px padding is exactly where the image
-                  // starts. Dropping to the image's own corner instead of
-                  // insetting again is what closes the gap.
-                  left: 0,
-                  top: listing.isFeatured ? 36 : 0,
-                  child: _WishlistBadge(
-                    wishlisted: wishlisted,
-                    loading: _wishlistToggling,
-                    onTap: _wishlistToggling
-                        ? null
-                        : () => _toggleWishlist(wishlisted),
-                  ),
-                ),
-              ],
+                  // On the artwork, not under it, for the same reason
+                  // "Unggulan" above is: a grid cell is one height for every
+                  // tile in it, so a row that only *some* listings carry is a
+                  // row every listing pays for. As its own line this cost the
+                  // grid ~29pt per cell, and the tiles without it wore that as
+                  // white space under the seller. Here it costs nothing.
+                  if (listing.acceptsOffers)
+                    Positioned(
+                      left: 6,
+                      bottom: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          // Opaque, unlike the in-flow pill it replaces: it now
+                          // sits on artwork rather than on the card's surface,
+                          // and a 6%-alpha fill over a holographic Pokémon card
+                          // is not a background, it's a smudge.
+                          color: Theme.of(context).cardColor,
+                          border: Border.all(color: context.borderColor),
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                        child: Text(
+                          'dengan penawaran',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.badge(context.mutedForeground),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             // Row 1 — the card's name, on a line of its own.
@@ -225,97 +288,102 @@ class _ListingCardState extends ConsumerState<ListingCard> {
             ),
             const SizedBox(height: 4),
 
-            // Row 2 — where the card is from: language, expansion, number.
+            // Row 2 — where the print is from, and which side of the book
+            // it is on. The side badge is the one thing on this line that
+            // must never clip, so it takes its own width and the provenance
+            // beside it gives way instead.
             Row(
               children: [
-                CardLanguageBadge(language: listing.card.language),
-                const SizedBox(width: 4),
-                // _setSymbol(context, listing),
-                Flexible(
-                  child: Text(
-                    listing.card.expansionCode.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(context.mutedForeground),
+                Expanded(
+                  child: Row(
+                    children: [
+                      CardLanguageBadge(language: listing.card.language),
+                      const SizedBox(width: 4),
+                      // _setSymbol(context, listing),
+                      Flexible(
+                        child: Text(
+                          listing.card.expansionCode.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          listing.card.collectorNumber,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 4),
-                Flexible(
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isBid ? semantic.bid : semantic.ask,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  // "WTB"/"WTS", not "BID (WTB)". On a tile the reader is
+                  // scanning, not trading: the side is a label to recognise
+                  // at a glance, and the parenthetical was the half of it
+                  // that everyone actually reads.
                   child: Text(
-                    listing.card.collectorNumber,
+                    isBid ? 'WTB' : 'WTS',
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(context.mutedForeground),
+                    style: AppTypography.badge(Colors.white),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
 
-            // Row 3 — which side of the book, and how many.
+            // Row 3 — the price, with how much is on offer against it.
+            //
+            // The price is never clipped or ellipsised: a price the reader
+            // has to guess the end of is worse than no price. Where the row
+            // genuinely runs out of room it scales down instead, the way
+            // [CardPriceNote] does — every digit still there, just smaller.
+            // That matters most at the narrow end, where this size (a step up
+            // from the rest of the tile, because the price is what the tile
+            // is for) is widest.
             Row(
               children: [
                 Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isBid ? semantic.bid : semantic.ask,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                  flex: 3,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
                     child: Text(
-                      isBid ? 'BID (WTB)' : 'ASK (WTS)',
+                      formatRupiah(listing.price),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.badge(Colors.white),
+                      style: AppTypography.price(
+                        colors.onSurface,
+                      ).copyWith(fontSize: 19),
                     ),
                   ),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
+                  flex: 2,
                   child: Text(
                     '${listing.available} ${isBid ? "Dicari" : "Tersedia"}',
                     maxLines: 1,
+                    textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.caption(context.mutedForeground),
                   ),
                 ),
               ],
             ),
-            // Takes up whatever the grid cell has left over, so the price
-            // and seller strip sit on the tile's bottom edge instead of a
-            // gap sitting under them — the cells are a fixed aspect ratio
-            // and most tiles don't fill one.
-            const SizedBox(height: 6),
 
-            // Row 4 — the price.
-            Row(
-              children: [
-                Text(
-                  formatRupiah(listing.price),
-                  style: AppTypography.bodySemibold(colors.onSurface),
-                ),
-              ],
-            ),
-
-            if (listing.acceptsOffers) ...[
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: context.mutedForeground.withValues(alpha: 0.06),
-                  border: Border.all(color: context.borderColor),
-                  borderRadius: BorderRadius.circular(AppRadius.full),
-                ),
-                child: Text(
-                  'dengan penawaran',
-                  style: AppTypography.badge(context.mutedForeground),
-                ),
-              ),
-            ],
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
 
             if (widget.showSeller && listing.storeSlug.isNotEmpty) ...[
               Container(
@@ -353,39 +421,33 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                           ReputationStar(score: listing.sellerFeedbackScore),
                         ],
                       ),
-                      // The city sits under the name now rather than
-                      // standing in for it, so it reads as the detail it is.
-                      if (listing.cityName.isNotEmpty)
-                        Text(
-                          listing.cityName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption(context.mutedForeground),
+                      // The city sits under the name rather than standing in
+                      // for it, so it reads as the detail it is. The pin is
+                      // what makes it read as a place at a glance rather than
+                      // as a second line of the shop's name.
+                      if (listing.cityName.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              LucideIcons.mapPin,
+                              size: 11,
+                              color: context.mutedForeground,
+                            ),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(
+                                listing.cityName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.caption(
+                                  context.mutedForeground,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-
-                      // if (listing.cityName.isNotEmpty) ...[
-                      //   const SizedBox(height: 2),
-                      //   Row(
-                      //     children: [
-                      //       Icon(
-                      //         LucideIcons.mapPin,
-                      //         size: 11,
-                      //         color: context.mutedForeground,
-                      //       ),
-                      //       const SizedBox(width: 2),
-                      //       Expanded(
-                      //         child: Text(
-                      //           listing.cityName,
-                      //           maxLines: 1,
-                      //           overflow: TextOverflow.ellipsis,
-                      //           style: AppTypography.caption(
-                      //             context.mutedForeground,
-                      //           ),
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ],
+                      ],
                     ],
                   ),
                 ),

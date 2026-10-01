@@ -16,7 +16,6 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../account/presentation/widgets/address_form_sheet.dart';
 import '../../account/repository/models/address_model.dart';
 import '../../account/usecase/address_notifier.dart';
-import '../../wallet/usecase/wallet_notifier.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import '../usecase/cart_notifier.dart';
@@ -173,17 +172,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final externalId = result.externalId;
       // Read before anything mutates the cart: `selectedCartItemsProvider`
       // is derived from it, so it empties the moment the lines are removed.
-      final checkedOutItemIds = [
-        for (final item in ref.read(selectedCartItemsProvider)) item.cartItemId,
-      ];
+      final selected = ref.read(selectedCartItemsProvider);
+      final checkedOutItemIds = [for (final item in selected) item.cartItemId];
+      // Copies, not cart lines: one line at quantity three is three cards.
+      final checkedOutCardCount = selected.fold<int>(
+        0,
+        (sum, item) => sum + item.quantity,
+      );
+      // Totals derive from the same selection, so this has to be read here
+      // too — after the refresh below it prices an empty cart.
+      final paidFromSaldo = notifier.totals.grandTotalBeforeFee;
       final method = ref.read(checkoutProvider).paymentMethod;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
       // Paying from the wallet is settled by the time `submit` returns, so
-      // there's nothing to show and nothing to poll.
+      // there's nothing to show and nothing to poll — it goes straight to the
+      // thank-you screen rather than dropping the buyer into Pesanan with no
+      // confirmation that anything happened. `submit` has already revalidated
+      // the wallet and the order list; the saldo is spent.
       if (method == PaymentMethod.wallet) {
         await ref.read(cartProvider.notifier).refresh();
-        if (mounted) context.goHomeThen(Routes.orders);
+        if (mounted) {
+          context.goHomeThen(
+            Routes.checkoutSuccessFor(
+              cards: checkedOutCardCount,
+              total: paidFromSaldo,
+            ),
+          );
+        }
         return;
       }
 
@@ -316,11 +332,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final addresses = ref.watch(addressesProvider).valueOrNull ?? const [];
     final address = _syncAddress(addresses);
 
-    // Wallet payment is gated on the real balance, so keep it in sync.
-    ref.listen(walletBalanceProvider, (_, next) {
-      final balance = next.valueOrNull;
-      if (balance != null) notifier.setWalletBalance(balance);
-    });
+    // Wallet payment is gated on the real balance; `CheckoutNotifier` seeds
+    // and follows it now, because the notifier is what actually decides
+    // whether saldo can cover the total.
 
     final groups = _groupBySeller(items);
     final totals = notifier.totals;
@@ -437,10 +451,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     onCouponInputChanged: (value) =>
                         setState(() => _couponInput.text = value),
                     couponLoading: state.couponLoading,
+                    couponError: state.couponError,
+                    // Same three conditions web applies, in the same order.
                     couponApplyDisabled:
                         _couponInput.text.trim().isEmpty ||
                         state.paymentChannel == null ||
                         state.paymentMethod == PaymentMethod.wallet,
+                    // An empty box explains itself; the other two do not.
+                    couponDisabledHint:
+                        state.paymentMethod == PaymentMethod.wallet
+                        ? 'Kupon tidak berlaku untuk pembayaran dari saldo.'
+                        : state.paymentChannel == null
+                        ? 'Pilih metode pembayaran dulu untuk memakai kupon.'
+                        : null,
                     onApplyCoupon: () =>
                         notifier.applyCoupon(_couponInput.text),
                     onRemoveCoupon: notifier.removeCoupon,
@@ -449,13 +472,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     onCheckout: _pay,
                   ),
 
-                  if (state.couponError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      state.couponError!,
-                      style: AppTypography.caption(context.appColors.error),
-                    ),
-                  ],
+                  // The coupon's own error now sits under its field, where
+                  // the code that caused it is still on screen.
                   if (blockedReason != null) ...[
                     const SizedBox(height: 8),
                     Text(

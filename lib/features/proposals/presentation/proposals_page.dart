@@ -48,19 +48,7 @@ class _ProposalsPageState extends ConsumerState<ProposalsPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: TransparentAppBar(
-        actions: [
-          // Listing offers are a different object from proposals, and web
-          // keeps them elsewhere entirely — the seller's offers list and
-          // inside chat. The app has no chat-side offer UI, so this is the
-          // only way to reach them.
-          IconButton(
-            tooltip: 'Penawaran Saya',
-            icon: const Icon(LucideIcons.tag, size: 20),
-            onPressed: () => context.push(Routes.offers),
-          ),
-        ],
-      ),
+      appBar: TransparentAppBar(),
       body: AppBarOverlayBody(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -91,6 +79,49 @@ class _ProposalsPageState extends ConsumerState<ProposalsPage> {
   }
 }
 
+/// Ports the filter group in `card-feed-list.tsx`: one muted track with the
+/// options inside it, the active one raised onto the card colour.
+///
+/// A row of separate pills, which is what this was, makes each option look
+/// like its own control — a set of things you might turn on. A track makes
+/// them one control with one answer, which is what a filter is.
+class _FilterTrack extends StatelessWidget {
+  const _FilterTrack({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        // Full width, like the block-level `div` web draws it as. The
+        // options still start at the left inside it rather than being
+        // stretched to fill — a filter whose widths move as the counts
+        // change is harder to aim at than one that stays put.
+        width: double.infinity,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: context.appColors.secondary,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterChip extends StatelessWidget {
   const _FilterChip({
     required this.label,
@@ -105,23 +136,33 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final radius = BorderRadius.circular(AppRadius.md);
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
+      borderRadius: radius,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? colors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? colors.primary : context.borderColor,
-          ),
+          // `bg-card shadow-sm` for the one that's on; nothing at all for
+          // the rest, so the track shows through.
+          color: selected ? Theme.of(context).cardColor : Colors.transparent,
+          borderRadius: radius,
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
           style: selected
-              ? AppTypography.captionSemibold(colors.onPrimary)
+              ? AppTypography.captionSemibold(colors.onSurface)
               : AppTypography.caption(context.mutedForeground),
         ),
       ),
@@ -159,33 +200,37 @@ class _CardFeedTab extends ConsumerWidget {
 
         return Column(
           children: [
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  for (final option in ProposalFeedFilter.values)
-                    // Web drops a chip with nothing behind it; "Semua"
-                    // always stands so there is a way back.
-                    if (option == ProposalFeedFilter.all ||
-                        groups.any(option.matches)) ...[
-                      _FilterChip(
-                        label:
-                            '${option.label} '
-                            '(${groups.where(option.matches).length})',
-                        selected: filter == option,
-                        onTap: () =>
-                            ref
-                                    .read(proposalFeedFilterProvider.notifier)
-                                    .state =
-                                option,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                ],
+            // Web states the size of the feed above the filter, so the
+            // count on "Semua" has something to be a share of.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${groups.length} kartu dengan aktivitas',
+                  style: AppTypography.bodySm(context.mutedForeground),
+                ),
               ),
             ),
+            _FilterTrack(
+              children: [
+                for (final option in ProposalFeedFilter.values)
+                  // Web drops a chip with nothing behind it; "Semua"
+                  // always stands so there is a way back.
+                  if (option == ProposalFeedFilter.all ||
+                      groups.any(option.matches))
+                    _FilterChip(
+                      label:
+                          '${option.label} '
+                          '(${groups.where(option.matches).length})',
+                      selected: filter == option,
+                      onTap: () =>
+                          ref.read(proposalFeedFilterProvider.notifier).state =
+                              option,
+                    ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Expanded(
               child: visible.isEmpty
                   ? const EmptyState(

@@ -6,71 +6,252 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../seller/presentation/seller_store_profile_page.dart'
+    show SellerPickupCard;
+import '../../settings/presentation/settings_page.dart' show SettingsSection;
 import '../repository/models/address_model.dart';
 import '../usecase/address_notifier.dart';
 import 'widgets/address_form_sheet.dart';
 
-/// Ports `features/address`' address book (web's Pengaturan → Alamat tab):
-/// the buyer's saved delivery addresses, with the primary one pinned to the
-/// top and used as the default at checkout.
+/// Ports web's Pengaturan → Alamat tab: `SettingsAddressBook` over
+/// `SellerPickupCard`. Each is one `SettingsSection`-style card, the same
+/// `bg-secondary/30` panel the settings page uses, so the two pages read as
+/// one surface.
 class AddressesPage extends ConsumerWidget {
   const AddressesPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
     final addressesAsync = ref.watch(addressesProvider);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const TransparentAppBar(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showAddressFormSheet(context),
-        icon: const Icon(LucideIcons.plus, size: 18),
-        label: const Text('Tambah Alamat'),
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
-      ),
       body: AppBarOverlayBody(
-        child: addressesAsync.when(
-          data: (addresses) => ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-            children: [
-              Text('Alamat', style: AppTypography.h2(colors.onSurface)),
-              const SizedBox(height: 4),
-              Text(
-                'Alamat utama dipakai sebagai tujuan pengiriman default saat '
-                'checkout.',
-                style: AppTypography.bodySm(context.mutedForeground),
-              ),
-              const SizedBox(height: 18),
-              if (addresses.isEmpty)
-                const EmptyState(
-                  icon: LucideIcons.mapPin,
-                  title: 'Belum ada alamat tersimpan',
-                  description:
-                      'Tambahkan alamat pengiriman supaya checkout bisa '
-                      'langsung memakainya.',
-                )
-              else
-                for (final address in addresses)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _AddressCard(address: address),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            SettingsSection(
+              title: 'Alamat Pengiriman',
+              description:
+                  'Kelola alamat tujuan pengiriman pembelian kartu kamu.',
+              children: [
+                addressesAsync.when(
+                  data: (addresses) => _AddressBook(addresses: addresses),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   ),
-            ],
-          ),
-          loading: () => const PikachuLoader(),
-          error: (_, __) => const EmptyState(
-            icon: LucideIcons.circleAlert,
-            title: 'Gagal memuat alamat',
-          ),
+                  error: (_, __) => const EmptyState(
+                    icon: LucideIcons.circleAlert,
+                    title: 'Gagal memuat alamat',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const SellerPickupCard(),
+          ],
         ),
       ),
     );
   }
+}
+
+/// Ports `AddressList` in "manage" mode: a search box once there is enough
+/// to search, the dashed add button, then the rows.
+class _AddressBook extends StatefulWidget {
+  const _AddressBook({required this.addresses});
+
+  final List<AddressModel> addresses;
+
+  @override
+  State<_AddressBook> createState() => _AddressBookState();
+}
+
+class _AddressBookState extends State<_AddressBook> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<AddressModel> get _filtered {
+    final query = _search.text.trim().toLowerCase();
+    if (query.isEmpty) return widget.addresses;
+    return widget.addresses.where((a) {
+      return a.label.toLowerCase().contains(query) ||
+          a.contactName.toLowerCase().contains(query) ||
+          a.cityName.toLowerCase().contains(query) ||
+          a.district.toLowerCase().contains(query) ||
+          a.fullAddress.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final addresses = widget.addresses;
+    final filtered = _filtered;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Web only offers the search once there is a list worth filtering.
+        if (addresses.isNotEmpty) ...[
+          TextField(
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'Cari nama, kota, atau kecamatan',
+              prefixIcon: Icon(LucideIcons.search, size: 16),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _AddAddressButton(onTap: () => showAddressFormSheet(context)),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          _DashedPanel(
+            child: Text(
+              addresses.isEmpty
+                  ? 'Belum ada alamat tersimpan'
+                  : 'Tidak ada alamat cocok',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+          )
+        else
+          for (final address in filtered)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _AddressCard(address: address),
+            ),
+      ],
+    );
+  }
+}
+
+/// Web's `border-2 border-dashed border-primary/40 bg-primary/5` call to
+/// action. Flutter has no dashed border, so [_DashedBorderPainter] draws it.
+class _AddAddressButton extends StatelessWidget {
+  const _AddAddressButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return _DashedPanel(
+      color: colors.primary.withValues(alpha: 0.4),
+      fill: colors.primary.withValues(alpha: 0.05),
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(LucideIcons.plus, size: 16, color: colors.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Tambah Alamat Baru',
+            style: AppTypography.bodySmSemibold(colors.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A dashed-outline panel — the add button and the empty state both use it,
+/// as they do on the web.
+class _DashedPanel extends StatelessWidget {
+  const _DashedPanel({
+    required this.child,
+    this.color,
+    this.fill,
+    this.onTap,
+    this.padding = const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+  });
+
+  final Widget child;
+  final Color? color;
+  final Color? fill;
+  final VoidCallback? onTap;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadius.lg);
+    return CustomPaint(
+      painter: _DashedBorderPainter(
+        color: color ?? context.borderColor,
+        radius: AppRadius.lg,
+        fill: fill,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({
+    required this.color,
+    required this.radius,
+    this.fill,
+  });
+
+  final Color color;
+  final double radius;
+  final Color? fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+
+    final background = fill;
+    if (background != null) {
+      canvas.drawRRect(rect, Paint()..color = background);
+    }
+
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    // Walk the rounded rect, drawing 5px on and 4px off.
+    for (final metric in (Path()..addRRect(rect)).computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = (distance + 5).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, next), stroke);
+        distance = next + 4;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color || old.fill != fill || old.radius != radius;
 }
 
 class _AddressCard extends ConsumerStatefulWidget {

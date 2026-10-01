@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/router/routes.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/providers/card_ownership_controller.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -54,7 +57,14 @@ class CardMarketHeader extends ConsumerWidget {
                   fallback: fallbackAsync.valueOrNull,
                 ),
               const SizedBox(width: 8),
-              WishlistButton(cardId: card.id),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ShareCardButton(card: card),
+                  const SizedBox(width: 8),
+                  WishlistButton(cardId: card.id),
+                ],
+              ),
             ],
           ),
           // Inside the same box as the price: bidding or asking is a
@@ -134,6 +144,66 @@ class _Headline extends StatelessWidget {
     return Text(
       'Belum ada data harga',
       style: AppTypography.caption(context.mutedForeground),
+    );
+  }
+}
+
+/// Shares a link to this card, sitting beside the wishlist toggle.
+///
+/// Sends the web URL rather than a deep link: the recipient may not have the
+/// app, and `/expansions/{packSlug}/{cardId}` is the same route on both — so
+/// the link opens the page either way, and opens it *in* the app once the
+/// App Links association is live.
+class ShareCardButton extends StatelessWidget {
+  const ShareCardButton({super.key, required this.card});
+
+  final CardModel card;
+
+  /// Built the same way the store poster's share link is
+  /// (`store_share_sheet.dart`), so both point at the same host.
+  @visibleForTesting
+  String get url =>
+      '${AppConfig.appUrl}/expansions/${card.packSlug}/${card.id}';
+
+  Future<void> _share(BuildContext context) async {
+    // The number is part of the name a collector would recognise, so it
+    // travels with it rather than leaving a bare card name and a URL.
+    final label =
+        '${card.name} · ${card.expansionCode} '
+        '${card.collectorNumber}';
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: '$label\n$url', subject: label),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('Gagal membagikan kartu.')),
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Deliberately the same pill as [WishlistButton] beside it: the two read
+    // as one pair of actions rather than two unrelated controls.
+    return InkWell(
+      onTap: () => _share(context),
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.borderColor),
+          borderRadius: BorderRadius.circular(AppRadius.full),
+        ),
+        child: Icon(
+          LucideIcons.share2,
+          size: 14,
+          color: context.mutedForeground,
+        ),
+      ),
     );
   }
 }

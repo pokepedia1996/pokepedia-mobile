@@ -23,6 +23,8 @@ class OrderSummary extends StatefulWidget {
     required this.couponInput,
     required this.onCouponInputChanged,
     required this.couponLoading,
+    this.couponDisabledHint,
+    this.couponError,
     required this.couponApplyDisabled,
     required this.onApplyCoupon,
     required this.onRemoveCoupon,
@@ -41,6 +43,18 @@ class OrderSummary extends StatefulWidget {
   final String couponInput;
   final ValueChanged<String> onCouponInputChanged;
   final bool couponLoading;
+
+  /// What the server said about the code just tried. Rendered against the
+  /// field rather than at the foot of the card: it used to sit below the
+  /// "Bayar Sekarang" button, far enough from the box that it read as a
+  /// complaint about the order rather than about the code.
+  final String? couponError;
+
+  /// Why "Pakai" is greyed out, when the reason is not simply an empty box.
+  /// Web leaves this unexplained and gets away with it because its payment
+  /// picker sits beside the coupon; on a phone the two are screens apart, so
+  /// a dead button with a code typed into it reads as broken.
+  final String? couponDisabledHint;
   final bool couponApplyDisabled;
   final VoidCallback onApplyCoupon;
   final VoidCallback onRemoveCoupon;
@@ -196,6 +210,23 @@ class _OrderSummaryState extends State<OrderSummary> {
                 ),
               ],
             ),
+          if (widget.appliedCoupon == null && widget.couponError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              widget.couponError!,
+              style: AppTypography.caption(colors.error),
+            ),
+          ]
+          // Only when there is no error to show: two lines under one small
+          // field is noise, and the failure is the more urgent of the two.
+          else if (widget.appliedCoupon == null &&
+              widget.couponDisabledHint != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              widget.couponDisabledHint!,
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),

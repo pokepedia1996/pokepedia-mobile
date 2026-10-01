@@ -103,21 +103,34 @@ class CartRepository {
     final cardRows = results[0];
     final profileRows = results[1];
 
-    // Best-effort storefront enrichment (name/logo/city/verified badge) —
-    // `seller_profiles` may or may not be directly readable by a buyer under
-    // RLS (the web only ever reads it via the service role); fall back to
-    // the seller's public username if this comes back empty or errors.
-    var storeById = <String, Map<String, dynamic>>{};
+    // Storefront names, through `get_listings_by_ids` rather than off
+    // `seller_profiles` directly.
+    //
+    // `seller_profiles` is granted to `authenticated`, so a direct read does
+    // not error — it comes back *empty*, because the only SELECT policy on it
+    // is `seller_profiles_self_select` (`auth.uid() = user_id`). A buyer can
+    // read their own storefront and nobody else's, so every seller in the
+    // cart fell through to their username: "Zedss__" where the store page
+    // says "singlepoke.id".
+    //
+    // The RPC is `SECURITY DEFINER` and granted to `authenticated`, and it
+    // already returns the store name, slug and logo joined per listing —
+    // which is the same way the marketplace tiles and the store page get
+    // them. Web reads the table with `service_role` instead
+    // (`lib/cart/index.ts`); this is the app's equivalent.
+    // Keyed by listing id, which is what the RPC takes and returns — it
+    // carries no `user_id` column, and the listing already knows its seller.
+    var storeByListing = <int, Map<String, dynamic>>{};
     try {
-      final storeRows = await _client
-          .from('seller_profiles')
-          .select(
-            'user_id, store_name, store_slug, store_logo_url, city_name, is_verified',
-          )
-          .inFilter('user_id', sellerIds);
-      storeById = {for (final r in storeRows) r['user_id'] as String: r};
+      final rows =
+          await _client.rpc('get_listings_by_ids', params: {'p_ids': askIds})
+              as List;
+      storeByListing = {
+        for (final raw in rows.whereType<Map<String, dynamic>>())
+          if ((raw['id'] as num?)?.toInt() case final id?) id: raw,
+      };
     } catch (_) {
-      // Swallowed — falls back to username-based display below.
+      // Best effort: a failure here costs the shop name, not the cart.
     }
 
     final cardById = {
@@ -129,17 +142,21 @@ class CartRepository {
     for (final row in listingRows) {
       final card = cardById[row['card_id'] as int];
       if (card == null) continue;
+      final listingId = row['id'] as int;
       final sellerId = row['user_id'] as String;
       final profile = profileById[sellerId];
-      final store = storeById[sellerId];
-      final username = profile?['username'] as String? ?? 'Pengguna';
-      listingById[row['id'] as int] = ListingModel.fromRow(
+      final store = storeByListing[listingId];
+      listingById[listingId] = ListingModel.fromRow(
         row,
         card: card,
-        storeSlug: (store?['store_slug'] as String?) ?? username,
-        storeName: (store?['store_name'] as String?) ?? '@$username',
-        isVerified: (store?['is_verified'] as bool?) ?? false,
-        cityName: (store?['city_name'] as String?) ?? '',
+        storeSlug: store?['store_slug'] as String?,
+        storeName: store?['store_name'] as String?,
+        sellerUsername: profile?['username'] as String?,
+        // Neither is on the RPC, and the direct `seller_profiles` read they
+        // used to come from returned nothing for another seller anyway — so
+        // these were already false/blank here, not a regression.
+        isVerified: false,
+        cityName: '',
         sellerAvatarUrl: profile?['avatar_url'] as String?,
         storeLogoUrl: store?['store_logo_url'] as String?,
       );
@@ -195,9 +212,21 @@ class CartRepository {
   /// `apply_coupon` RPC the web's `/api/coupons/apply` wraps. This only
   /// validates and prices the discount — the coupon is actually redeemed
   /// server-side when the invoice is created.
+  /// [paymentChannel] is the Xendit channel code the buyer has picked. It is
+  /// required rather than optional, and not because the discount needs it:
+  /// `apply_coupon` is overloaded, and the 4-argument form differs from the
+  /// 5-argument one only by this parameter. Sending `p_gateway_fee` without
+  /// it matched both, and PostgREST refuses an ambiguous call —
+  /// "Could not choose the best candidate function between: ...". Naming the
+  /// channel picks the 5-argument overload outright, which is the same one
+  /// web's `/api/coupons/apply` reaches.
+  ///
+  /// The coupon button is gated on a channel being chosen, so there is always
+  /// one to send by the time this runs.
   Future<CouponResult> applyCoupon({
     required String code,
     required int itemsSubtotal,
+    required String? paymentChannel,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
@@ -210,11 +239,11 @@ class CartRepository {
           'p_code': code.trim().toUpperCase(),
           'p_user_id': userId,
           'p_items_subtotal': itemsSubtotal,
-          // The gateway fee depends on the payment channel, which is only
-          // chosen at the payment step — quote against zero so a
-          // fee-waiving coupon reads as "no discount yet" rather than a
-          // number that later changes.
-          'p_gateway_fee': 0,
+          // `p_gateway_fee` is deliberately not sent: the 5-argument overload
+          // defaults it, and the server derives the fee from the channel
+          // rather than trusting a number the client made up. Web omits it
+          // for the same reason.
+          'p_payment_channel': paymentChannel,
         },
       );
       return CouponResult.fromRpc(result as Map<String, dynamic>?);

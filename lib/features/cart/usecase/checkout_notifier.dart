@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import '../../account/repository/models/address_model.dart';
+import '../../orders/usecase/orders_notifier.dart';
+import '../../wallet/usecase/wallet_notifier.dart';
 import '../repository/checkout_gateway.dart';
 import '../repository/checkout_pricing.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import 'cart_notifier.dart';
 import 'cart_selection.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Per-seller shipping state. Ports `SellerShipping` from
 /// `features/checkout/types.ts`.
@@ -54,7 +57,9 @@ class CheckoutState {
     this.buyerNote = '',
     this.paymentMethod = PaymentMethod.xendit,
     this.paymentChannel,
-    this.walletBalance = 0,
+    this.walletBalance,
+    this.lastPaidChannel,
+    this.paymentTouched = false,
     this.sellerOrigins = const {},
     this.phoneVerified = true,
     this.contextLoading = true,
@@ -71,7 +76,21 @@ class CheckoutState {
   final String buyerNote;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
-  final int walletBalance;
+
+  /// Null until the wallet has answered. Distinct from zero on purpose:
+  /// an unknown balance must not read as an empty one, or saldo shows up
+  /// greyed out as "tidak cukup" for the moment before it loads.
+  final int? walletBalance;
+
+  /// The channel the buyer paid with last time, used to preselect a VA bank
+  /// rather than always landing them on the first one in the list. Null
+  /// until it has been read, and for a buyer who last paid from saldo.
+  final PaymentChannel? lastPaidChannel;
+
+  /// Whether the buyer has picked a payment method themselves. Auto-select
+  /// stops the moment they do — a choice that keeps being overwritten by a
+  /// changing total is worse than no default at all.
+  final bool paymentTouched;
 
   /// Where each seller ships from, keyed by seller id. Needed before a quote
   /// can be asked for, and only the server can read it.
@@ -100,6 +119,8 @@ class CheckoutState {
     PaymentMethod? paymentMethod,
     PaymentChannel? paymentChannel,
     int? walletBalance,
+    PaymentChannel? lastPaidChannel,
+    bool? paymentTouched,
     Map<String, SellerOrigin>? sellerOrigins,
     bool? phoneVerified,
     bool? contextLoading,
@@ -123,6 +144,8 @@ class CheckoutState {
           ? null
           : (paymentChannel ?? this.paymentChannel),
       walletBalance: walletBalance ?? this.walletBalance,
+      lastPaidChannel: lastPaidChannel ?? this.lastPaidChannel,
+      paymentTouched: paymentTouched ?? this.paymentTouched,
       sellerOrigins: sellerOrigins ?? this.sellerOrigins,
       phoneVerified: phoneVerified ?? this.phoneVerified,
       contextLoading: contextLoading ?? this.contextLoading,
@@ -138,12 +161,48 @@ class CheckoutState {
 /// insurance, coupon, note, payment choice, and the totals that follow from
 /// them. Ports `checkout-client.tsx` together with the `useShippingRates`,
 /// `useInsurance`, `usePayment` and `useCoupon` hooks it composes.
-class CheckoutNotifier extends Notifier<CheckoutState> {
+class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   @override
   CheckoutState build() {
     Future.microtask(loadContext);
-    return const CheckoutState();
+    Future.microtask(loadLastPaidChannel);
+
+    // Follow the wallet, and seed from it in case it is already resolved.
+    // `ref.listen` fires on change only, so on its own it never delivered a
+    // value that had settled before checkout opened — which is how the buyer
+    // reached this page with the default balance and saldo greyed out. The
+    // listen also keeps the autoDispose provider alive for as long as
+    // checkout is on screen.
+    //
+    // Seeded with `read` rather than `watch`: watching would rebuild the
+    // whole CheckoutState when the balance moves, discarding the address,
+    // courier and payment choices the buyer had already made.
+    ref.listen(walletBalanceProvider, (_, next) {
+      final balance = next.valueOrNull;
+      if (balance != null) setWalletBalance(balance);
+    });
+
+    // The rate debounce outlives the notifier otherwise. A buyer who picks an
+    // address and leaves checkout inside 400ms left a timer behind that woke
+    // up, called `_refreshAllRates`, and read `selectedCartItemsProvider` off
+    // a container that no longer exists — "Tried to read a provider from a
+    // ProviderContainer that was already disposed".
+    ref.onDispose(() {
+      _disposed = true;
+      _rateDebounce?.cancel();
+      _rateDebounce = null;
+    });
+    return CheckoutState(
+      walletBalance: ref.read(walletBalanceProvider).valueOrNull,
+    );
   }
+
+  /// Whether checkout has been left. `build` starts two microtasks and
+  /// `selectAddress` a 400ms timer, any of which can come back after the
+  /// buyer has popped the page — and reading `ref` then throws "Tried to read
+  /// a provider from a ProviderContainer that was already disposed". Every
+  /// continuation checks this before touching `ref` or `state`.
+  bool _disposed = false;
 
   List<CartItem> get _items => ref.read(selectedCartItemsProvider);
 
@@ -162,6 +221,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       );
 
   Future<void> loadContext() async {
+    if (_disposed) return;
     state = state.copyWith(contextLoading: true, clearContextError: true);
     final gateway = ref.read(checkoutGatewayProvider);
     try {
@@ -171,6 +231,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
         gateway.fetchContext(),
         gateway.fetchSellerOrigins(),
       ]);
+      if (_disposed) return;
       state = state.copyWith(
         contextLoading: false,
         phoneVerified: (results[0] as CheckoutContext).phoneVerified,
@@ -178,6 +239,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       );
       await _refreshAllRates();
     } on ApiException catch (e) {
+      if (_disposed) return;
       // Leaves `phoneVerified` alone: without the server we can't tell, and
       // blocking the buyer on an unknown is worse than letting the handoff
       // surface the real reason.
@@ -203,6 +265,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
 
   /// Ports `fetchRatesForSeller`.
   Future<void> fetchRatesForSeller(String sellerId) async {
+    if (_disposed) return;
     final destination = state.address;
     if (destination == null) return;
 
@@ -217,7 +280,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
         origins = await ref.read(checkoutGatewayProvider).fetchSellerOrigins();
         state = state.copyWith(sellerOrigins: origins);
       } on ApiException catch (e) {
-        _setShipping(sellerId, SellerShipping(error: e.message));
+        _setShipping(sellerId, SellerShipping(error: userFacingError(e)));
         return;
       }
     }
@@ -279,7 +342,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
       );
       _syncMandatoryInsurance(sellerId);
     } on ApiException catch (e) {
-      _setShipping(sellerId, SellerShipping(error: e.message));
+      _setShipping(sellerId, SellerShipping(error: userFacingError(e)));
     }
   }
 
@@ -303,7 +366,8 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     _syncChannel();
   }
 
-  /// Ports the two `usePayment` effects the picker was missing.
+  /// Ports the two `usePayment` effects the picker was missing, and the
+  /// default the app never had.
   ///
   /// The channel a buyer picked can stop being valid without them touching
   /// it: QRIS is capped at [qrisMaxIdr], and the total moves when a courier
@@ -312,12 +376,19 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
   /// that *is* allowed; the app kept the dead pick and let the buyer submit
   /// with it.
   ///
-  /// Only ever touches the channel — a buyer who chose Saldo stays on Saldo.
+  /// Until the buyer picks for themselves, this also *chooses* for them —
+  /// see [_autoSelectPayment]. After they pick, it only ever repairs a
+  /// channel the total has invalidated, and a buyer on Saldo stays there.
   void _syncChannel() {
-    if (state.paymentMethod == PaymentMethod.wallet) return;
-
     final total = totals.grandTotalBeforeFee;
     if (total <= 0) return;
+
+    if (!state.paymentTouched) {
+      _autoSelectPayment(total);
+      return;
+    }
+
+    if (state.paymentMethod == PaymentMethod.wallet) return;
 
     final channel = state.paymentChannel;
     if (channel != null && !isChannelAllowedForAmount(channel, total)) {
@@ -331,12 +402,54 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     }
   }
 
+  /// Applies [autoSelectPayment], which is where the rule itself lives.
+  void _autoSelectPayment(int total) {
+    final pick = autoSelectPayment(
+      grandTotalIdr: total,
+      // Unknown reads as nothing to spend, so auto-select never lands on
+      // saldo before the balance is in.
+      walletBalance: state.walletBalance ?? 0,
+      lastPaidChannel: state.lastPaidChannel,
+      holdsFeeWaiver: state.coupon?.waivesGatewayFee ?? false,
+    );
+
+    if (state.paymentMethod == pick.method &&
+        state.paymentChannel == pick.channel) {
+      return;
+    }
+    state = state.copyWith(
+      paymentMethod: pick.method,
+      paymentChannel: pick.channel,
+      clearChannel: pick.channel == null,
+    );
+  }
+
+  /// Reads what the buyer paid with last time. Failure is silent on purpose:
+  /// this only sharpens the default, and a checkout that can't load a
+  /// preference is not a checkout that should stop.
+  Future<void> loadLastPaidChannel() async {
+    // This runs on a microtask that can outlive a checkout the buyer backed
+    // out of, so the read itself has to be guarded, not just the write.
+    if (_disposed) return;
+    final gateway = ref.read(checkoutGatewayProvider);
+
+    try {
+      final channel = await gateway.fetchLastPaidChannel();
+      if (channel == null || _disposed) return;
+      state = state.copyWith(lastPaidChannel: channel);
+      _syncChannel();
+    } catch (_) {
+      // Keep the list's own default.
+    }
+  }
+
   void setBuyerNote(String note) => state = state.copyWith(buyerNote: note);
 
   void selectXendit(PaymentChannel channel) {
     state = state.copyWith(
       paymentMethod: PaymentMethod.xendit,
       paymentChannel: channel,
+      paymentTouched: true,
     );
     // Guards a pick made against a total that has since moved.
     _syncChannel();
@@ -346,14 +459,20 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     state = state.copyWith(
       paymentMethod: PaymentMethod.wallet,
       clearChannel: true,
+      paymentTouched: true,
       // A wallet payment charges no gateway fee, so a fee-waiver coupon has
       // nothing left to waive.
       clearCoupon: state.coupon?.waivesGatewayFee ?? false,
     );
   }
 
-  void setWalletBalance(int balance) =>
-      state = state.copyWith(walletBalance: balance);
+  void setWalletBalance(int balance) {
+    if (state.walletBalance == balance) return;
+    state = state.copyWith(walletBalance: balance);
+    // The balance lands after the first build, so the default can only be
+    // decided once it has.
+    _syncChannel();
+  }
 
   Future<void> applyCoupon(String code) async {
     final trimmed = code.trim();
@@ -361,7 +480,12 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
     state = state.copyWith(couponLoading: true, clearCouponError: true);
     final result = await ref
         .read(cartRepositoryProvider)
-        .applyCoupon(code: trimmed, itemsSubtotal: itemsSubtotal);
+        .applyCoupon(
+          code: trimmed,
+          itemsSubtotal: itemsSubtotal,
+          paymentChannel: state.paymentChannel?.code,
+        );
+    if (_disposed) return;
     state = state.copyWith(
       couponLoading: false,
       coupon: result.coupon,
@@ -419,9 +543,13 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
         state.paymentChannel == null) {
       return 'Pilih metode pembayaran.';
     }
-    if (state.paymentMethod == PaymentMethod.wallet &&
-        state.walletBalance < totals.grandTotalBeforeFee) {
-      return 'Saldo dompet tidak cukup.';
+    if (state.paymentMethod == PaymentMethod.wallet) {
+      final balance = state.walletBalance;
+      // Blocked either way, but only one of these is the buyer's problem.
+      if (balance == null) return 'Memuat saldo...';
+      if (balance < totals.grandTotalBeforeFee) {
+        return 'Saldo dompet tidak cukup.';
+      }
     }
     for (final sellerId in _itemsBySeller.keys) {
       if (state.shippingBySeller[sellerId]?.selected == null) {
@@ -453,7 +581,7 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
         );
       }
 
-      return await ref
+      final result = await ref
           .read(checkoutGatewayProvider)
           .submit(
             courierChoices: choices,
@@ -464,13 +592,29 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
             couponCode: state.coupon?.code,
             selectedCartItemIds: [for (final item in _items) item.cartItemId],
           );
+
+      // A saldo checkout is already settled server-side when this returns:
+      // `pay_checkout_with_wallet` debited the balance through `credit_wallet`
+      // and wrote the ledger row before responding. All three of these are
+      // plain FutureProviders that stay cached for the session, so without
+      // this the buyer reached Pesanan with the pre-checkout saldo, nothing
+      // in Riwayat, and an order list missing what they had just bought —
+      // the wallet page's pull-to-refresh was the only thing that cleared
+      // them. A card payment is still pending at this point and revalidates
+      // when its webhook lands, so it is deliberately left alone.
+      if (state.paymentMethod == PaymentMethod.wallet) {
+        ref.invalidate(walletBalanceProvider);
+        ref.invalidate(walletActivityProvider);
+        ref.invalidate(ordersProvider);
+      }
+      return result;
     } finally {
       state = state.copyWith(submitting: false);
     }
   }
 
   Future<void> _refreshAllRates() async {
-    if (state.address == null) return;
+    if (_disposed || state.address == null) return;
     await Future.wait([
       for (final sellerId in _itemsBySeller.keys) fetchRatesForSeller(sellerId),
     ]);
@@ -504,6 +648,16 @@ class CheckoutNotifier extends Notifier<CheckoutState> {
   }
 }
 
-final checkoutProvider = NotifierProvider<CheckoutNotifier, CheckoutState>(
-  CheckoutNotifier.new,
-);
+/// Auto-disposed on purpose: checkout is a page, not a session.
+///
+/// A kept-alive notifier survived leaving the page, so a second checkout
+/// reused the first one's state — and because `selectAddress` early-returns
+/// when the address hasn't changed, nothing ever asked for quotes against
+/// the new cart. `shippingBySeller` still held the previous seller's entry
+/// and had none for this one, which the picker renders as "0 layanan
+/// tersedia". Entering the page now always starts from a clean state and
+/// re-quotes every seller in it.
+final checkoutProvider =
+    NotifierProvider.autoDispose<CheckoutNotifier, CheckoutState>(
+      CheckoutNotifier.new,
+    );

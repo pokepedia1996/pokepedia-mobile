@@ -16,6 +16,10 @@ class PendingCheckout {
     required this.hasInvoice,
     this.invoiceUrl,
     this.totalAmount,
+    this.sellerId,
+    this.storeName,
+    this.sellerUsername,
+    this.sellerImageUrl,
   });
 
   /// Folds the RPC's per-line rows back into the checkout they belong to.
@@ -57,6 +61,76 @@ class PendingCheckout {
   /// gateway fee and any coupon.
   final int? totalAmount;
 
+  /// Who the cart is with. Carried on every snapshot line; a cart is locked to
+  /// one seller, so the first line's is the cart's.
+  final String? sellerId;
+
+  /// Storefront name, `@username` and avatar — the three the card's header
+  /// shows. Resolved by the repository rather than the snapshot, which stores
+  /// only the id. Null until then, and for a seller-side view that has no
+  /// business naming the buyer's counterparty.
+  final String? storeName;
+  final String? sellerUsername;
+  final String? sellerImageUrl;
+
+  /// The line under the store name, matching web's `resolveSellerDisplay`:
+  /// the handle, hidden when it would just repeat the name above it.
+  String? get sellerSecondaryName {
+    final username = sellerUsername;
+    if (username == null || username.isEmpty) return null;
+    // Compared against what the header actually prints, not against
+    // `storeName`: a seller with no storefront is already headlined by their
+    // handle, and repeating it underneath reads as two different sellers.
+    if (displayName.toLowerCase() == username.toLowerCase()) return null;
+    return '@$username';
+  }
+
+  /// What the header calls the shop: its storefront name, falling back to the
+  /// handle for a seller who never named one.
+  String get displayName => (storeName != null && storeName!.isNotEmpty)
+      ? storeName!
+      : (sellerUsername != null && sellerUsername!.isNotEmpty)
+      ? sellerUsername!
+      : 'Penjual';
+
+  PendingCheckout withSeller({
+    String? storeName,
+    String? sellerUsername,
+    String? sellerImageUrl,
+  }) => PendingCheckout(
+    cartId: cartId,
+    externalId: externalId,
+    buyerUsername: buyerUsername,
+    createdAt: createdAt,
+    expiresAt: expiresAt,
+    items: items,
+    hasInvoice: hasInvoice,
+    invoiceUrl: invoiceUrl,
+    totalAmount: totalAmount,
+    sellerId: sellerId,
+    storeName: storeName ?? this.storeName,
+    sellerUsername: sellerUsername ?? this.sellerUsername,
+    sellerImageUrl: sellerImageUrl ?? this.sellerImageUrl,
+  );
+
+  /// Replaces the lines with enriched copies — the card art the snapshot has
+  /// no room for.
+  PendingCheckout withItems(List<PendingCheckoutItem> next) => PendingCheckout(
+    cartId: cartId,
+    externalId: externalId,
+    buyerUsername: buyerUsername,
+    createdAt: createdAt,
+    expiresAt: expiresAt,
+    items: next,
+    hasInvoice: hasInvoice,
+    invoiceUrl: invoiceUrl,
+    totalAmount: totalAmount,
+    sellerId: sellerId,
+    storeName: storeName,
+    sellerUsername: sellerUsername,
+    sellerImageUrl: sellerImageUrl,
+  );
+
   /// The seller's number, not the buyer's: the RPC has no order number to
   /// give, and web labels these `CART-<id>`.
   String get reference => 'CART-$cartId';
@@ -90,6 +164,8 @@ class PendingCheckoutItem {
     this.condition,
     this.shippingCost = 0,
     this.courierService,
+    this.askOrderId,
+    this.sellerId,
   });
 
   factory PendingCheckoutItem.fromRow(Map<String, dynamic> row) {
@@ -117,6 +193,31 @@ class PendingCheckoutItem {
   final int quantity;
   final int shippingCost;
   final String? courierService;
+
+  /// `listings.id`. The snapshot stores this rather than the card, so it is
+  /// the only way back to the artwork.
+  final int? askOrderId;
+  final String? sellerId;
+
+  PendingCheckoutItem withCard({
+    String? cardName,
+    String? imageUrl,
+    String? expansionCode,
+    String? collectorNumber,
+  }) => PendingCheckoutItem(
+    cardId: cardId,
+    cardName: cardName ?? this.cardName,
+    expansionCode: expansionCode ?? this.expansionCode,
+    collectorNumber: collectorNumber ?? this.collectorNumber,
+    imageUrl: imageUrl ?? this.imageUrl,
+    condition: condition,
+    price: price,
+    quantity: quantity,
+    shippingCost: shippingCost,
+    courierService: courierService,
+    askOrderId: askOrderId,
+    sellerId: sellerId,
+  );
 }
 
 /// A checkout the *buyer* started and hasn't paid for.
@@ -148,6 +249,8 @@ PendingCheckout pendingCheckoutFromCart(Map<String, dynamic> row) {
         quantity: (entry['quantity'] as num?)?.toInt() ?? 1,
         shippingCost: (entry['shipping_cost'] as num?)?.toInt() ?? 0,
         courierService: entry['courier_service'] as String?,
+        askOrderId: (entry['ask_order_id'] as num?)?.toInt(),
+        sellerId: entry['seller_id'] as String?,
       ),
     );
   }
@@ -166,5 +269,6 @@ PendingCheckout pendingCheckoutFromCart(Map<String, dynamic> row) {
     items: items,
     invoiceUrl: row['invoice_url'] as String?,
     totalAmount: (row['total_amount'] as num?)?.toInt(),
+    sellerId: items.isEmpty ? null : items.first.sellerId,
   );
 }

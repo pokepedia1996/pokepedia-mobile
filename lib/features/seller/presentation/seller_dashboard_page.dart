@@ -12,10 +12,13 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
-import '../../orders/repository/models/seller_order.dart';
 import '../repository/models/seller_dashboard.dart';
 import '../repository/seller_repository.dart';
+import '../usecase/offers_notifier.dart';
+import '../usecase/seller_listings_notifier.dart';
 import '../usecase/seller_notifier.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
+import 'widgets/seller_header.dart';
 import 'widgets/daily_gmv_chart.dart';
 
 /// Ports `app/seller/page.tsx` — the seller's home: today's queue, the
@@ -32,10 +35,13 @@ class SellerDashboardPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).valueOrNull;
 
+    // No app bar. This is a tab, not a pushed page: there is nothing to go
+    // back to, and the bar's back arrow sat directly on top of the wordmark
+    // while `AppBarOverlayBody` pushed the whole dashboard down by its
+    // height. The page carries its own header instead.
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
-      body: AppBarOverlayBody(
+      body: SafeArea(
+        bottom: false,
         child: user == null
             ? EmptyState(
                 icon: LucideIcons.store,
@@ -87,11 +93,24 @@ class _NoStoreState extends StatelessWidget {
   }
 }
 
-class _DashboardScroll extends ConsumerWidget {
+class _DashboardScroll extends ConsumerStatefulWidget {
   const _DashboardScroll();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DashboardScroll> createState() => _DashboardScrollState();
+}
+
+class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.appColors;
     final async = ref.watch(sellerDashboardProvider);
     final identity =
@@ -107,73 +126,170 @@ class _DashboardScroll extends ConsumerWidget {
     final failed = async.hasError || async.valueOrNull == null;
     final displayName = identity.username ?? 'Penjual';
 
+    final counts = ref.watch(sellerListingCountsProvider).valueOrNull;
+    final drafts = ref.watch(sellerDraftsProvider).valueOrNull?.length ?? 0;
+    final offers = ref
+        .watch(offerCountsProvider)
+        .values
+        .fold<int>(0, (sum, c) => sum + c.needsResponse);
+    final kpi = payload.kpi;
+    final openOrders =
+        kpi.awaitingPayment + kpi.toShip + kpi.inTransit + kpi.arrived;
+
+    // What the seller has to *do*, in the order it costs them if ignored:
+    // an unshipped order is a clock already running, an offer is money
+    // waiting on an answer, a complaint is already someone else's move.
+    final tasks = <({String label, int count, bool urgent, String route})>[
+      (
+        label: 'Perlu dikirim',
+        count: kpi.toShip,
+        urgent: kpi.toShip > 0,
+        route: Routes.sellerOrdersFiltered('to_ship'),
+      ),
+      (
+        label: 'Ada penawaran masuk',
+        count: offers,
+        urgent: offers > 0,
+        // The listings with offers on them, filtered — not the whole list
+        // on whichever tab happened to be open last.
+        route: Routes.sellerProductsWithOffers(),
+      ),
+      (
+        label: 'Komplain terbuka',
+        count: kpi.disputesOpen,
+        urgent: kpi.disputesOpen > 0,
+        route: Routes.sellerOrdersFiltered('disputes'),
+      ),
+    ];
+
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(sellerDashboardProvider);
         ref.invalidate(sellerIdentityProvider);
+        ref.invalidate(sellerListingCountsProvider);
         await ref.read(sellerDashboardProvider.future);
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: EdgeInsets.only(
+          bottom: AppBottomNav.reservedSpace(context) + 16,
+        ),
         children: [
-          Text('Halo, $displayName', style: AppTypography.h2(colors.onSurface)),
-          const SizedBox(height: 2),
-          Text(
-            'Ringkasan aktivitas toko dan performa penjualan kamu.',
-            style: AppTypography.bodySm(context.mutedForeground),
-          ),
+          SellerHeader(controller: _search),
           const SizedBox(height: 12),
 
-          Row(
-            children: [
-              Expanded(child: _WalletPill(balance: payload.walletBalance)),
-              if (identity.storeHandle != null) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      context.push(Routes.storeDetail(identity.storeHandle!)),
-                  icon: const Icon(LucideIcons.externalLink, size: 14),
-                  label: const Text('Toko'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Halo, $displayName',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.h3(colors.onSurface),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.push(Routes.sellerStore),
+                  iconAlignment: IconAlignment.end,
+                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                  label: const Text('Atur Toko'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.mutedForeground,
+                    textStyle: AppTypography.bodySmSemibold(
+                      context.mutedForeground,
+                    ),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
 
           if (failed) ...[
             const SizedBox(height: 12),
-            _ErrorBanner(
-              onRetry: () => ref.invalidate(sellerDashboardProvider),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _ErrorBanner(
+                onRetry: () => ref.invalidate(sellerDashboardProvider),
+              ),
             ),
           ],
 
-          const SizedBox(height: 20),
-          Text(
-            'Penting hari ini',
-            style: AppTypography.bodySmSemibold(colors.onSurface),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: InkWell(
+              onTap: () => context.push(Routes.sellerPerformance),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: _RevenueBlock(summary: payload.summary),
+            ),
           ),
-          const SizedBox(height: 8),
-          _KpiStrip(kpi: payload.kpi),
 
-          const SizedBox(height: 20),
-          // Web puts these behind a nav bar across the top of every seller
-          // page; on a phone that bar would compete with the app's own
-          // chrome, so the same destinations live here as a section.
-          const _SellerTools(),
-
-          const SizedBox(height: 20),
-          _WindowSwitcher(
-            selected: window,
-            onSelect: (next) =>
-                ref.read(sellerWindowProvider.notifier).state = next,
+          const SizedBox(height: 14),
+          _StatStrip(
+            active: counts?.active,
+            orders: openOrders,
+            drafts: drafts,
+            inactive: counts?.inactive,
           ),
-          const SizedBox(height: 12),
 
-          _MetricGrid(performance: payload.performance),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Tugas \u00b7 ${tasks.length}',
+              style: AppTypography.bodySemibold(colors.onSurface),
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final task in tasks)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _TaskRow(
+                label: task.label,
+                count: task.count,
+                urgent: task.urgent,
+                onTap: () => context.push(task.route),
+              ),
+            ),
 
-          const SizedBox(height: 12),
-          _ChartCard(
-            performance: payload.performance,
-            summary: payload.summary,
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Divider(color: context.borderColor, height: 1),
+          ),
+          const SizedBox(height: 16),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Pembayaran',
+              style: AppTypography.bodySemibold(colors.onSurface),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _WalletPill(balance: payload.walletBalance),
+          ),
+
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ElevatedButton.icon(
+              onPressed: () => context.push(Routes.sellerProductsTab('draft')),
+              icon: const Icon(LucideIcons.plus, size: 16),
+              label: const Text('Tambahkan Listing'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.onSurface,
+                foregroundColor: Theme.of(context).cardColor,
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -181,6 +297,274 @@ class _DashboardScroll extends ConsumerWidget {
   }
 }
 
+/// "OMZET 30 HARI" and what it did — the one number a seller opens this
+/// page for.
+class _RevenueBlock extends StatelessWidget {
+  const _RevenueBlock({required this.summary});
+
+  final DashboardSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final up = summary.delta30 >= 0;
+    final tone = up ? context.appSemantic.success : colors.error;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'OMZET 30 HARI',
+              style: AppTypography.overline(context.mutedForeground),
+            ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message:
+                  'Nilai transaksi selesai dalam 30 hari terakhir, '
+                  'dibandingkan 30 hari sebelumnya.',
+              triggerMode: TooltipTriggerMode.tap,
+              child: Icon(
+                LucideIcons.info,
+                size: 13,
+                color: context.mutedForeground,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatRupiah(summary.last30),
+                  maxLines: 1,
+                  style: AppTypography.h2(colors.onSurface),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    up ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+                    size: 15,
+                    color: tone,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${up ? '+' : ''}${summary.delta30.toStringAsFixed(0)}%',
+                    style: AppTypography.bodySmSemibold(tone),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// AKTIF / PESANAN / DRAFT / INAKTIF. Scrolls sideways rather than squeezing
+/// four columns onto a phone, which is what the design does: the first two
+/// are the ones that matter daily and they stay in view.
+class _StatStrip extends StatelessWidget {
+  const _StatStrip({
+    required this.active,
+    required this.orders,
+    required this.drafts,
+    required this.inactive,
+  });
+
+  final int? active;
+  final int orders;
+  final int drafts;
+  final int? inactive;
+
+  @override
+  Widget build(BuildContext context) {
+    // Each tile opens the tab it counted. They all used to land on Kelola
+    // Listing as it was last left, so tapping "DRAFT" and arriving on Aktif
+    // read as the tap having gone somewhere else entirely.
+    final tiles = <({String label, int? value, String route})>[
+      (
+        label: 'AKTIF',
+        value: active,
+        route: Routes.sellerProductsTab('active'),
+      ),
+      (label: 'PESANAN', value: orders, route: Routes.sellerOrders),
+      (label: 'DRAFT', value: drafts, route: Routes.sellerProductsTab('draft')),
+      (
+        label: 'INAKTIF',
+        value: inactive,
+        route: Routes.sellerProductsTab('inactive'),
+      ),
+    ];
+
+    return SizedBox(
+      height: 66,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: tiles.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final tile = tiles[i];
+          return _StatTile(
+            label: tile.label,
+            value: tile.value,
+            onTap: () => context.push(tile.route),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+
+  /// Null while the count is still being fetched — shown as a dash rather
+  /// than a zero, which would read as "you have none" for as long as the
+  /// query takes.
+  final int? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: context.mutedForeground.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        // Both lines scale down rather than overflow: the tile is a fixed
+        // height in a horizontal strip, so it has nowhere to grow, and the
+        // label is a word whose length varies with translation.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: AppTypography.overline(context.mutedForeground),
+                ),
+              ),
+            ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value == null ? '-' : '$value',
+                  maxLines: 1,
+                  style: AppTypography.bodySemibold(
+                    context.appColors.onSurface,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One line of the Tugas list: what needs doing and how much of it.
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({
+    required this.label,
+    required this.count,
+    required this.urgent,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool urgent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySm(colors.onSurface),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              constraints: const BoxConstraints(minWidth: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                // Red only when there is something to do. A zero in the
+                // same red would train the seller to ignore the colour.
+                color: urgent
+                    ? colors.error
+                    : context.mutedForeground.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                '$count',
+                style: AppTypography.captionSemibold(
+                  urgent ? Colors.white : context.mutedForeground,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The wallet row under "Pembayaran".
+///
+/// No pill around it and no border: it is the only row in its section, and a
+/// card drawn around a single row is a box with nothing to separate it from.
+/// The section heading above already says what it is.
 class _WalletPill extends StatelessWidget {
   const _WalletPill({required this.balance});
 
@@ -189,28 +573,32 @@ class _WalletPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+
     return InkWell(
       onTap: () => context.push(Routes.wallet),
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: context.borderColor),
-        ),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
+            // A rounded square in the neutral fill, not a red circle. Red is
+            // the brand's alert colour and this is a balance, not a warning;
+            // the square matches the icon tiles in the bulk menu, which are
+            // the same kind of thing — a label for the row beside it.
             Container(
-              width: 30,
-              height: 30,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: colors.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                color: context.mutedForeground.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
-              child: Icon(LucideIcons.wallet, size: 16, color: colors.primary),
+              child: Icon(
+                LucideIcons.wallet,
+                size: 18,
+                color: colors.onSurface,
+              ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,16 +607,20 @@ class _WalletPill extends StatelessWidget {
                     'Saldo dompet',
                     style: AppTypography.caption(context.mutedForeground),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     formatRupiah(balance),
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySemibold(colors.onSurface),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             Icon(
-              LucideIcons.arrowRight,
-              size: 16,
+              LucideIcons.chevronRight,
+              size: 18,
               color: context.mutedForeground,
             ),
           ],
@@ -270,182 +662,50 @@ class _ErrorBanner extends StatelessWidget {
 
 /// Ports `KpiStrip` — the three counters worth acting on today, each one a
 /// link into the orders list filtered to what it counted, as on web.
-class _KpiStrip extends StatelessWidget {
-  const _KpiStrip({required this.kpi});
-
-  final DashboardKpi kpi;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Column(children: _rows(context)),
-    );
-  }
-
-  /// Only what actually needs doing, with a divider between what's left.
-  ///
-  /// A counter at zero is not news: three of them are three lines of nothing
-  /// at the top of the dashboard, and they bury the one line that does need
-  /// attention on the days there is one. The tones drop their zero branches
-  /// with them — a row only exists now when its count is above zero.
-  List<Widget> _rows(BuildContext context) {
-    final cells = <Widget>[
-      if (kpi.toShip > 0)
-        _KpiCell(
-          label: 'Perlu dikirim',
-          count: kpi.toShip,
-          icon: LucideIcons.package,
-          tone: _KpiTone.warning,
-          tab: SellerOrderTab.urgent,
-        ),
-      if (kpi.inTransit > 0)
-        _KpiCell(
-          label: 'Sedang dikirim',
-          count: kpi.inTransit,
-          icon: LucideIcons.truck,
-          tone: _KpiTone.neutral,
-          tab: SellerOrderTab.inTransit,
-        ),
-      if (kpi.disputesOpen > 0)
-        _KpiCell(
-          label: 'Komplain terbuka',
-          count: kpi.disputesOpen,
-          icon: LucideIcons.shieldAlert,
-          tone: _KpiTone.danger,
-          tab: SellerOrderTab.disputed,
-        ),
-    ];
-
-    // An empty bordered box would read as something failing to load, so the
-    // quiet day says so in words.
-    if (cells.isEmpty) return const [_KpiAllClear()];
-
-    return [
-      for (var i = 0; i < cells.length; i++) ...[
-        if (i > 0) Divider(height: 1, color: context.borderColor),
-        cells[i],
-      ],
-    ];
-  }
-}
-
-/// What "Penting hari ini" says when nothing is.
-class _KpiAllClear extends StatelessWidget {
-  const _KpiAllClear();
+/// The performance detail the dashboard's headline opens.
+///
+/// These charts used to sit on the dashboard itself, under everything else.
+/// The dashboard is a page about what to do next — what is selling, what
+/// needs shipping, what is owed — and a seller comparing thirty days to the
+/// previous thirty is asking a different question, at a different moment.
+/// Kept rather than dropped with the redesign: it is the only place the shop
+/// can be seen over time.
+class SellerPerformancePage extends ConsumerWidget {
+  const SellerPerformancePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Row(
-        children: [
-          Icon(
-            LucideIcons.circleCheck,
-            size: 18,
-            color: context.appSemantic.success,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Tidak ada yang perlu ditangani hari ini',
-              style: AppTypography.bodySm(context.mutedForeground),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(sellerDashboardProvider);
+    final window = ref.watch(sellerWindowProvider);
+    final payload = async.valueOrNull ?? DashboardPayload.empty(window.days);
+
+    return Scaffold(
+      appBar: const TransparentAppBar(title: Text('Performa')),
+      body: async.isLoading && !async.hasValue
+          ? const PikachuLoader()
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                _WindowSwitcher(
+                  selected: window,
+                  onSelect: (next) =>
+                      ref.read(sellerWindowProvider.notifier).state = next,
+                ),
+                const SizedBox(height: 12),
+                _MetricGrid(performance: payload.performance),
+                const SizedBox(height: 12),
+                _ChartCard(
+                  performance: payload.performance,
+                  summary: payload.summary,
+                ),
+                const SizedBox(height: 20),
+                const _SellerTools(),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-enum _KpiTone { neutral, warning, danger }
-
-class _KpiCell extends StatelessWidget {
-  const _KpiCell({
-    required this.label,
-    required this.count,
-    required this.icon,
-    required this.tone,
-    required this.tab,
-  });
-
-  final String label;
-  final int count;
-  final IconData icon;
-  final _KpiTone tone;
-
-  /// The orders tab this counter describes — tapping it opens that list.
-  final SellerOrderTab tab;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final active = count > 0;
-    final accent = switch (tone) {
-      _KpiTone.danger => colors.error,
-      _KpiTone.warning => context.appSemantic.gold,
-      _KpiTone.neutral => context.mutedForeground,
-    };
-
-    return InkWell(
-      onTap: () => context.push(Routes.sellerOrdersFiltered(tab.filterKey)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: active
-                    ? accent.withValues(alpha: 0.12)
-                    : colors.secondary,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Icon(
-                icon,
-                size: 17,
-                color: active ? accent : context.mutedForeground,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$count',
-                    style: AppTypography.bodySemibold(
-                      active && tone != _KpiTone.neutral
-                          ? accent
-                          : colors.onSurface,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: context.mutedForeground,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Ports `WINDOW_OPTIONS`' segmented control.
 class _WindowSwitcher extends StatelessWidget {
   const _WindowSwitcher({required this.selected, required this.onSelect});
 
@@ -707,6 +967,7 @@ class _SummaryRow extends StatelessWidget {
 
 /// The seller workspace's other sections — web's `SECTIONS` in
 /// `lib/seller/workspace-nav.ts`, minus Beranda, which is this page.
+
 class _SellerTools extends StatelessWidget {
   const _SellerTools();
 

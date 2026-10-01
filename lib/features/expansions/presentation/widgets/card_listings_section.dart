@@ -23,6 +23,7 @@ import '../../../proposals/presentation/widgets/make_offer_sheet.dart';
 import '../../../proposals/repository/models/listing_offer_model.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../usecase/expansions_notifier.dart';
+import '../../../../core/errors/user_message.dart';
 
 /// How many rows are shown before "Muat lebih banyak" — web paginates at
 /// the same size, but a phone reads better as one growing list.
@@ -302,7 +303,7 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
       if (!mounted) return;
       setState(() => _adding = false);
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.showSnackBar(SnackBar(content: Text(userFacingError(e))));
       return;
     }
     if (!mounted) return;

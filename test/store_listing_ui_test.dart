@@ -40,10 +40,7 @@ void main() {
           home: const Scaffold(
             body: Column(
               children: [
-                ConditionBadge(
-                  key: Key('plain'),
-                  condition: CardCondition.nm,
-                ),
+                ConditionBadge(key: Key('plain'), condition: CardCondition.nm),
                 ConditionBadge(
                   key: Key('tinted'),
                   condition: CardCondition.nm,
@@ -56,12 +53,14 @@ void main() {
       );
 
       BoxDecoration decorationOf(String key) =>
-          tester.widget<Container>(
-                find.descendant(
-                  of: find.byKey(Key(key)),
-                  matching: find.byType(Container),
-                ),
-              ).decoration!
+          tester
+                  .widget<Container>(
+                    find.descendant(
+                      of: find.byKey(Key(key)),
+                      matching: find.byType(Container),
+                    ),
+                  )
+                  .decoration!
               as BoxDecoration;
 
       // Over artwork the pill stays white; in the panel it carries the
@@ -147,9 +146,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
-          home: const Scaffold(
-            body: AppSearchField(hintText: 'Cari kartu...'),
-          ),
+          home: const Scaffold(body: AppSearchField(hintText: 'Cari kartu...')),
         ),
       );
 
@@ -166,10 +163,7 @@ void main() {
       // The shape the field is meant to have everywhere: a 40pt pill on the
       // muted fill, not the form decoration the rest of the app's inputs use.
       expect(box.constraints?.maxHeight, 40);
-      expect(
-        decoration.borderRadius,
-        BorderRadius.circular(AppRadius.full),
-      );
+      expect(decoration.borderRadius, BorderRadius.circular(AppRadius.full));
       expect(decoration.border, isNotNull);
     });
 
@@ -285,8 +279,10 @@ void main() {
 
     test('Dalam Proses and Dikirim take the tones web gives them', () {
       expect(describeMatchStatus('in_escrow').tone, InlinePillTone.progress);
-      expect(describeMatchStatus('awaiting_shipment').tone,
-          InlinePillTone.progress);
+      expect(
+        describeMatchStatus('awaiting_shipment').tone,
+        InlinePillTone.progress,
+      );
       expect(describeMatchStatus('shipped').tone, InlinePillTone.shipped);
       expect(describeMatchStatus('open').tone, InlinePillTone.info);
       expect(describeMatchStatus('refunded').tone, InlinePillTone.info);

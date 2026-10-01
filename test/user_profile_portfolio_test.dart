@@ -18,11 +18,9 @@ import 'package:pokepedia_mobile/shared/widgets/card_grid_item.dart';
 const _owner = AppUser(id: 'owner', email: 'owner@example.com');
 const _visitor = AppUser(id: 'visitor', email: 'visitor@example.com');
 
-PublicProfile _profile({bool isPublic = true}) => PublicProfile(
+PublicProfile _profile() => const PublicProfile(
   userId: 'owner',
   username: 'figaro89',
-  isCollectionPublic: isPublic,
-  showCollectionQuantity: true,
   contributionCount: 0,
 );
 
@@ -82,9 +80,12 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         authProvider.overrideWith(() => _FakeAuth(viewer)),
-        userProfileProvider(
+        userProfileProvider('figaro89').overrideWith((ref) async => _profile()),
+        // Visibility is a property of the collection now, not the account, so
+        // it arrives through its own provider rather than on the profile.
+        collectionVisibilityProvider(
           'figaro89',
-        ).overrideWith((ref) async => _profile(isPublic: isPublic)),
+        ).overrideWith((ref) async => isPublic),
         userCollectionProvider(
           'figaro89',
         ).overrideWith((ref) async => collection),

@@ -45,6 +45,9 @@ class BidProposalModel {
     required this.expiresAt,
     this.seenAt,
     this.message,
+    this.proposedPrice,
+    this.bidPrice,
+    this.photos = const [],
   });
 
   final String slug;
@@ -60,4 +63,22 @@ class BidProposalModel {
   final DateTime createdAt;
   final DateTime expiresAt;
   final String? message;
+
+  /// What the seller is asking for this copy.
+  final int? proposedPrice;
+
+  /// What the buyer's own bid offers — the number [proposedPrice] is being
+  /// judged against.
+  final int? bidPrice;
+
+  /// Photos of the actual copy. A proposal is an offer of one specific card,
+  /// and its condition is a word until you can see it.
+  final List<String> photos;
+
+  /// Whether the seller is asking more than the bid offers.
+  ///
+  /// At the bid price the seller has simply taken the offer; above it they
+  /// are countering, and the buyer never committed to that number.
+  bool get isAboveBid =>
+      proposedPrice != null && bidPrice != null && proposedPrice! > bidPrice!;
 }

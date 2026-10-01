@@ -102,9 +102,14 @@ final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((
   return ref.read(portfolioRepositoryProvider).fetchInventoryActivity(user.id);
 });
 
+/// What a card picker is asking for: the text, and optionally one catalog
+/// language to stay inside.
+typedef CardPickerQuery = ({String query, CardLanguage? language});
+
 /// Catalog search for the "Tambahkan" tab's card picker.
-final cardSearchPickerProvider = FutureProvider.family<List<CardModel>, String>(
-  (ref, query) {
-    return ref.read(portfolioRepositoryProvider).searchCardsPicker(query);
-  },
-);
+final cardSearchPickerProvider =
+    FutureProvider.family<List<CardModel>, CardPickerQuery>((ref, key) {
+      return ref
+          .read(portfolioRepositoryProvider)
+          .searchCardsPicker(key.query, language: key.language);
+    });

@@ -430,7 +430,10 @@ void main() {
       // `showDisabledCancel` — so the option reads as spent, not absent.
       final s = BuyerOrderStates(
         _order(
-          _row(settlementStatus: 'awaiting_shipment', shipmentStatus: 'shipped'),
+          _row(
+            settlementStatus: 'awaiting_shipment',
+            shipmentStatus: 'shipped',
+          ),
         ),
         now: _now,
       );

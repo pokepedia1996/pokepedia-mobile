@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_condition.dart';
+import '../../../shared/utils/seller_identity.dart';
 import 'models/trading_models.dart';
+import '../../../core/errors/user_message.dart';
 
 /// Writes to the order book. Ports `POST /api/listings` — which is itself a
 /// thin wrapper over the `place_order` RPC — straight onto Supabase, since
@@ -178,7 +180,7 @@ class TradingRepository {
         error: null,
       );
     } on PostgrestException catch (e) {
-      return (sentCount: 0, error: e.message);
+      return (sentCount: 0, error: userFacingError(e));
     }
   }
 
@@ -219,7 +221,7 @@ class TradingRepository {
       }
       return (proposalSlug: row['proposal_slug'] as String?, error: null);
     } on PostgrestException catch (e) {
-      return (proposalSlug: null, error: e.message);
+      return (proposalSlug: null, error: userFacingError(e));
     }
   }
 
@@ -348,8 +350,24 @@ class TradingRepository {
         .inFilter('user_id', sellerIds);
     final storeByUser = {for (final s in stores) s['user_id'] as String: s};
 
+    // Sellers without a storefront are named and linked by their username.
+    var usernameByUser = <String, String?>{};
+    try {
+      final profiles = await _client
+          .from('profiles')
+          .select('id, username')
+          .inFilter('id', sellerIds);
+      usernameByUser = {
+        for (final p in profiles) p['id'] as String: p['username'] as String?,
+      };
+    } catch (_) {
+      // Best effort — falls back to the storefront fields alone.
+    }
+
     return matches.map((row) {
-      final store = storeByUser[row['user_id'] as String];
+      final sellerId = row['user_id'] as String;
+      final store = storeByUser[sellerId];
+      final username = usernameByUser[sellerId];
       return MatchingAsk(
         slug: row['slug'] as String? ?? '',
         cardId: (row['card_id'] as num).toInt(),
@@ -357,8 +375,14 @@ class TradingRepository {
         condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
         available:
             (row['quantity'] as int? ?? 0) - (row['qty_locked'] as int? ?? 0),
-        storeSlug: store?['store_slug'] as String? ?? '',
-        storeName: store?['store_name'] as String? ?? 'Toko',
+        storeSlug: resolveSellerHandle(
+          storeSlug: store?['store_slug'] as String?,
+          username: username,
+        ),
+        storeName: resolveSellerName(
+          storeName: store?['store_name'] as String?,
+          username: username,
+        ),
       );
     }).toList();
   }

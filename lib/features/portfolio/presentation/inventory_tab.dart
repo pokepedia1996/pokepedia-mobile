@@ -13,7 +13,11 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import 'package:flutter/services.dart';
+import '../../../shared/utils/price_input_formatter.dart';
 import '../../../shared/widgets/card_art.dart';
+import '../../../shared/widgets/confirm_dialog.dart';
+import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
@@ -260,17 +264,14 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
                         style: AppTypography.bodySm(context.mutedForeground),
                       ),
                     )
-                  : ListView.separated(
+                  : ListView(
                       padding: EdgeInsets.fromLTRB(
                         16,
                         0,
                         16,
                         AppBottomNav.reservedSpace(context) + 12,
                       ),
-                      itemCount: visible.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) =>
-                          _InventoryGroupTile(group: visible[i]),
+                      children: [_RecordTable(groups: visible)],
                     ),
             ),
           ],
@@ -282,62 +283,236 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
   }
 }
 
-class _InventoryGroupTile extends StatelessWidget {
-  const _InventoryGroupTile({required this.group});
+/// The Database tab's table — what is actually held, a row per card.
+///
+/// Web's columns, minus the ones that would only ever repeat: every row here
+/// is a saved record, so "Status" says the same thing on all of them, and
+/// the sort/pagination controls belong to a screen with a mouse.
+class _RecordTable extends StatelessWidget {
+  const _RecordTable({required this.groups});
 
-  final _InventoryGroup group;
+  final List<_InventoryGroup> groups;
+
+  static const _headers = <({String label, double width})>[
+    (label: 'Gambar', width: 64),
+    (label: 'Nama Kartu', width: 140),
+    (label: 'Ekspansi', width: 84),
+    (label: 'Nomor', width: 88),
+    (label: 'Kelangkaan', width: 104),
+    (label: 'Jumlah', width: 64),
+    (label: 'Harga Satuan', width: 104),
+    (label: 'Harga Total', width: 108),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: CardArt(
-              imageUrl: group.card.imageUrl,
-              borderRadius: AppRadius.sm,
+
+    return _TableFrame(
+      headers: _headers,
+      rows: [
+        for (final group in groups)
+          [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.xs),
+              child: SizedBox(
+                width: 44,
+                height: 32,
+                child: CardArt(
+                  imageUrl: group.card.imageUrl,
+                  aspectRatio: 44 / 32,
+                  alignment: const Alignment(0, -0.55),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
+            Row(
+              children: [
+                CardLanguageBadge(language: group.card.language, size: 13),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    group.card.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySm(colors.onSurface),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              group.card.expansionCode.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              group.card.collectorNumber,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              group.card.rarity ?? '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+            Text(
+              '${group.totalQty}',
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+            Text(
+              // The average of what the copies cost, which is what a
+              // grouped row can honestly say about a unit price.
+              formatRupiah(group.avgPrice),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              formatRupiah(group.totalValue),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+          ],
+      ],
+    );
+  }
+}
+
+/// The Aktivitas tab's table — ports `features/inventory/components/
+/// activity-table.tsx`, in its column order: when, what, and to which card.
+class _ActivityTable extends StatelessWidget {
+  const _ActivityTable({required this.rows});
+
+  final List<InventoryActivityEntry> rows;
+
+  static const _headers = <({String label, double width})>[
+    (label: 'Tanggal', width: 104),
+    (label: 'Aksi', width: 104),
+    (label: 'Jumlah', width: 64),
+    (label: 'Nama Kartu', width: 140),
+    (label: 'Ekspansi', width: 84),
+    (label: 'Nomor', width: 88),
+    (label: 'Kelangkaan', width: 104),
+    (label: 'Harga Satuan', width: 104),
+    (label: 'Harga Total', width: 108),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    return _TableFrame(
+      headers: _headers,
+      rows: [
+        for (final row in rows)
+          [
+            // Web prints the date and the clock together; stacked, because a
+            // phone column has the height to spare and not the width.
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  group.card.name,
+                  formatShortDateId(row.createdAt),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                  style: AppTypography.bodySm(colors.onSurface),
                 ),
                 Text(
-                  '${group.card.collectorNumber} · ×${group.totalQty}',
+                  formatClockId(row.createdAt),
                   style: AppTypography.caption(context.mutedForeground),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                formatRupiah(group.totalValue),
-                style: AppTypography.bodySmSemibold(colors.onSurface),
-              ),
-              Text(
-                'Rata-rata ${formatRupiah(group.avgPrice)}',
-                style: AppTypography.caption(context.mutedForeground),
-              ),
-            ],
-          ),
-        ],
+            _ActionPill(action: row.action),
+            Text(
+              '${row.quantity}',
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+            Row(
+              children: [
+                CardLanguageBadge(language: row.card.language, size: 13),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    row.card.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySm(colors.onSurface),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              row.card.expansionCode.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              row.card.collectorNumber,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              row.card.rarity ?? '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+            Text(
+              formatRupiah(row.unitPrice),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(colors.onSurface),
+            ),
+            Text(
+              formatRupiah(row.unitPrice * row.quantity),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+          ],
+      ],
+    );
+  }
+}
+
+/// What happened, as a tinted word rather than an icon in a column of them.
+class _ActionPill extends StatelessWidget {
+  const _ActionPill({required this.action});
+
+  final InventoryActivityAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, tint) = switch (action) {
+      InventoryActivityAction.addedIn => (
+        'Ditambahkan',
+        context.appSemantic.success,
+      ),
+      InventoryActivityAction.removedOut => (
+        'Dihapus',
+        context.appColors.error,
+      ),
+      InventoryActivityAction.updated => (
+        'Diperbarui',
+        context.mutedForeground,
+      ),
+    };
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(AppRadius.full),
+        ),
+        child: Text(label, style: AppTypography.badge(tint)),
       ),
     );
   }
@@ -401,6 +576,33 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     );
   }
 
+  /// Clears the staging table. Confirmed first: it is the one button here
+  /// that throws work away.
+  Future<void> _deleteAll(List<InventoryEntry> drafts) async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+
+    await showConfirmDialog(
+      context,
+      title: 'Hapus semua?',
+      description:
+          '${drafts.length} draft akan dibuang. Kartu yang sudah disimpan '
+          'ke inventori tidak terpengaruh.',
+      confirmLabel: 'Hapus',
+      loadingLabel: 'Menghapus...',
+      onConfirm: () async {
+        final repository = ref.read(portfolioRepositoryProvider);
+        for (final draft in drafts) {
+          await repository.deleteDraftRecord(
+            userId: user.id,
+            recordId: draft.id,
+          );
+        }
+        ref.invalidate(inventoryDraftsProvider);
+      },
+    );
+  }
+
   Future<void> _saveAll(List<InventoryEntry> drafts) async {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
@@ -432,7 +634,9 @@ class _AddSectionState extends ConsumerState<_AddSection> {
     final draftsAsync = ref.watch(inventoryDraftsProvider);
     final showResults = _debouncedQuery.trim().length >= 2;
     final resultsAsync = showResults
-        ? ref.watch(cardSearchPickerProvider(_debouncedQuery))
+        ? ref.watch(
+            cardSearchPickerProvider((query: _debouncedQuery, language: null)),
+          )
         : null;
 
     return ListView(
@@ -456,11 +660,37 @@ class _AddSectionState extends ConsumerState<_AddSection> {
                   ),
                 );
               }
-              return Column(
-                children: [
-                  for (final c in results)
-                    _SearchResultTile(card: c, onTap: () => _openAddSheet(c)),
-                ],
+              // A rail, not a list: results are pictures, and a card is
+              // recognised by its art long before its name is read. Web
+              // scrolls these sideways for the same reason — a column of
+              // thumbnails pushes the drafts table off the screen.
+              final drafted = <int, int>{};
+              final staged =
+                  draftsAsync.valueOrNull ?? const <InventoryEntry>[];
+              for (final draft in staged) {
+                drafted.update(
+                  draft.card.id,
+                  (n) => n + draft.quantity,
+                  ifAbsent: () => draft.quantity,
+                );
+              }
+
+              return SizedBox(
+                height: _AddResultCard.railHeight,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  // Off the page's own padding, so the first card starts at
+                  // the margin and the last can scroll clear of it.
+                  padding: EdgeInsets.zero,
+                  clipBehavior: Clip.none,
+                  itemCount: results.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, i) => _AddResultCard(
+                    card: results[i],
+                    drafted: drafted[results[i].id] ?? 0,
+                    onTap: () => _openAddSheet(results[i]),
+                  ),
+                ),
               );
             },
             loading: () => const Padding(
@@ -477,24 +707,11 @@ class _AddSectionState extends ConsumerState<_AddSection> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Draft belum disimpan (${drafts.length})',
-                        style: AppTypography.bodySmSemibold(
-                          context.appColors.onSurface,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _saveAll(drafts),
-                      child: const Text('Simpan Semua'),
-                    ),
-                  ],
+                _DraftTable(
+                  drafts: drafts,
+                  onSaveAll: () => _saveAll(drafts),
+                  onDeleteAll: () => _deleteAll(drafts),
                 ),
-                const SizedBox(height: 8),
-                for (final d in drafts) _DraftTile(entry: d),
               ],
             );
           },
@@ -506,54 +723,92 @@ class _AddSectionState extends ConsumerState<_AddSection> {
   }
 }
 
-class _SearchResultTile extends StatelessWidget {
-  const _SearchResultTile({required this.card, required this.onTap});
+/// Ports `AddCardItem` — one result in the rail: the artwork, what it is
+/// under it, and a badge for however many are already staged as drafts.
+class _AddResultCard extends StatelessWidget {
+  const _AddResultCard({
+    required this.card,
+    required this.drafted,
+    required this.onTap,
+  });
+
+  /// `w-36` on the web.
+  static const width = 140.0;
+
+  /// Artwork at 245:342, plus the gap and the two lines under it. Measured
+  /// in `inventory_add_rail_test`, which fails if the tile outgrows it.
+  static const railHeight = width * 342 / 245 + 48;
 
   final CardModel card;
+
+  /// Copies already staged for this card, which web badges in the corner.
+  final int drafted;
+
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: context.borderColor),
-        ),
-        child: Row(
+
+    return SizedBox(
+      width: width,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 40,
-              child: CardArt(
-                imageUrl: card.imageUrl,
-                borderRadius: AppRadius.sm,
-              ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: CardArt(imageUrl: card.imageUrl),
+                ),
+                if (drafted > 0)
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$drafted',
+                        style: AppTypography.captionSemibold(colors.onPrimary),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CardLanguageBadge(language: card.language, size: 13),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
                     card.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                    style: AppTypography.caption(colors.onSurface),
                   ),
-                  Text(
-                    '${card.collectorNumber} · ${card.expansionCode}',
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Icon(LucideIcons.circlePlus, color: colors.primary),
+            Text(
+              '${card.collectorNumber} · ${card.expansionCode}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.badge(
+                context.mutedForeground,
+              ).copyWith(fontWeight: FontWeight.w400),
+            ),
           ],
         ),
       ),
@@ -561,138 +816,625 @@ class _SearchResultTile extends StatelessWidget {
   }
 }
 
-class _DraftTile extends ConsumerWidget {
-  const _DraftTile({required this.entry});
+/// The frame every inventory table shares: a header band, fixed column
+/// widths, and one sideways scroll over the lot.
+///
+/// Ports the shape of the tables in `app/portfolio/inventory/page.tsx`,
+/// which are the same table three times over — the tab decides what the
+/// columns are, not how they are drawn.
+class _TableFrame extends StatelessWidget {
+  const _TableFrame({required this.headers, required this.rows});
+
+  final List<({String label, double width})> headers;
+
+  /// One list of cells per row, in the headers' order.
+  final List<List<Widget>> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = headers.fold<double>(0, (sum, h) => sum + h.width);
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: context.appColors.secondary,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    for (final header in headers)
+                      SizedBox(
+                        width: header.width,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            header.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.captionSemibold(
+                              context.mutedForeground,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              for (final row in rows)
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: context.borderColor)),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < row.length; i++)
+                        SizedBox(
+                          width: headers[i].width,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: row[i],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A column of the draft table. Web keeps the same set and lets each one be
+/// hidden — the narrow ones carry facts you only need while you are checking
+/// a batch, and on a phone they are what makes the table a scroll.
+enum _DraftColumn {
+  status('Status', 78),
+  image('Gambar', 64),
+  name('Nama Kartu', 130),
+  expansion('Ekspansi', 84),
+  number('Nomor', 88),
+  rarity('Kelangkaan', 104),
+  quantity('Jumlah', 116),
+  unitPrice('Harga Satuan', 96),
+  totalPrice('Harga Total', 104),
+  notes('Catatan', 150),
+  actions('', 90);
+
+  const _DraftColumn(this.label, this.width);
+
+  final String label;
+  final double width;
+
+  /// The two that are the point of the table: what you are saving, and the
+  /// buttons that save it.
+  bool get canHide => this != _DraftColumn.name && this != _DraftColumn.actions;
+}
+
+/// The staging table, in web's shape: one row per draft, the columns fixed
+/// and the whole thing scrolling sideways.
+///
+/// A table rather than the stacked cards this used to be — the point of the
+/// draft stage is comparing what you're about to save, and quantities and
+/// prices only compare when they line up in columns.
+class _DraftTable extends StatefulWidget {
+  const _DraftTable({
+    required this.drafts,
+    required this.onSaveAll,
+    required this.onDeleteAll,
+  });
+
+  final List<InventoryEntry> drafts;
+  final VoidCallback onSaveAll;
+  final VoidCallback onDeleteAll;
+
+  @override
+  State<_DraftTable> createState() => _DraftTableState();
+}
+
+class _DraftTableState extends State<_DraftTable> {
+  /// Held here rather than on the server: web persists a column config per
+  /// user, which is worth having when you keep a spreadsheet open all day.
+  /// A phone session is a batch, and a batch is over before a preference
+  /// would pay for itself.
+  final _hidden = <_DraftColumn>{};
+
+  List<_DraftColumn> get _visible => [
+    for (final column in _DraftColumn.values)
+      if (!_hidden.contains(column)) column,
+  ];
+
+  double get _tableWidth => _visible.fold<double>(0, (sum, c) => sum + c.width);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Web's trio above the table: the destructive one outlined, the one
+        // you came to press filled, and the columns behind an icon.
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: widget.onDeleteAll,
+                icon: const Icon(LucideIcons.trash2, size: 15),
+                label: const Text('Hapus Semua'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: context.appColors.error,
+                  side: BorderSide(
+                    color: context.appColors.error.withValues(alpha: 0.4),
+                  ),
+                  minimumSize: const Size.fromHeight(40),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: widget.onSaveAll,
+                icon: const Icon(LucideIcons.check, size: 15),
+                label: const Text('Simpan Semua'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appSemantic.success,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(40),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _ColumnMenu(
+              hidden: _hidden,
+              onToggle: (column) => setState(() {
+                if (!_hidden.remove(column)) _hidden.add(column);
+              }),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: context.borderColor),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: _tableWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    color: context.appColors.secondary,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      children: [
+                        for (final column in _visible)
+                          SizedBox(
+                            width: column.width,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Text(
+                                column.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.captionSemibold(
+                                  context.mutedForeground,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  for (final draft in widget.drafts)
+                    _DraftRow(entry: draft, columns: _visible),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The icon beside the bulk actions: which columns the table shows.
+class _ColumnMenu extends StatelessWidget {
+  const _ColumnMenu({required this.hidden, required this.onToggle});
+
+  final Set<_DraftColumn> hidden;
+  final ValueChanged<_DraftColumn> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_DraftColumn>(
+      tooltip: 'Atur kolom',
+      position: PopupMenuPosition.under,
+      onSelected: onToggle,
+      itemBuilder: (context) => [
+        for (final column in _DraftColumn.values)
+          if (column.canHide)
+            PopupMenuItem(
+              value: column,
+              child: Row(
+                children: [
+                  Icon(
+                    hidden.contains(column)
+                        ? LucideIcons.square
+                        : LucideIcons.squareCheck,
+                    size: 16,
+                    color: hidden.contains(column)
+                        ? context.mutedForeground
+                        : context.appColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    column.label,
+                    style: AppTypography.bodySm(context.appColors.onSurface),
+                  ),
+                ],
+              ),
+            ),
+      ],
+      child: Container(
+        width: 44,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Icon(
+          LucideIcons.settings2,
+          size: 18,
+          color: context.mutedForeground,
+        ),
+      ),
+    );
+  }
+}
+
+/// One draft, editable in place: how many, what each cost, and a note.
+class _DraftRow extends ConsumerStatefulWidget {
+  const _DraftRow({required this.entry, required this.columns});
 
   final InventoryEntry entry;
 
+  /// Only the columns the table is showing, in order.
+  final List<_DraftColumn> columns;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DraftRow> createState() => _DraftRowState();
+}
+
+class _DraftRowState extends ConsumerState<_DraftRow> {
+  late final TextEditingController _price = TextEditingController(
+    text: widget.entry.unitPrice == 0
+        ? ''
+        : formatCountId(widget.entry.unitPrice),
+  );
+  late final TextEditingController _notes = TextEditingController(
+    text: widget.entry.notes ?? '',
+  );
+  late int _quantity = widget.entry.quantity;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  int get _priceValue =>
+      int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
+
+  /// Writes the row as it stands. Called when a field is done being edited
+  /// rather than on every keystroke — a draft is a scratch pad, and saving
+  /// each character would be a write per digit.
+  Future<void> _commit() async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+    await ref
+        .read(portfolioRepositoryProvider)
+        .updateDraftRecord(
+          userId: user.id,
+          recordId: widget.entry.id,
+          quantity: _quantity,
+          unitPrice: _priceValue,
+          notes: _notes.text.trim(),
+        );
+    ref.invalidate(inventoryDraftsProvider);
+  }
+
+  Future<void> _confirm() async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+    setState(() => _busy = true);
+    // Whatever is on screen is what gets saved, including an edit still in
+    // the field.
+    await _commit();
+    final error = await ref
+        .read(cardOwnershipControllerProvider)
+        .confirmInventoryDraft(
+          userId: user.id,
+          recordId: widget.entry.id,
+          cardId: widget.entry.card.id,
+          quantity: _quantity,
+          unitPrice: _priceValue,
+        );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(error), persist: false));
+    }
+  }
+
+  Future<void> _delete() async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+    setState(() => _busy = true);
+    await ref
+        .read(portfolioRepositoryProvider)
+        .deleteDraftRecord(userId: user.id, recordId: widget.entry.id);
+    ref.invalidate(inventoryDraftsProvider);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.appColors;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: context.borderColor),
+    final card = widget.entry.card;
+    final total = _priceValue * _quantity;
+
+    Widget cell(_DraftColumn column) => SizedBox(
+      width: column.width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: _cellFor(column, card: card, total: total, colors: colors),
       ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.borderColor)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        children: [
-          SizedBox(
-            width: 40,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [for (final column in widget.columns) cell(column)],
+      ),
+    );
+  }
+
+  Widget _cellFor(
+    _DraftColumn column, {
+    required CardModel card,
+    required int total,
+    required ColorScheme colors,
+  }) {
+    switch (column) {
+      case _DraftColumn.status:
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: context.appSemantic.condMp.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            child: Text(
+              'Draft',
+              style: AppTypography.badge(context.appSemantic.condMp),
+            ),
+          ),
+        );
+
+      case _DraftColumn.image:
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.xs),
+          child: SizedBox(
+            width: 44,
+            height: 32,
+            // The artwork, cropped the way the seller table crops it.
             child: CardArt(
-              imageUrl: entry.card.imageUrl,
-              borderRadius: AppRadius.sm,
+              imageUrl: card.imageUrl,
+              aspectRatio: 44 / 32,
+              alignment: const Alignment(0, -0.55),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
-                ),
-                Text(
-                  '×${entry.quantity} · ${formatRupiah(entry.unitPrice)}',
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-              ],
+        );
+
+      case _DraftColumn.name:
+        return Row(
+          children: [
+            CardLanguageBadge(language: card.language, size: 13),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                card.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySm(colors.primary),
+              ),
             ),
+          ],
+        );
+
+      case _DraftColumn.expansion:
+        return Text(
+          card.expansionCode.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.bodySm(colors.onSurface),
+        );
+
+      case _DraftColumn.number:
+        return Text(
+          card.collectorNumber,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.bodySm(colors.onSurface),
+        );
+
+      case _DraftColumn.rarity:
+        return Text(
+          card.rarity ?? '—',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.bodySm(context.mutedForeground),
+        );
+
+      case _DraftColumn.quantity:
+        return QuantitySelector(
+          value: _quantity,
+          min: 1,
+          size: QuantitySelectorSize.sm,
+          enabled: !_busy,
+          onChanged: (value) {
+            setState(() => _quantity = value);
+            _commit();
+          },
+        );
+
+      case _DraftColumn.unitPrice:
+        return TextField(
+          controller: _price,
+          keyboardType: TextInputType.number,
+          enabled: !_busy,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            const PriceInputFormatter(),
+          ],
+          onChanged: (_) => setState(() {}),
+          onEditingComplete: _commit,
+          onTapOutside: (_) => _commit(),
+          style: AppTypography.caption(colors.onSurface),
+          decoration: const InputDecoration(
+            prefixText: 'Rp ',
+            hintText: '0',
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.pencil, size: 18),
-            onPressed: () async {
-              final result =
-                  await showModalBottomSheet<({int quantity, int unitPrice})>(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (context) => _AddDraftSheet(
-                      card: entry.card,
-                      initialQuantity: entry.quantity,
-                      initialUnitPrice: entry.unitPrice,
-                    ),
-                  );
-              if (result == null) return;
-              final user = ref.read(authProvider).valueOrNull;
-              if (user == null) return;
-              await ref
-                  .read(portfolioRepositoryProvider)
-                  .updateDraftRecord(
-                    userId: user.id,
-                    recordId: entry.id,
-                    quantity: result.quantity,
-                    unitPrice: result.unitPrice,
-                  );
-              ref.invalidate(inventoryDraftsProvider);
-            },
+        );
+
+      case _DraftColumn.totalPrice:
+        return Text(
+          // "–" until there is a price to multiply, as web shows it.
+          total <= 0 ? '–' : formatRupiah(total),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.bodySmSemibold(colors.onSurface),
+        );
+
+      case _DraftColumn.notes:
+        return TextField(
+          controller: _notes,
+          enabled: !_busy,
+          onEditingComplete: _commit,
+          onTapOutside: (_) => _commit(),
+          style: AppTypography.caption(colors.onSurface),
+          decoration: const InputDecoration(
+            hintText: '–',
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           ),
-          IconButton(
-            icon: Icon(
-              LucideIcons.circleCheck,
-              size: 18,
-              color: context.appSemantic.success,
+        );
+
+      case _DraftColumn.actions:
+        return Row(
+          children: [
+            _RowAction(
+              icon: LucideIcons.check,
+              tint: context.appSemantic.success,
+              tooltip: 'Simpan draft ini',
+              onPressed: _busy ? null : _confirm,
             ),
-            onPressed: () async {
-              final user = ref.read(authProvider).valueOrNull;
-              if (user == null) return;
-              final error = await ref
-                  .read(cardOwnershipControllerProvider)
-                  .confirmInventoryDraft(
-                    userId: user.id,
-                    recordId: entry.id,
-                    cardId: entry.card.id,
-                    quantity: entry.quantity,
-                    unitPrice: entry.unitPrice,
-                  );
-              if (error != null && context.mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(error)));
-              }
-            },
+            const SizedBox(width: 6),
+            _RowAction(
+              icon: LucideIcons.x,
+              tint: colors.error,
+              tooltip: 'Hapus draft ini',
+              onPressed: _busy ? null : _delete,
+            ),
+          ],
+        );
+    }
+  }
+}
+
+/// The tinted square buttons that close a draft row.
+class _RowAction extends StatelessWidget {
+  const _RowAction({
+    required this.icon,
+    required this.tint,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final Color tint;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Container(
+          width: 32,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: onPressed == null ? 0.05 : 0.12),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: tint.withValues(alpha: 0.3)),
           ),
-          IconButton(
-            icon: Icon(LucideIcons.x, size: 18, color: colors.error),
-            onPressed: () async {
-              final user = ref.read(authProvider).valueOrNull;
-              if (user == null) return;
-              await ref
-                  .read(portfolioRepositoryProvider)
-                  .deleteDraftRecord(userId: user.id, recordId: entry.id);
-              ref.invalidate(inventoryDraftsProvider);
-            },
-          ),
-        ],
+          child: Icon(icon, size: 16, color: tint),
+        ),
       ),
     );
   }
 }
 
 class _AddDraftSheet extends StatefulWidget {
-  const _AddDraftSheet({
-    required this.card,
-    this.initialQuantity = 1,
-    this.initialUnitPrice = 0,
-  });
+  const _AddDraftSheet({required this.card});
 
   final CardModel card;
-  final int initialQuantity;
-  final int initialUnitPrice;
 
   @override
   State<_AddDraftSheet> createState() => _AddDraftSheetState();
 }
 
 class _AddDraftSheetState extends State<_AddDraftSheet> {
-  late int _quantity = widget.initialQuantity;
-  late final _priceController = TextEditingController(
-    text: widget.initialUnitPrice > 0 ? '${widget.initialUnitPrice}' : '',
-  );
+  // Always a fresh draft now: editing one happens in the table itself.
+  int _quantity = 1;
+  late final _priceController = TextEditingController(text: '');
 
   @override
   void dispose() {
@@ -1059,78 +1801,18 @@ class _ActivitySection extends ConsumerWidget {
             title: 'Belum ada aktivitas',
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          itemCount: activity.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, i) => _ActivityTile(entry: activity[i]),
+        return ListView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            AppBottomNav.reservedSpace(context) + 12,
+          ),
+          children: [_ActivityTable(rows: activity)],
         );
       },
       loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat aktivitas')),
-    );
-  }
-}
-
-class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({required this.entry});
-
-  final InventoryActivityEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final (icon, color, label) = switch (entry.action) {
-      InventoryActivityAction.addedIn => (
-        LucideIcons.circlePlus,
-        context.appSemantic.success,
-        'Ditambahkan',
-      ),
-      InventoryActivityAction.removedOut => (
-        LucideIcons.circleMinus,
-        colors.error,
-        'Dihapus',
-      ),
-      InventoryActivityAction.updated => (
-        LucideIcons.pencil,
-        context.mutedForeground,
-        'Diperbarui',
-      ),
-    };
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
-                ),
-                Text(
-                  '$label ×${entry.quantity} · ${formatRupiah(entry.unitPrice)}',
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            formatRelativeId(entry.createdAt),
-            style: AppTypography.caption(context.mutedForeground),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -10,6 +10,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_market_price.dart';
+import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
@@ -19,8 +20,11 @@ import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../home/repository/models/portfolio_value.dart';
+import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
 import '../../portfolio/presentation/widgets/add_destination_sheet.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
@@ -136,6 +140,42 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
     );
   }
 
+  /// Files [next] copies of [card] into the portfolio the header names.
+  ///
+  /// The two shelves take different calls: the main collection moves by a
+  /// delta, a list is told the number it should hold. Both end in a re-read
+  /// rather than a local patch, so the "Dimiliki" count above the grid moves
+  /// with the tile that was just changed.
+  Future<void> _setQuantity(CardModel card, int next) async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null) return;
+
+    final target = ref.read(selectedPortfolioProvider);
+    final controller = ref.read(cardOwnershipControllerProvider);
+    final listId = target.listId;
+
+    final error = listId == null
+        ? await controller.adjustQuantity(
+            userId: user.id,
+            cardId: card.id,
+            delta: next - card.owned,
+          )
+        : await controller.setListCardQuantity(
+            listId: listId,
+            cardId: card.id,
+            quantity: next,
+          );
+
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(error), persist: false));
+      return;
+    }
+    ref.invalidate(packOwnedQuantitiesProvider(widget.packSlug));
+  }
+
   Future<void> _confirmBulkRemove(List<int> cardIds) {
     return showConfirmDialog(
       context,
@@ -174,7 +214,9 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
       // what tapping a tab means anyway. The pill also doesn't shrink on
       // scroll here; that animation is driven by the shell's listener.
       bottomNavigationBar: AppBottomNav(
-        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.expansions),
+        // Pencarian, not Ekspansi: the expansions browser lives inside the
+        // search tab now, so that is the tab a pack page belongs to.
+        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.search),
         onTap: (index) => context.go(AppBottomNav.tabPaths[index]),
       ),
       body: AppBarOverlayBody(
@@ -182,7 +224,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
           data: (cards) {
             final pack = packAsync.valueOrNull;
 
-            // `fetchCardsForPack` doesn't join `user_cards`, so every
+            // `fetchCardsForPack` doesn't join the collection, so every
             // `CardModel.owned` here is 0; the real quantities arrive
             // separately, exactly as the web's `useUserCardQuantities` does
             // it. Stamping them onto the models is what lights up the owned
@@ -244,7 +286,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       // Owning every card only closes the button off when
                       // the main collection is the only place they could go;
                       // with a list to file them into there's still work to
-                      // do, whatever `user_cards` already holds.
+                      // do, whatever the collection already holds.
                       onAddAll: _bulkLoading
                           ? null
                           : user == null
@@ -302,7 +344,12 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       AppBottomNav.reservedSpace(context) + 12,
                     ),
                     sliver: SliverGrid(
-                      gridDelegate: cardGridDelegate(context),
+                      gridDelegate: cardGridDelegate(
+                        context,
+                        extraChrome: user == null
+                            ? 0
+                            : cardGridItemFooterChrome,
+                      ),
                       delegate: SliverChildBuilderDelegate((context, i) {
                         final card = visible[i];
                         return CardGridItem(
@@ -310,6 +357,20 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                           onTap: () => context.push(
                             Routes.cardDetail(widget.packSlug, card.id),
                           ),
+                          // Signed out there is nowhere to put a copy, so
+                          // the tile keeps its plain "Qty" line instead.
+                          footer: user == null
+                              ? null
+                              : Align(
+                                  alignment: Alignment.centerRight,
+                                  child: QuantitySelector(
+                                    value: card.owned,
+                                    size: QuantitySelectorSize.sm,
+                                    enabled: !_bulkLoading,
+                                    onChanged: (next) =>
+                                        _setQuantity(card, next),
+                                  ),
+                                ),
                         );
                       }, childCount: visible.length),
                     ),
@@ -350,7 +411,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
   }
 }
 
-class _PackHeader extends StatelessWidget {
+class _PackHeader extends ConsumerWidget {
   const _PackHeader({
     required this.pack,
     required this.cardCount,
@@ -374,7 +435,7 @@ class _PackHeader extends StatelessWidget {
   final VoidCallback? onRemoveAll;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -425,7 +486,70 @@ class _PackHeader extends StatelessWidget {
             ].join(' · '),
             style: AppTypography.caption(context.mutedForeground),
           ),
+          // Which shelf the counts above and the steppers below answer for.
+          // Under the meta line rather than beside the title: it qualifies
+          // "Dimiliki 27 / 211", and that number is meaningless without it.
+          if (ownedCount != null) ...[
+            const SizedBox(height: 6),
+            _PortfolioToggle(selected: ref.watch(selectedPortfolioProvider)),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// "Portofolio: Utama ⌄" — the same switcher Beranda and Koleksi carry, so
+/// the three surfaces agree on which portfolio is being worked on.
+class _PortfolioToggle extends ConsumerWidget {
+  const _PortfolioToggle({required this.selected});
+
+  final PortfolioTarget selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: () => showPortfolioPicker(context, ref),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 5, 8, 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            border: Border.all(color: context.borderColor),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                LucideIcons.layers,
+                size: 13,
+                color: context.mutedForeground,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Portofolio: ',
+                style: AppTypography.caption(context.mutedForeground),
+              ),
+              Flexible(
+                child: Text(
+                  selected.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.captionSemibold(colors.onSurface),
+                ),
+              ),
+              Icon(
+                LucideIcons.chevronDown,
+                size: 15,
+                color: context.mutedForeground,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

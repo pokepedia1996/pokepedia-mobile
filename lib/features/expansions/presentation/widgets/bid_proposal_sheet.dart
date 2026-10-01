@@ -12,6 +12,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
+import '../../../../shared/utils/price_input_formatter.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/trading_notifier.dart';
@@ -85,7 +86,8 @@ class _BidProposalSheet extends ConsumerStatefulWidget {
 class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   final _message = TextEditingController();
   late final TextEditingController _askPrice = TextEditingController(
-    text: '${widget.price}',
+    // Seeded grouped, so it matches what typing into it produces.
+    text: formatCountId(widget.price),
   );
   final _photos = <File>[];
 
@@ -140,7 +142,12 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
 
   /// What the seller is asking. Sent only when it's above the bid — matching
   /// the bid exactly is an acceptance, not a counter.
-  int get _askValue => int.tryParse(_askPrice.text.trim()) ?? widget.price;
+  ///
+  /// Digits only: the field groups them as they're typed, and a `tryParse`
+  /// of "301.198" is null, which would quietly send the bid price instead.
+  int get _askValue =>
+      int.tryParse(_askPrice.text.replaceAll(RegExp(r'\D'), '')) ??
+      widget.price;
   bool get _photosRequired => _askValue >= _photoRequiredThreshold;
 
   Future<void> _pickPhoto() async {
@@ -297,7 +304,10 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                 TextField(
                   controller: _askPrice,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    const PriceInputFormatter(),
+                  ],
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     prefixText: 'Rp ',

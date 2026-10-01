@@ -37,7 +37,10 @@ void main() {
 
     test('capped so a close-up card cannot balloon the upload', () {
       final quad = _rect(0, 0, 5000, 7000);
-      expect(warpOutputSize(quad).width, 1400);
+      // The cap the upload uses, not a number of its own: the server embeds
+      // at 512, so warping larger only samples pixels the resize after it
+      // throws away.
+      expect(warpOutputSize(quad).width, captureMaxSide);
     });
 
     test('a degenerate quad still yields a usable size', () {
@@ -240,8 +243,8 @@ void main() {
         const Point2(5000, 3000),
         const Point2(0, 3000),
       ]);
-      expect(warpOutputSize(wide).width, 1400);
-      expect(warpOutputSize(_rect(0, 0, 5000, 7000)).width, 1400);
+      expect(warpOutputSize(wide).width, captureMaxSide);
+      expect(warpOutputSize(_rect(0, 0, 5000, 7000)).width, captureMaxSide);
     });
   });
 }

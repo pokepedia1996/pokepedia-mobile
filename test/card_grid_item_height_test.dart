@@ -4,6 +4,7 @@ import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/shared/models/card_market_price.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/widgets/card_grid_item.dart';
+import 'package:pokepedia_mobile/shared/widgets/quantity_selector.dart';
 
 /// `cardGridDelegate` sizes its cells from one measured constant. If the
 /// tile grows a row and nobody updates it, every catalog grid overflows —
@@ -39,8 +40,10 @@ const _card = CardModel(
 Future<bool> _overflows(
   WidgetTester tester,
   double width,
-  double height,
-) async {
+  double height, {
+  Widget? footer,
+  bool? selected,
+}) async {
   // A blank frame first: pumping the identical tree twice repaints nothing,
   // so no fresh overflow error is reported and every size after the first
   // looks fine.
@@ -57,7 +60,12 @@ Future<bool> _overflows(
           child: SizedBox(
             width: width,
             height: height,
-            child: CardGridItem(card: _card, onTap: () {}),
+            child: CardGridItem(
+              card: _card,
+              onTap: () {},
+              footer: footer,
+              selected: selected,
+            ),
           ),
         ),
       ),
@@ -68,8 +76,8 @@ Future<bool> _overflows(
 }
 
 /// What `cardGridDelegate` would give a cell this wide.
-double _extentFor(double cellWidth) =>
-    (cellWidth - 20) * 342 / 245 + cardGridItemChrome;
+double _extentFor(double cellWidth, {double extraChrome = 0}) =>
+    (cellWidth - 20) * 342 / 245 + cardGridItemChrome + extraChrome;
 
 void main() {
   testWidgets('the harness can see an overflow at all', (tester) async {
@@ -96,4 +104,31 @@ void main() {
       );
     }
   });
+
+  testWidgets('an edit-mode tile fits its footer chrome', (tester) async {
+    tester.view.physicalSize = const Size(1170, 3000);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    for (final cell in [260.0, 320.0]) {
+      final extent = _extentFor(cell, extraChrome: cardGridItemFooterChrome);
+      expect(
+        await _overflows(
+          tester,
+          cell,
+          extent,
+          selected: true,
+          footer: const QuantitySelector(
+            value: 3,
+            onChanged: _ignore,
+            size: QuantitySelectorSize.sm,
+          ),
+        ),
+        isFalse,
+        reason: 'editing cell ${cell}x$extent overflows',
+      );
+    }
+  });
 }
+
+void _ignore(int _) {}

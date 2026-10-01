@@ -39,6 +39,11 @@ class WalletPage extends ConsumerWidget {
             ref.invalidate(walletBalanceProvider);
             ref.invalidate(walletDestinationsProvider);
             ref.invalidate(walletActivityProvider);
+            // The balance is the headline, so the spinner waits for it. The
+            // other two land alongside; without an await here the indicator
+            // snapped back before any of them had answered, which reads as a
+            // refresh that did nothing.
+            await ref.read(walletBalanceProvider.future);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),

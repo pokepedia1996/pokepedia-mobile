@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
@@ -7,6 +8,7 @@ import '../../../shared/models/store_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../repository/market_repository.dart';
 import '../repository/models/listing_facets.dart';
+import '../repository/models/market_page.dart';
 import '../repository/models/store_feedback.dart';
 import 'market_filters.dart';
 
@@ -35,20 +37,137 @@ final marketFacetsProvider = FutureProvider<ListingFacets>((ref) {
   return ref.read(marketRepositoryProvider).fetchListingFacets(bucket);
 });
 
-final marketListingsProvider = FutureProvider<List<ListingModel>>((ref) {
-  final bucket = ref.watch(bucketProvider);
-  final query = ref.watch(marketQueryProvider);
-  final sort = ref.watch(marketSortProvider);
-  final filters = ref.watch(marketFiltersProvider);
-  return ref
-      .read(marketRepositoryProvider)
-      .fetchListings(
-        bucket: bucket,
-        query: query,
-        sort: sort,
-        filters: filters,
+/// The marketplace feed and how far through it we are.
+class MarketListingsState {
+  const MarketListingsState({
+    this.listings = const [],
+    this.loading = true,
+    this.loadingMore = false,
+    this.hasNext = false,
+    this.error = false,
+    this.cursor,
+  });
+
+  final List<ListingModel> listings;
+
+  /// The first page is in flight — the grid shows a loader in place of
+  /// everything. [loadingMore] is the later pages, which append under rows
+  /// the user is already reading.
+  final bool loading;
+  final bool loadingMore;
+  final bool hasNext;
+  final bool error;
+  final MarketCursor? cursor;
+
+  MarketListingsState copyWith({
+    List<ListingModel>? listings,
+    bool? loading,
+    bool? loadingMore,
+    bool? hasNext,
+    bool? error,
+    MarketCursor? cursor,
+  }) {
+    return MarketListingsState(
+      listings: listings ?? this.listings,
+      loading: loading ?? this.loading,
+      loadingMore: loadingMore ?? this.loadingMore,
+      hasNext: hasNext ?? this.hasNext,
+      error: error ?? this.error,
+      cursor: cursor ?? this.cursor,
+    );
+  }
+}
+
+/// The marketplace feed, paged.
+///
+/// It used to be a `FutureProvider` fetching a single hardcoded page of 40
+/// with `p_offset: 0`, and nothing could reach row 41. Rebuilt on every
+/// bucket/sort/filter/query change, because each of those is a different
+/// feed and the cursor from the old one means nothing in the new.
+class MarketListingsNotifier extends Notifier<MarketListingsState> {
+  @override
+  MarketListingsState build() {
+    // Watched, so changing any of them tears this notifier down and rebuilds
+    // it — which is exactly the reset the old provider got for free.
+    final bucket = ref.watch(bucketProvider);
+    final query = ref.watch(marketQueryProvider);
+    final sort = ref.watch(marketSortProvider);
+    final filters = ref.watch(marketFiltersProvider);
+
+    Future.microtask(
+      () => _load(bucket: bucket, query: query, sort: sort, filters: filters),
+    );
+    return const MarketListingsState();
+  }
+
+  Future<void> _load({
+    required MarketBucket bucket,
+    required String query,
+    required MarketSort sort,
+    required MarketFilters filters,
+  }) async {
+    try {
+      final page = await ref
+          .read(marketRepositoryProvider)
+          .fetchListings(
+            bucket: bucket,
+            query: query,
+            sort: sort,
+            filters: filters,
+          );
+      state = MarketListingsState(
+        listings: page.listings,
+        loading: false,
+        hasNext: page.hasNext,
+        cursor: page.cursor,
       );
-});
+    } catch (_) {
+      state = const MarketListingsState(loading: false, error: true);
+    }
+  }
+
+  /// Appends the next page. Safe to call on every scroll frame — it returns
+  /// immediately unless there is another page and nothing already in flight.
+  Future<void> loadMore() async {
+    final cursor = state.cursor;
+    if (state.loading || state.loadingMore || !state.hasNext) return;
+    if (cursor == null) return;
+
+    state = state.copyWith(loadingMore: true);
+    try {
+      final page = await ref
+          .read(marketRepositoryProvider)
+          .fetchListings(
+            bucket: ref.read(bucketProvider),
+            query: ref.read(marketQueryProvider),
+            sort: ref.read(marketSortProvider),
+            filters: ref.read(marketFiltersProvider),
+            cursor: cursor,
+          );
+      state = state.copyWith(
+        listings: [...state.listings, ...page.listings],
+        loadingMore: false,
+        hasNext: page.hasNext,
+        // Held from the last *returned* row, so a page emptied by the
+        // own-listings filter still advances instead of asking for the same
+        // rows forever.
+        cursor: page.cursor ?? cursor,
+      );
+    } catch (_) {
+      // The rows already on screen stay; only the next page is lost, and
+      // scrolling again retries.
+      state = state.copyWith(loadingMore: false);
+    }
+  }
+
+  /// What the error state's "Coba lagi" calls.
+  void retry() => ref.invalidateSelf();
+}
+
+final marketListingsProvider =
+    NotifierProvider<MarketListingsNotifier, MarketListingsState>(
+      MarketListingsNotifier.new,
+    );
 
 final marketStoresProvider = FutureProvider<List<StoreModel>>((ref) {
   final query = ref.watch(marketQueryProvider);
@@ -113,10 +232,17 @@ typedef BidListingData = ({
 /// The card comes from [cardDetailProvider] rather than from the bid row:
 /// the listing carries only enough of a card to draw a tile, and this page
 /// shows the card's own detail sections underneath.
+///
+/// Re-reads when the session changes. Both SELECT policies on `listings`
+/// require `auth.uid()`, so a guest's fetch comes back empty no matter which
+/// bid it is — and the page turns that into a sign-in prompt. Without this
+/// watch the empty result would stay cached, and signing in from that prompt
+/// would land back on it.
 final bidListingProvider = FutureProvider.family<BidListingData?, String>((
   ref,
   slug,
 ) async {
+  ref.watch(authProvider);
   final repo = ref.read(marketRepositoryProvider);
   final listing = await repo.fetchBidListing(slug);
   if (listing == null) return null;

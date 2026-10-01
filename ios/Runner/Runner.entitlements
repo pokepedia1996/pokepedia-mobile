@@ -9,5 +9,15 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Universal Links for the emailed confirmation/recovery links, verified
+	     against https://www.pokepedia.id/.well-known/apple-app-site-association.
+	     Like the Apple Sign-In entitlement above, Associated Domains must also
+	     be enabled on the App ID in the Apple Developer portal, or the links
+	     silently open in Safari instead. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:www.pokepedia.id</string>
+		<string>applinks:pokepedia.id</string>
+	</array>
 </dict>
 </plist>

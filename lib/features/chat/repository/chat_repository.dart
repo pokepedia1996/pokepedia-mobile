@@ -504,14 +504,37 @@ class ChatRepository {
 
   /// The room for a conversation about a listing, when one already exists.
   Future<String?> findListingRoomSlug(int listingId) async {
-    final result =
-        await _client.rpc(
-              'chat_about_listing',
-              params: {'p_listing_order_id': listingId},
-            )
-            as Map<String, dynamic>;
-    if (result['error'] != null) return null;
-    return result['room_slug'] as String?;
+    return (await fetchListingChat(listingId)).roomSlug;
+  }
+
+  /// `chat_about_listing` in full: the room, if these two have already
+  /// spoken, **and** the listing the conversation is about.
+  ///
+  /// The payload is the point. The RPC deliberately creates nothing — the
+  /// room and its `listing_context` message are written on the first send,
+  /// by `ensure_direct_room` — so until then this is the only thing that
+  /// knows which card "Hubungi" was tapped on, and dropping it left the
+  /// thread opening blank.
+  Future<({String? roomSlug, ChatListingContext? context})> fetchListingChat(
+    int listingId,
+  ) async {
+    try {
+      final result =
+          await _client.rpc(
+                'chat_about_listing',
+                params: {'p_listing_order_id': listingId},
+              )
+              as Map<String, dynamic>;
+      if (result['error'] != null) return (roomSlug: null, context: null);
+      return (
+        roomSlug: result['room_slug'] as String?,
+        context: ChatListingContext.fromJson(result['listing_context']),
+      );
+    } catch (_) {
+      // A listing that has since sold or been pulled: the thread still
+      // opens, just without the card.
+      return (roomSlug: null, context: null);
+    }
   }
 
   /// How far every *other* participant has read, as the lowest cursor among
