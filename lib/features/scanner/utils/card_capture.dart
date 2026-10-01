@@ -43,15 +43,6 @@ import 'warp_quad.dart';
 /// web. The guide box is what keeps that from mattering in practice — a card
 /// aligned to a drawn rectangle is close to frontal by construction.
 
-/// Long side of the uploaded crop.
-///
-/// The server resizes to a 1000px working side before the embedder sees it
-/// (`scan.server.ts`), so anything above that is upload cost the embedder
-/// immediately discards. Kept a little above 1000, like the web's own
-/// `CAPTURE_MAX_SIDE`, so the final downscale is done by the server's Lanczos
-/// resize rather than this one.
-const captureMaxSide = 1400;
-
 /// JPEG quality for the upload. Matches the web's 0.92 WebP — high enough that
 /// compression artifacts don't perturb the embedding, low enough to keep the
 /// request well under `/api/scan`'s 4.5 MB cap.

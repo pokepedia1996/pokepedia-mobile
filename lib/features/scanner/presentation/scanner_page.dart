@@ -11,6 +11,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/widgets/confirm_dialog.dart';
 import '../repository/models/scan_models.dart';
 import '../repository/scanner_repository.dart';
 import '../usecase/scan_session_notifier.dart';
@@ -66,6 +67,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   static const _tickInterval = Duration(milliseconds: 120);
 
   /// Web's `CAPTURE_BURST_FRAMES` / `CAPTURE_BURST_GAP_MS`.
+  /// Past this, the quad that locked the overlay is too old to stand in for
+  /// a fresh detection — well over the burst window it normally crosses, so
+  /// this is a backstop rather than a limit anything reaches. Ports
+  /// `STALE_QUAD_MAX_AGE_MS`.
+  static const _staleQuadMaxAge = Duration(milliseconds: 1500);
+
   static const _burstFrames = 2;
   static const _burstGap = Duration(milliseconds: 80);
 
@@ -96,6 +103,13 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   bool _detecting = false;
   Timer? _tickTimer;
   final _autoCapture = AutoCaptureMachine();
+
+  /// The card the last accepted capture filed.
+  ///
+  /// Web's `lastCapturedCardIdRef`: what the duplicate prompt compares
+  /// against. Cleared whenever the scanner returns to idle, so the question
+  /// is only ever asked about the card immediately before this one.
+  int? _lastCapturedCardId;
 
   /// What the hint text reflects.
   bool _cardDetected = false;
@@ -299,7 +313,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       );
       if (prep == null || !mounted) return;
 
-      final detection = await _detect(model, prep);
+      // Coarse only: the second stage is for the frame about to be sent,
+      // not for tracking. See [_detectCoarse].
+      final detection = await _detectCoarse(model, prep);
       if (!mounted) return;
 
       final result = _autoCapture.tick(detection?.quad, DateTime.now());
@@ -316,12 +332,30 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         await _captureQuad(
           model,
           liveQuad: result.quad!,
+          liveQuadAt: DateTime.now(),
           presence: detection?.present ?? 0,
         );
       }
     } finally {
       _detecting = false;
     }
+  }
+
+  /// Stage one alone — what the live loop tracks with.
+  ///
+  /// Two reasons the tick does not refine, both web's (`detectCardCoarse`).
+  /// The refined quad and the coarse one disagree by a few pixels every
+  /// tick, and that disagreement is movement as far as the lock's drift
+  /// check is concerned: the stability timer restarts on a card that is
+  /// being held perfectly still, and the lock never fires. And the second
+  /// stage costs another crop, another resize, another 150k pixel reads and
+  /// another inference — per tick, eight times a second, for a quad that is
+  /// only ever drawn as an outline. Precision is what capture needs, and
+  /// capture re-runs the full two-stage detector on its own frame.
+  Future<Detection?> _detectCoarse(CornerModel model, FramePrep prep) async {
+    final detection = await model.run(prep.tensor, prep.region);
+    if (detection == null || !passesGates(detection, prep.region)) return null;
+    return detection;
   }
 
   /// One pass over the whole frame, then a tighter re-run around what it
@@ -373,6 +407,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   Future<void> _captureQuad(
     CornerModel model, {
     required Quad liveQuad,
+    required DateTime liveQuadAt,
     required double presence,
   }) async {
     if (_capturing) return;
@@ -411,6 +446,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       // it — it is a copy of a quad that already passed — so bounds are what
       // this tier actually checks.
       if (quad == null &&
+          DateTime.now().difference(liveQuadAt) <= _staleQuadMaxAge &&
           _quadWithinFrame(liveQuad, prep) &&
           passesGates(
             Detection(present: presence, quad: liveQuad),
@@ -447,19 +483,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       if (!mounted) return;
 
       if (result is ScanMatched) {
-        final tempId = ref
-            .read(scanSessionProvider.notifier)
-            .addItem(
-              card: result.card,
-              variants: result.variants,
-              needsReview: !result.confident,
-              logId: result.logId,
-            );
-        setState(() => _activeTempId = tempId);
-        // Fired once per card that actually lands, matching web. With no
-        // shutter this is the only confirmation the user gets — they are
-        // looking at the card in their hand, not the screen.
-        unawaited(ref.read(scanSoundProvider).play());
+        // The same card twice in a row is usually the scanner having fired
+        // again on a card still in shot, not someone holding two copies. It
+        // is a real case though — playsets are four of one card — so it is a
+        // question rather than a refusal, and the answer is theirs.
+        if (result.card.id == _lastCapturedCardId) {
+          final again = await _confirmDuplicate(result.card);
+          if (!mounted || !again) {
+            // Declined: nothing is added, and the machine is left as the
+            // fire put it — suspended until the card moves or leaves. A
+            // `reset()` here would re-arm on the card still sitting in shot
+            // and ask the same question again a second later.
+            return;
+          }
+        }
+        _addMatch(result);
       } else if (result is ScanFailed) {
         _showError(result.message);
         // Let the same card be retried without moving it.
@@ -469,6 +507,50 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       if (mounted) setState(() => _capturing = false);
       _scheduleRearm();
     }
+  }
+
+  /// Files a match into the session and says so.
+  void _addMatch(ScanMatched result) {
+    final tempId = ref
+        .read(scanSessionProvider.notifier)
+        .addItem(
+          card: result.card,
+          variants: result.variants,
+          needsReview: !result.confident,
+          logId: result.logId,
+        );
+    setState(() {
+      _activeTempId = tempId;
+      _lastCapturedCardId = result.card.id;
+    });
+    // Fired once per card that actually lands, matching web. With no
+    // shutter this is the only confirmation the user gets — they are
+    // looking at the card in their hand, not the screen.
+    unawaited(ref.read(scanSoundProvider).play());
+  }
+
+  /// "Kartu yang sama terdeteksi" — web's duplicate prompt.
+  ///
+  /// Asked before the copy is filed rather than offered as an undo
+  /// afterwards: the session merges duplicates by quantity, so an unwanted
+  /// second copy is not a row to delete but a number to correct.
+  Future<bool> _confirmDuplicate(ScanCard card) async {
+    var again = false;
+    await showConfirmDialog(
+      context,
+      title: 'Kartu yang sama terdeteksi',
+      // Web falls back to "Kartu ini" when the row carries no name, and the
+      // column is nullable here too.
+      description:
+          '${card.nameId?.trim().isNotEmpty == true ? card.nameId : "Kartu ini"}'
+          ' baru saja dipindai. Tambahkan lagi?',
+      confirmLabel: 'Tambahkan',
+      cancelLabel: 'Batalkan',
+      // Adding a card is not a destructive act, whatever the default is.
+      destructive: false,
+      onConfirm: () async => again = true,
+    );
+    return again;
   }
 
   /// Whether [quad] still lands inside [prep]'s frame, with web's 10% slack.
@@ -561,7 +643,13 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     // it was scanned under the new one.
     _rearmTimer?.cancel();
     ref.read(scannerProvider.notifier).reset();
-    setState(() => _activeTempId = null);
+    setState(() {
+      _activeTempId = null;
+      // Web clears this here and only here — not on the per-scan re-arm,
+      // which would wipe it 900ms after every capture and leave the
+      // duplicate prompt with nothing to compare against.
+      _lastCapturedCardId = null;
+    });
   }
 
   /// Applies a variant-strip pick and reports the correction back against this
