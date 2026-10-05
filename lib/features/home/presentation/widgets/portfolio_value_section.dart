@@ -33,7 +33,7 @@ class PortfolioValueSection extends ConsumerWidget {
     final counts = ref.watch(portfolioCardCountProvider);
     final delta = ref.watch(portfolioDeltaProvider);
     final range = ref.watch(portfolioRangeProvider);
-    final loading = ref.watch(portfolioHoldingsProvider).isLoading;
+    final loading = ref.watch(collectionSummaryProvider).isLoading;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),

@@ -69,7 +69,9 @@ extension TrainerSubtypeX on TrainerSubtype {
 
   static TrainerSubtype? fromRaw(String? raw) {
     if (raw == null) return null;
-    final needle = raw.trim().toLowerCase();
+    // The catalog spells the tool subtype both "Pokemon Tool" and
+    // "Pokémon Tool".
+    final needle = raw.trim().toLowerCase().replaceAll('é', 'e');
     for (final subtype in TrainerSubtype.values) {
       if (subtype.labelId.toLowerCase() == needle || subtype.name == needle) {
         return subtype;

@@ -1,6 +1,3 @@
-import 'dart:math' as math;
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +22,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
+import '../usecase/collection_page_notifier.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'widgets/portfolio_picker_sheet.dart';
 import 'widgets/selection_sheet.dart';
@@ -97,88 +95,29 @@ class _CollectionTab extends ConsumerStatefulWidget {
   ConsumerState<_CollectionTab> createState() => _CollectionTabState();
 }
 
-class _CollectionTabState extends ConsumerState<_CollectionTab> {
-  CardFilters _filters = const CardFilters();
+/// A staged quantity edit, remembering what the card held when it was
+/// staged — the page under it can reload mid-edit, and the write is a delta.
+typedef _StagedEdit = ({int from, int to});
 
-  /// Most valuable first. The collection is a portfolio rather than a
-  /// checklist, so what it is worth is the order that answers the question
-  /// the page is opened with.
-  CardSortOption _sortBy = CardSortOption.priceDesc;
+class _CollectionTabState extends ConsumerState<_CollectionTab> {
   CardViewMode _viewMode = CardViewMode.grid;
 
   bool _editMode = false;
 
   /// Staged quantities by card id — only the ones the user actually moved.
-  final Map<int, int> _edits = {};
+  final Map<int, _StagedEdit> _edits = {};
 
   /// Cards ticked in Kelola mode, for the batch actions.
   final Set<int> _selected = {};
   bool _saving = false;
   bool _working = false;
 
-  /// How many of the filtered cards are handed to the sliver, and how much
-  /// that grows by when the end of the window comes into view.
-  ///
-  /// The sliver builds its children lazily either way, but the child count is
-  /// also the ceiling on how much work one fling can start: every tile the
-  /// scroll passes resolves an image. A collection of a few thousand cards
-  /// flung end to end opened that many requests at once, and the decodes
-  /// alone pushed everything earlier out of the image cache. The window keeps
-  /// it to a few screens' worth at a time.
-  static const _pageSize = 36;
-  int _shown = _pageSize;
-
-  /// The last filter-and-sort pass, kept so that a rebuild which changes
-  /// nothing about what is listed — a stepper tap, a tick in Kelola, the
-  /// selection bar appearing — doesn't filter and re-sort the whole
-  /// collection again. Both are O(n log n) over every card the user owns, and
-  /// in Kelola mode they ran on every single tap.
-  List<CardModel>? _visibleSource;
-  CardFilters? _visibleFilters;
-  String? _visibleSearch;
-  CardSortOption? _visibleSort;
-  List<CardModel> _visible = const [];
-
-  /// Same idea for the facet options, which scan every card to find the
-  /// rarities and types present. They only depend on the unfiltered set.
-  List<CardModel>? _optionsSource;
-  CardFilterOptions? _options;
-
-  List<CardModel> _visibleFor(List<CardModel> cards, String search) {
-    if (identical(cards, _visibleSource) &&
-        identical(_filters, _visibleFilters) &&
-        search == _visibleSearch &&
-        _sortBy == _visibleSort) {
-      return _visible;
-    }
-
-    _visibleSource = cards;
-    _visibleFilters = _filters;
-    _visibleSearch = search;
-    _visibleSort = _sortBy;
-    _visible = sortCards(
-      applyCardFilters(cards, _filters.copyWith(search: search)),
-      _sortBy,
-    );
-    // A different list of cards starts at the top again.
-    _shown = _pageSize;
-    return _visible;
-  }
-
-  CardFilterOptions _optionsFor(List<CardModel> cards) {
-    if (!identical(cards, _optionsSource) || _options == null) {
-      _optionsSource = cards;
-      _options = deriveCardFilterOptions(cards);
-    }
-    return _options!;
-  }
-
-  /// Reveals the next page once the end of the current one is within a
+  /// Asks for the next page once the end of the loaded rows is within a
   /// screenful. Returns false so the notification carries on bubbling.
-  bool _revealMore(ScrollNotification notification, int total) {
-    if (notification.depth != 0 || _shown >= total) return false;
+  bool _loadMoreNearEnd(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
     if (notification.metrics.extentAfter > 800) return false;
-    setState(() => _shown = math.min(_shown + _pageSize, total));
+    ref.read(collectionPageProvider.notifier).loadMore();
     return false;
   }
 
@@ -196,15 +135,16 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   void _stage(CardModel card, int quantity) {
     setState(() {
-      if (quantity == card.owned) {
+      final from = _edits[card.id]?.from ?? card.owned;
+      if (quantity == from) {
         _edits.remove(card.id);
       } else {
-        _edits[card.id] = quantity;
+        _edits[card.id] = (from: from, to: quantity);
       }
     });
   }
 
-  Future<void> _save(List<CardModel> cards) async {
+  Future<void> _save() async {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null || _edits.isEmpty) {
       _exitEdit();
@@ -235,7 +175,6 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _saving = true);
-    final byId = {for (final card in cards) card.id: card};
     final controller = ref.read(cardOwnershipControllerProvider);
     // Which shelf the grid is showing. A list holds its own copies, so an
     // edit there sets the list's quantity rather than moving the main
@@ -244,18 +183,17 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     String? failure;
 
     for (final entry in _edits.entries) {
-      final owned = byId[entry.key]?.owned ?? 0;
-      if (entry.value == owned) continue;
+      final edit = entry.value;
       final error = target.isPrimary
           ? await controller.adjustQuantity(
               userId: user.id,
               cardId: entry.key,
-              delta: entry.value - owned,
+              delta: edit.to - edit.from,
             )
           : await controller.setListCardQuantity(
               listId: target.listId!,
               cardId: entry.key,
-              quantity: entry.value,
+              quantity: edit.to,
             );
       failure ??= error;
     }
@@ -282,167 +220,201 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Not `collectionProvider` directly: the title's picker can narrow the
-    // page to one list, and this is that list's cards.
-    final async = ref.watch(selectedPortfolioCardsProvider);
-    // The search box lives at the top of the page now, so the query comes
-    // from there rather than from this tab's own filter bar.
-    final search = ref.watch(collectionSearchProvider);
-    final filters = _filters.copyWith(search: search);
+    // Searched, filtered and sorted on the server, a page at a time — the
+    // way web's Koleksi reads it — for whichever portfolio the title's
+    // picker names.
+    final page = ref.watch(collectionPageProvider);
+    final summary = ref.watch(collectionSummaryProvider).valueOrNull;
+    final facets = ref.watch(collectionFacetsProvider).valueOrNull;
+    // The search box lives at the top of the page, so the query comes from
+    // there rather than from this tab's own filter bar.
+    final filters = ref
+        .watch(collectionFiltersProvider)
+        .copyWith(search: ref.watch(collectionSearchProvider));
+    final sort = ref.watch(collectionSortProvider);
+    final cards = [for (final row in page.rows) row.card];
 
-    return async.when(
-      data: (cards) {
-        final visible = _visibleFor(cards, search);
+    // The summary is unfiltered, so it is what tells an empty collection
+    // from a filter that matches nothing.
+    final collectionEmpty = summary?.isEmpty ?? false;
+    final hasCards = summary?.isEmpty == false || cards.isNotEmpty;
 
-        return Stack(
-          children: [
-            _grid(cards, visible, filters),
-            // The batch bar rides above the grid, clearing the floating nav.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: AppBottomNav.reservedSpace(context),
-              child: SelectionSheet(
-                count: _selected.length,
-                busy: _working,
-                canMove: !ref.watch(selectedPortfolioProvider).isPrimary,
-                moveHint: const Text('Pilih list dulu'),
-                onCopy: () => _copyOrMove(cards, move: false),
-                onMove: () => _copyOrMove(cards, move: true),
-                onDelete: () => _deleteSelected(cards),
-                onClear: () => setState(_selected.clear),
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: _loadMoreNearEnd,
+          child: CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(child: _TitleRow()),
+              SliverToBoxAdapter(
+                child: _CollectionHeader(
+                  totalValue: summary?.totalValue ?? 0,
+                  hasCards: hasCards,
+                  editMode: _editMode,
+                  pendingEdits: _edits.length,
+                  saving: _saving,
+                  onAdd: _openAddSheet,
+                  onManage: () => setState(() => _editMode = true),
+                  onDone: _save,
+                  onCancel: _exitEdit,
+                ),
               ),
-            ),
-          ],
-        );
-      },
-      loading: () => const PikachuLoader(),
-      error: (error, stack) {
-        // The message on screen stays the same; the reason behind it used to
-        // go nowhere at all, which made a failure here impossible to place.
-        if (kDebugMode) {
-          debugPrint('[portfolio] collection failed: $error\n$stack');
-        }
-        return const Center(child: Text('Gagal memuat data'));
-      },
+              if (hasCards)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: CardFilterBar(
+                      cards: cards,
+                      showSearch: false,
+                      // What the whole collection holds, not just the pages
+                      // loaded so far.
+                      optionsOverride: facets?.toFilterOptions(),
+                      filters: filters,
+                      onFiltersChanged: (f) =>
+                          ref.read(collectionFiltersProvider.notifier).state =
+                              f,
+                      sortBy: sort,
+                      onSortChanged: (s) =>
+                          ref.read(collectionSortProvider.notifier).state = s,
+                      viewMode: _viewMode,
+                      onViewModeChanged: (v) => setState(() => _viewMode = v),
+                    ),
+                  ),
+                ),
+              ..._body(page, cards, collectionEmpty),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  // Room for the nav pill, plus the batch bar when it's up.
+                  height:
+                      AppBottomNav.reservedSpace(context) +
+                      (_selected.isEmpty ? 0 : 72),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // The batch bar rides above the grid, clearing the floating nav.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: AppBottomNav.reservedSpace(context),
+          child: SelectionSheet(
+            count: _selected.length,
+            busy: _working,
+            canMove: !ref.watch(selectedPortfolioProvider).isPrimary,
+            moveHint: const Text('Pilih list dulu'),
+            onCopy: () => _copyOrMove(move: false),
+            onMove: () => _copyOrMove(move: true),
+            onDelete: _deleteSelected,
+            onClear: () => setState(_selected.clear),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _grid(
+  List<Widget> _body(
+    CollectionPageState page,
     List<CardModel> cards,
-    List<CardModel> visible,
-    CardFilters filters,
+    bool collectionEmpty,
   ) {
-    final shown = math.min(_shown, visible.length);
+    if (cards.isEmpty) {
+      if (page.loading) {
+        return const [
+          SliverPadding(
+            padding: EdgeInsets.only(top: 48),
+            sliver: SliverToBoxAdapter(child: PikachuLoader()),
+          ),
+        ];
+      }
+      if (page.error) return [_retry()];
+      if (collectionEmpty) {
+        return [
+          _message(
+            'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
+            'ekspansi!',
+          ),
+        ];
+      }
+      return [_message('Tidak ada kartu yang sesuai filter.')];
+    }
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) =>
-          _revealMore(notification, visible.length),
-      child: CustomScrollView(
-        slivers: [
-          const SliverToBoxAdapter(child: _TitleRow()),
-          SliverToBoxAdapter(
-            child: _CollectionHeader(
-              cards: cards,
-              visible: visible,
-              editMode: _editMode,
-              pendingEdits: _edits.length,
-              saving: _saving,
-              onAdd: _openAddSheet,
-              onManage: () => setState(() => _editMode = true),
-              onDone: () => _save(cards),
-              onCancel: _exitEdit,
+    return [
+      if (_viewMode == CardViewMode.grid)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          sliver: SliverGrid(
+            gridDelegate: cardGridDelegate(
+              context,
+              // The stepper row only exists while editing.
+              extraChrome: _editMode ? cardGridItemFooterChrome : 0,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => _collectionCard(cards[i]),
+              childCount: cards.length,
+              // A tile holds nothing worth keeping once it is off screen,
+              // and the keep-alive wrapper is per child.
+              addAutomaticKeepAlives: false,
             ),
           ),
-          if (cards.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: CardFilterBar(
-                  cards: cards,
-                  showSearch: false,
-                  // Derived once per collection rather than on every tap.
-                  optionsOverride: _optionsFor(cards),
-                  filters: filters,
-                  onFiltersChanged: (f) => setState(() => _filters = f),
-                  sortBy: _sortBy,
-                  onSortChanged: (s) => setState(() => _sortBy = s),
-                  viewMode: _viewMode,
-                  onViewModeChanged: (v) => setState(() => _viewMode = v),
-                ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _collectionCard(cards[i], list: true),
               ),
-            ),
-          if (cards.isEmpty)
-            _message(
-              'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
-              'ekspansi!',
-            )
-          else if (visible.isEmpty)
-            _message('Tidak ada kartu yang sesuai filter.')
-          else if (_viewMode == CardViewMode.grid)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              sliver: SliverGrid(
-                gridDelegate: cardGridDelegate(
-                  context,
-                  // The stepper row only exists while editing.
-                  extraChrome: _editMode ? cardGridItemFooterChrome : 0,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => _collectionCard(visible[i]),
-                  childCount: shown,
-                  // A tile holds nothing worth keeping once it is off screen,
-                  // and the keep-alive wrapper is per child.
-                  addAutomaticKeepAlives: false,
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _collectionCard(visible[i], list: true),
-                  ),
-                  childCount: shown,
-                  addAutomaticKeepAlives: false,
-                ),
-              ),
-            ),
-          // Says the rest is coming rather than letting the grid look like it
-          // ends early. It is only ever on screen for the frame or two the
-          // next page takes to build.
-          if (shown < visible.length)
-            const SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              // Room for the nav pill, plus the batch bar when it's up.
-              height:
-                  AppBottomNav.reservedSpace(context) +
-                  (_selected.isEmpty ? 0 : 72),
+              childCount: cards.length,
+              addAutomaticKeepAlives: false,
             ),
           ),
-        ],
+        ),
+      // Says the rest is coming rather than letting the grid look like it
+      // ends early.
+      if (page.hasNext || page.loadingMore)
+        const SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  Widget _retry() {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          children: [
+            Text(
+              'Gagal memuat data',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+            TextButton(
+              onPressed: () =>
+                  ref.read(collectionPageProvider.notifier).retry(),
+              child: const Text('Coba lagi'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// Adds the selected cards to a list the user picks, and in `move` mode
   /// takes them out of the list currently on screen.
-  Future<void> _copyOrMove(List<CardModel> cards, {required bool move}) async {
+  Future<void> _copyOrMove({required bool move}) async {
     final target = ref.read(selectedPortfolioProvider);
     if (move && target.isPrimary) return;
 
@@ -480,6 +452,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     if (target.listId != null) {
       ref.invalidate(listCardsProvider(target.listId!));
     }
+    invalidateCollectionViews(ref.invalidate);
 
     _toast(
       error ??
@@ -491,7 +464,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   /// Removes the selected cards from the list on screen, or from the
   /// collection itself when the main portfolio is the one being shown.
-  Future<void> _deleteSelected(List<CardModel> cards) async {
+  Future<void> _deleteSelected() async {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
     final target = ref.read(selectedPortfolioProvider);
@@ -516,6 +489,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
               .removeCardsFromList(listId: target.listId!, cardIds: ids);
           ref.invalidate(listCardsProvider(target.listId!));
           ref.invalidate(listsProvider);
+          invalidateCollectionViews(ref.invalidate);
         } else {
           final result = await ref
               .read(cardOwnershipControllerProvider)
@@ -576,7 +550,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
   /// The quantity stepper, and the trash that zeroes a card out in one tap
   /// instead of holding minus down — web's edit-mode row.
   Widget _stepperRow(CardModel card) {
-    final quantity = _edits[card.id] ?? card.owned;
+    final quantity = _edits[card.id]?.to ?? card.owned;
     return Row(
       children: [
         QuantitySelector(
@@ -619,7 +593,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   Future<void> _openAddSheet() async {
     final added = await showCollectionAddSheet(context);
-    if (added == true && mounted) ref.invalidate(collectionProvider);
+    if (added != true || !mounted) return;
+    ref.invalidate(collectionProvider);
+    invalidateCollectionViews(ref.invalidate);
   }
 }
 
@@ -627,8 +603,8 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 /// header block.
 class _CollectionHeader extends StatelessWidget {
   const _CollectionHeader({
-    required this.cards,
-    required this.visible,
+    required this.totalValue,
+    required this.hasCards,
     required this.editMode,
     required this.pendingEdits,
     required this.saving,
@@ -638,8 +614,8 @@ class _CollectionHeader extends StatelessWidget {
     required this.onCancel,
   });
 
-  final List<CardModel> cards;
-  final List<CardModel> visible;
+  final int totalValue;
+  final bool hasCards;
   final bool editMode;
   final int pendingEdits;
   final bool saving;
@@ -651,10 +627,6 @@ class _CollectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final totalValue = cards.fold<int>(
-      0,
-      (sum, c) => sum + (c.marketPrice ?? 0) * c.owned,
-    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -712,7 +684,7 @@ class _CollectionHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // const SizedBox(width: 8),
-                if (cards.isNotEmpty)
+                if (hasCards)
                   OutlinedButton.icon(
                     onPressed: onManage,
                     icon: const Icon(LucideIcons.pencil, size: 15),

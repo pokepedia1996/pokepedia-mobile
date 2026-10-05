@@ -23,7 +23,7 @@ class PortfolioValueChart extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(portfolioValueSeriesProvider);
-    final holdings = ref.watch(portfolioHoldingsProvider).valueOrNull;
+    final summary = ref.watch(collectionSummaryProvider).valueOrNull;
 
     return SizedBox(
       height: height,
@@ -55,7 +55,7 @@ class PortfolioValueChart extends ConsumerWidget {
             // Every collection has its own history now, so there is no
             // "main collection only" case left — an empty series means either
             // no cards or no nightly run yet.
-            final empty = holdings?.isEmpty ?? true;
+            final empty = summary?.isEmpty ?? true;
             return _ChartMessage(
               title: empty
                   ? 'Belum ada kartu di portofolio ini'
