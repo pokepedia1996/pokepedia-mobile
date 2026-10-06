@@ -5,25 +5,24 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/card_language_badge.dart';
 import '../../repository/models/scan_models.dart';
 import '../../usecase/scan_session_notifier.dart';
 import 'scan_card_search_sheet.dart';
 import 'scan_card_thumb.dart';
 import 'scan_variant_strip.dart';
 
-/// Ports `ScanResultSheet` — the bottom dock: the shutter, the card just
-/// recognized with its price, and the way into the batch.
+/// Ports `ScanResultSheet` — the bottom dock, drawn straight over the camera
+/// preview the way web draws it: the card just recognized on the left (price,
+/// name, printing, thumb), the running total and the way into the batch on
+/// the right.
 ///
-/// It stays mounted with the shutter visible even before the first scan, so
-/// the primary control never moves. The card summary expands in above it once
-/// there's a result.
+/// No sheet behind it. The preview stays the whole screen, and the dock
+/// slides in only once the session has something in it — before the first
+/// scan there is nothing to show and nothing to manage.
 class ScanResultSheet extends ConsumerStatefulWidget {
   const ScanResultSheet({
     super.key,
     required this.item,
-    required this.sessionCount,
-    required this.busy,
     required this.onSelectVariant,
     required this.onOpenSession,
   });
@@ -31,8 +30,6 @@ class ScanResultSheet extends ConsumerStatefulWidget {
   /// The most recent scan's session row, or null before the first result.
   final ScanSessionItem? item;
 
-  final int sessionCount;
-  final bool busy;
   final ValueChanged<ScanCard> onSelectVariant;
   final VoidCallback onOpenSession;
 
@@ -74,146 +71,242 @@ class _ScanResultSheetState extends ConsumerState<ScanResultSheet> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final session = ref.watch(scanSessionProvider);
     final prices = ref.watch(scanSessionPricesProvider).valueOrNull;
+    final total = session.fold<int>(
+      0,
+      (sum, it) => sum + (prices?[it.card.id]?.price ?? 0) * it.quantity,
+    );
+    final quantity = session.fold<int>(0, (sum, it) => sum + it.quantity);
+    final open = session.isNotEmpty;
+    final padding = MediaQuery.of(context).padding;
+
+    final Widget content;
+    if (item != null && _stripExpanded) {
+      content = ScanVariantStrip(
+        selected: item.card,
+        variants: item.variants.isNotEmpty ? item.variants : [item.card],
+        onSelect: (card) {
+          widget.onSelectVariant(card);
+          setState(() => _stripExpanded = false);
+        },
+        onSearch: () => _openSearch(item),
+        dark: true,
+      );
+    } else {
+      content = Padding(
+        padding: EdgeInsets.only(
+          left: padding.left + 16,
+          right: padding.right + 16,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: item == null
+                  ? const SizedBox.shrink()
+                  : Align(
+                      alignment: Alignment.bottomLeft,
+                      child: _CardPreview(
+                        // Keyed on the row so each new match animates in,
+                        // not just the first — web's `card?.id` dependency.
+                        key: ValueKey(item.tempId),
+                        item: item,
+                        price: prices?[item.card.id]?.price,
+                        onTap: () => setState(() => _stripExpanded = true),
+                      ),
+                    ),
+            ),
+            // Web's 5.5rem middle column, kept clear of the preview.
+            const SizedBox(width: 88),
+            Expanded(
+              child: open
+                  ? _TotalColumn(
+                      total: total,
+                      quantity: quantity,
+                      onOpenSession: widget.onOpenSession,
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.appColors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + 12,
-          top: 12,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (item != null) ...[
-              _ResultRow(
-                item: item,
-                price: prices?[item.card.id]?.price,
-                expanded: _stripExpanded,
-                onToggleStrip: () =>
-                    setState(() => _stripExpanded = !_stripExpanded),
-              ),
-              if (_stripExpanded) ...[
-                const SizedBox(height: 8),
-                ScanVariantStrip(
-                  selected: item.card,
-                  variants: item.variants.isNotEmpty
-                      ? item.variants
-                      : [item.card],
-                  onSelect: (card) {
-                    widget.onSelectVariant(card);
-                    setState(() => _stripExpanded = false);
-                  },
-                  onSearch: () => _openSearch(item),
-                ),
-              ],
-              const SizedBox(height: 12),
-            ],
-            _ShutterRow(
-              busy: widget.busy,
-              sessionCount: widget.sessionCount,
-              onOpenSession: widget.onOpenSession,
-            ),
-          ],
+      child: IgnorePointer(
+        ignoring: !open,
+        child: AnimatedSlide(
+          offset: open ? Offset.zero : const Offset(0, 1),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          child: Padding(
+            padding: EdgeInsets.only(top: 16, bottom: padding.bottom + 24),
+            child: content,
+          ),
         ),
       ),
     );
   }
 }
 
-class _ResultRow extends StatelessWidget {
-  const _ResultRow({
+class _CardPreview extends StatelessWidget {
+  const _CardPreview({
+    super.key,
     required this.item,
     required this.price,
-    required this.expanded,
-    required this.onToggleStrip,
+    required this.onTap,
   });
 
   final ScanSessionItem item;
   final int? price;
-  final bool expanded;
-  final VoidCallback onToggleStrip;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final card = item.card;
-    final language = card.language;
-    return InkWell(
-      onTap: onToggleStrip,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
-          children: [
-            ScanCardThumb(card: card, width: 44),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+    final price = this.price;
+    // Web's entrance: up 20px from 96% scale, `power3.out`.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Transform.translate(
+        offset: Offset(0, 20 * (1 - t)),
+        child: Transform.scale(scale: 0.96 + 0.04 * t, child: child),
+      ),
+      child: Semantics(
+        button: true,
+        label: 'Ganti varian atau kartu',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (price != null)
+                Text(
+                  formatRupiah(price),
+                  style: AppTypography.bodySm(
+                    Colors.white,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+              const SizedBox(height: 4),
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      if (language != null) ...[
-                        CardLanguageBadge(language: language, size: 14),
-                        const SizedBox(width: 6),
-                      ],
-                      Flexible(
-                        child: Text(
-                          card.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySmSemibold(
-                            context.appColors.onSurface,
-                          ),
-                        ),
-                      ),
-                      // The badge is the whole point of tracking confidence:
-                      // it tells the user which rows to look at before
-                      // committing the batch, so an unconfident guess is
-                      // never mistaken for a settled answer.
-                      if (item.needsReview) ...[
-                        const SizedBox(width: 6),
-                        const _ReviewBadge(),
-                      ],
-                      Icon(
-                        expanded
-                            ? LucideIcons.chevronDown
-                            : LucideIcons.chevronRight,
-                        size: 16,
-                        color: context.mutedForeground,
-                      ),
-                    ],
+                  Flexible(
+                    child: Text(
+                      card.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodySmSemibold(Colors.white),
+                    ),
                   ),
-                  Text(
-                    [
-                      card.printingLabel,
-                      if (card.variantLabel != null) card.variantLabel!,
-                    ].join(' · '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(context.mutedForeground),
+                  // Not on web. Kept because it tells the user which rows to
+                  // check before committing the batch, so an unconfident
+                  // guess is never mistaken for a settled answer.
+                  if (item.needsReview) ...[
+                    const SizedBox(width: 6),
+                    const _ReviewBadge(),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  card.printingLabel,
+                  if (card.variantLabel != null) card.variantLabel!,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption(Colors.white70),
+              ),
+              const SizedBox(height: 4),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ScanCardThumb(card: card, width: 80),
+                  Positioned(
+                    right: -4,
+                    bottom: -4,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        LucideIcons.pencil,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              // A dash rather than a zero while the price is still in flight —
-              // the price fetch is deliberately off the scan's critical path,
-              // so this gap is normal and must not read as "worthless".
-              price == null ? 'Rp-' : formatRupiah(price!),
-              style: AppTypography.bodySemibold(context.appColors.onSurface),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _TotalColumn extends StatelessWidget {
+  const _TotalColumn({
+    required this.total,
+    required this.quantity,
+    required this.onOpenSession,
+  });
+
+  final int total;
+  final int quantity;
+  final VoidCallback onOpenSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Total', style: AppTypography.caption(Colors.white60)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Text(
+            formatRupiah(total),
+            style: AppTypography.h3(
+              Colors.white,
+            ).copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Semantics(
+          label: 'Kelola kartu',
+          excludeSemantics: true,
+          child: FilledButton(
+            onPressed: onOpenSession,
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.primary,
+              foregroundColor: colors.onPrimary,
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Kelola ($quantity)',
+              style: AppTypography.captionSemibold(colors.onPrimary),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -230,85 +323,6 @@ class _ReviewBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text('Cek', style: AppTypography.badge(context.appSemantic.gold)),
-    );
-  }
-}
-
-class _ShutterRow extends StatelessWidget {
-  const _ShutterRow({
-    required this.busy,
-    required this.sessionCount,
-    required this.onOpenSession,
-  });
-
-  final bool busy;
-  final int sessionCount;
-  final VoidCallback onOpenSession;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          // Where the shutter was. Auto-capture fires on its own, so this
-          // reports what the scanner is doing rather than asking for a tap —
-          // an inert button would read as broken.
-          Expanded(
-            child: Center(
-              child: AnimatedOpacity(
-                opacity: busy ? 1 : 0,
-                duration: const Duration(milliseconds: 150),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: context.appColors.primary,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.appColors.onPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Memindai...',
-                        style: AppTypography.captionSemibold(
-                          context.appColors.onPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 76,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Badge(
-                isLabelVisible: sessionCount > 0,
-                label: Text('$sessionCount'),
-                child: IconButton(
-                  onPressed: onOpenSession,
-                  tooltip: 'Kelola kartu',
-                  icon: const Icon(LucideIcons.package),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

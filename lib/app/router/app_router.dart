@@ -228,6 +228,19 @@ final appRouter = GoRouter(
     GoRoute(path: Routes.scan, builder: (_, __) => const ScannerPage()),
 
     // Auth.
+    //
+    // The App Link the confirmation email carries. Tapping it opens the app
+    // with `https://www.pokepedia.id/auth/confirm?token_hash=...` as the
+    // location, and go_router matches on the path — so without this route
+    // the first thing a new account ever saw was "Page Not Found" over a
+    // GoException, while the token was redeemed perfectly well behind it.
+    //
+    // Nothing is built: `AuthLinkHandler` is already redeeming the token off
+    // the same link through `app_links`, and this only answers "where is the
+    // user standing while that happens". Home, because the session arrives a
+    // moment later and the auth listener drives whatever comes next —
+    // onboarding for a fresh account, the account page for a returning one.
+    GoRoute(path: Routes.authConfirm, redirect: (_, __) => Routes.home),
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
     GoRoute(

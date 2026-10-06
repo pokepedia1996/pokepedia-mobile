@@ -36,6 +36,9 @@ class StoreModel {
     this.aboutMarkdown,
     this.memberSince,
     this.isFollowing = false,
+    this.avatarUrl,
+    this.feedbackScore,
+    this.positivePct,
   });
 
   final String handle;
@@ -65,6 +68,22 @@ class StoreModel {
   final String? userId;
 
   final String? logoUrl;
+
+  /// The owner's profile photo — what web's directory card shows when the
+  /// store never set a logo, ahead of falling back to an initial.
+  final String? avatarUrl;
+
+  /// Net feedback (positive minus negative), drawn as the reputation star.
+  /// Null where the source row doesn't carry it.
+  final int? feedbackScore;
+
+  /// Share of feedback that was positive, 0–100. Null for a store nobody
+  /// has rated yet, which is not the same as 0%.
+  final double? positivePct;
+
+  /// Logo first, then the owner's avatar — web's `store_logo_url ??
+  /// avatar_url`.
+  String? get imageUrl => logoUrl ?? avatarUrl;
 
   /// `seller_profiles.store_banner_url` — the cover image the storefront
   /// leads with on the web.
@@ -103,6 +122,9 @@ class StoreModel {
       vacationMode: row['vacation_mode'] as String?,
       userId: row['user_id'] as String?,
       logoUrl: proxyImageUrl(row['store_logo_url'] as String?),
+      avatarUrl: proxyImageUrl(row['avatar_url'] as String?),
+      feedbackScore: (row['feedback_score'] as num?)?.toInt(),
+      positivePct: (row['positive_pct'] as num?)?.toDouble(),
     );
   }
 

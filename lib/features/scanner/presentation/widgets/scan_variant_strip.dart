@@ -25,7 +25,12 @@ class ScanVariantStrip extends StatelessWidget {
     required this.variants,
     required this.onSelect,
     required this.onSearch,
+    this.dark = false,
   });
+
+  /// Web's `tone="dark"`: white labels for when the strip sits straight on
+  /// the camera preview rather than on a sheet.
+  final bool dark;
 
   final ScanCard selected;
   final List<ScanCard> variants;
@@ -43,13 +48,14 @@ class ScanVariantStrip extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           if (index == variants.length) {
-            return _SearchTile(onTap: onSearch);
+            return _SearchTile(onTap: onSearch, dark: dark);
           }
           final card = variants[index];
           return _VariantTile(
             card: card,
             selected: card.id == selected.id,
             onTap: () => onSelect(card),
+            dark: dark,
           );
         },
       ),
@@ -62,11 +68,13 @@ class _VariantTile extends StatelessWidget {
     required this.card,
     required this.selected,
     required this.onTap,
+    required this.dark,
   });
 
   final ScanCard card;
   final bool selected;
   final VoidCallback onTap;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +104,9 @@ class _VariantTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.badge(
-                selected ? colors.onSurface : context.mutedForeground,
+                dark
+                    ? (selected ? Colors.white : Colors.white60)
+                    : (selected ? colors.onSurface : context.mutedForeground),
               ),
             ),
           ],
@@ -107,9 +117,10 @@ class _VariantTile extends StatelessWidget {
 }
 
 class _SearchTile extends StatelessWidget {
-  const _SearchTile({required this.onTap});
+  const _SearchTile({required this.onTap, required this.dark});
 
   final VoidCallback onTap;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -119,18 +130,26 @@ class _SearchTile extends StatelessWidget {
         width: 68,
         margin: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          border: Border.all(color: context.borderColor),
+          border: Border.all(
+            color: dark ? Colors.white30 : context.borderColor,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(LucideIcons.search, size: 22, color: context.mutedForeground),
+            Icon(
+              LucideIcons.search,
+              size: 22,
+              color: dark ? Colors.white60 : context.mutedForeground,
+            ),
             const SizedBox(height: 4),
             Text(
               'Ganti\nkartu',
               textAlign: TextAlign.center,
-              style: AppTypography.badge(context.mutedForeground),
+              style: AppTypography.badge(
+                dark ? Colors.white60 : context.mutedForeground,
+              ),
             ),
           ],
         ),

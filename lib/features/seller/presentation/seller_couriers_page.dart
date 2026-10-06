@@ -156,9 +156,11 @@ class _SellerCouriersPageState extends ConsumerState<SellerCouriersPage> {
           ),
           data: (profile) {
             if (profile == null) {
-              return const EmptyState(
-                icon: LucideIcons.store,
-                title: 'Belum punya toko',
+              return const Center(
+                child: EmptyState(
+                  icon: LucideIcons.store,
+                  title: 'Belum punya toko',
+                ),
               );
             }
             return ListView(

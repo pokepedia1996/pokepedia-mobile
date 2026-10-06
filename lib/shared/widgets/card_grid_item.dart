@@ -46,10 +46,11 @@ SliverGridDelegate cardGridDelegate(
 /// Everything in the tile that isn't artwork: the name, expansion and
 /// price rows, the gaps between them, and the tile's vertical padding.
 ///
-/// Measured, not guessed — `card_grid_item_height_test` needs between 86 and
-/// 90 in the test harness's square fallback font, so 94 keeps a few points
-/// in hand for a row that grows by a point or two.
-const cardGridItemChrome = 94.0;
+/// Measured, not guessed — `card_grid_item_height_test` needs about 106 in
+/// the test harness's square fallback font since the variant line (a 17pt
+/// caption) joined the tile, so 111 keeps a few points in hand for a row
+/// that grows by a point or two.
+const cardGridItemChrome = 111.0;
 
 /// What a tile grows by when it carries a [CardGridItem.footer]: a `sm`
 /// [QuantitySelector] and the gap above it. Pass it to [cardGridDelegate] as
@@ -132,6 +133,19 @@ class CardGridItem extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.bodySmSemibold(colors.onSurface),
+            ),
+
+            // Row 1b — the finish, web's italic `VariantLabel`. The line is
+            // held even for the plain print: the grid gives every tile one
+            // fixed height, and a row that came and went would push the plain
+            // tiles' prices out of line with their neighbours'.
+            Text(
+              card.variantLabel ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption(
+                context.mutedForeground.withValues(alpha: 0.7),
+              ).copyWith(fontStyle: FontStyle.italic),
             ),
             const SizedBox(height: 3),
 

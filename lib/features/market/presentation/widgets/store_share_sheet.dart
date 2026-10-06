@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -99,6 +101,68 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
     });
   }
 
+  /// How long a page may spend waiting on its pictures before it is shared
+  /// as it stands. A dead connection should cost the user a few seconds, not
+  /// a button that never comes back.
+  static const _imageWait = Duration(seconds: 10);
+
+  /// Waits until every picture on [page] has either loaded or failed.
+  ///
+  /// The card art arrives over the network after the poster is on screen,
+  /// and a capture taken before then puts blank tiles in the shared image.
+  /// It resolves each `Image` widget's own provider rather than precaching
+  /// the URLs: `CardArt` decodes at a size-dependent `cacheWidth`, so a plain
+  /// precache would miss the cache and fetch everything twice.
+  ///
+  /// Two passes, because a failed card falls back to the bundled card back —
+  /// another `Image`, which only exists once the first pass has rebuilt.
+  Future<void> _awaitImages(int page) async {
+    final deadline = DateTime.now().add(_imageWait);
+    for (var pass = 0; pass < 2; pass++) {
+      final root = _keyFor(page).currentContext;
+      if (root is! Element || !root.mounted) return;
+
+      final pending = <Future<void>>[];
+      void visit(Element element) {
+        final widget = element.widget;
+        if (widget is Image) pending.add(_settled(widget.image, element));
+        element.visitChildren(visit);
+      }
+
+      root.visitChildren(visit);
+      if (pending.isEmpty) return;
+
+      final left = deadline.difference(DateTime.now());
+      if (left <= Duration.zero) return;
+      try {
+        await Future.wait(pending).timeout(left);
+      } on TimeoutException {
+        return;
+      }
+      // Let the loaded pictures replace their shimmer before looking again.
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  /// Completes once [provider] has delivered a frame or given up.
+  Future<void> _settled(ImageProvider provider, BuildContext context) {
+    final done = Completer<void>();
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    late final ImageStreamListener listener;
+    void finish() {
+      if (done.isCompleted) return;
+      done.complete();
+      stream.removeListener(listener);
+    }
+
+    listener = ImageStreamListener(
+      (_, __) => finish(),
+      onError: (_, __) => finish(),
+    );
+    stream.addListener(listener);
+    return done.future;
+  }
+
   /// Paints one page and hands back PNG bytes.
   ///
   /// The poster is laid out at a fixed 1080×1350 regardless of the phone, so
@@ -110,9 +174,11 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
             as RenderRepaintBoundary?;
     if (boundary == null) return null;
 
-    // A frame may not have painted yet on the first tap.
-    if (boundary.debugNeedsPaint) {
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+    // A frame may not have painted yet on the first tap. Not
+    // `debugNeedsPaint`: that getter only has a value with asserts on, so in
+    // a release build reading it throws and every share failed.
+    if (SchedulerBinding.instance.hasScheduledFrame) {
+      await SchedulerBinding.instance.endOfFrame;
     }
     final image = await boundary.toImage(pixelRatio: 1);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -146,6 +212,8 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
           _controller.jumpToPage(page);
         }
         await WidgetsBinding.instance.endOfFrame;
+        await _awaitImages(page);
+        if (!mounted) return;
 
         final bytes = await _capture(page);
         if (bytes == null) continue;
@@ -171,7 +239,8 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
           text: '${widget.store.storeName} · ${_side.label} di $_shareUrl',
         ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[share] poster failed: $e\n$st');
       _toast('Gagal membagikan poster.');
     } finally {
       if (mounted) setState(() => _busy = false);

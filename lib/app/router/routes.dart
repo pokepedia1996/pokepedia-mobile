@@ -40,6 +40,15 @@ class Routes {
   static const scan = '/scan';
 
   // Auth.
+  /// Where the emailed confirmation and recovery links land.
+  ///
+  /// The app claims this path as an App Link, so the OS hands the whole URL
+  /// to the router as a location to open — which means the router has to
+  /// know it, even though nothing is drawn here. [AuthLinkHandler] is what
+  /// actually redeems the token; this route only decides where the user is
+  /// standing while that happens.
+  static const authConfirm = '/auth/confirm';
+
   static const login = '/login';
   static const signup = '/signup';
   static const forgotPassword = '/forgot-password';

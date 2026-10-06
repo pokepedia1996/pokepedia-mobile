@@ -52,11 +52,13 @@ class SellerStoreProfilePage extends ConsumerWidget {
           ),
           data: (profile) {
             if (profile == null) {
-              return const EmptyState(
-                icon: LucideIcons.store,
-                title: 'Belum punya toko',
-                description:
-                    'Buka toko dulu di pokepedia.id, lalu kelola dari sini.',
+              return const Center(
+                child: EmptyState(
+                  icon: LucideIcons.store,
+                  title: 'Belum punya toko',
+                  description:
+                      'Buka toko dulu di pokepedia.id, lalu kelola dari sini.',
+                ),
               );
             }
             return ListView(

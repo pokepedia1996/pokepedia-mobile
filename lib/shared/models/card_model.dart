@@ -406,6 +406,23 @@ class CardModel {
   CardCondition tradeCondition(CardCondition chosen) =>
       isSealed ? CardCondition.nm : chosen;
 
+  /// The printing's finish as a tile prints it — "Holo Reverse",
+  /// "Holo Master Ball" — or null for the plain print, which says nothing.
+  /// Ports web's `VariantLabel` together with `formatVariantLabel`.
+  ///
+  /// Each finish is its own catalog row with the same name, number and art,
+  /// so without this a set's reverse and its plain print are two identical
+  /// tiles at different prices.
+  String? get variantLabel {
+    final raw = variant.trim();
+    if (raw.isEmpty || raw.toLowerCase() == 'normal') return null;
+    final titleCased = raw
+        .split(RegExp(r'\s+'))
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
+    return 'Holo $titleCased';
+  }
+
   /// How far the market price has moved in the last week, as a percentage,
   /// or null when there is nothing to say.
   ///
