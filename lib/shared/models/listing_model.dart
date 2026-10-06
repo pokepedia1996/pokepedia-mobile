@@ -129,6 +129,10 @@ class ListingModel {
   /// `resolveSellerDisplay`'s `storeLogoUrl ?? avatarUrl`.
   String? get sellerImageUrl => storeLogoUrl ?? sellerAvatarUrl;
 
+  /// The seller's first photo of this copy, else the catalog artwork —
+  /// mirrors `heroImage` in `storefront-listing-card.tsx`.
+  String? get tileImageUrl => photoUrls.firstOrNull ?? card.imageUrl;
+
   /// Maps a `listings` row joined with its `cards` row and the seller's
   /// store info (fetched separately since `listings.user_id` and
   /// `seller_profiles.user_id` both reference `auth.users` rather than one
@@ -185,10 +189,7 @@ class ListingModel {
       sellerAvatarUrl: proxyImageUrl(sellerAvatarUrl),
       storeLogoUrl: proxyImageUrl(storeLogoUrl),
       sellerFeedbackScore: sellerFeedbackScore,
-      photoUrls: ((row['photo_urls'] as List?) ?? const [])
-          .map((u) => proxyImageUrl(u as String?))
-          .whereType<String>()
-          .toList(),
+      photoUrls: _parsePhotoUrls(row),
     );
   }
 
@@ -256,6 +257,13 @@ class ListingModel {
       sellerAvatarUrl: proxyImageUrl(row['avatar_url'] as String?),
       storeLogoUrl: proxyImageUrl(row['store_logo_url'] as String?),
       sellerFeedbackScore: (row['seller_feedback_score'] as num?)?.toInt() ?? 0,
+      photoUrls: _parsePhotoUrls(row),
     );
   }
+
+  static List<String> _parsePhotoUrls(Map<String, dynamic> row) =>
+      ((row['photo_urls'] as List?) ?? const [])
+          .map((u) => proxyImageUrl(u as String?))
+          .whereType<String>()
+          .toList();
 }

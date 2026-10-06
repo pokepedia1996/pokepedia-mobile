@@ -195,7 +195,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
             Flexible(
               child: Stack(
                 children: [
-                  CardArt(imageUrl: listing.card.imageUrl),
+                  CardArt(imageUrl: listing.tileImageUrl),
                   Positioned(
                     right: 6,
                     top: 6,
