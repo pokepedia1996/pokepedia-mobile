@@ -5,28 +5,26 @@ import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/home/presentation/widgets/portfolio_value_chart.dart';
 import 'package:pokepedia_mobile/features/home/repository/models/portfolio_value.dart';
 import 'package:pokepedia_mobile/features/home/usecase/portfolio_value_notifier.dart';
+import 'package:pokepedia_mobile/features/portfolio/repository/models/collection_page.dart';
 
 PortfolioValuePoint _point(String day, int value) =>
     PortfolioValuePoint(day: DateTime.parse(day), value: value);
 
-const _holding = PortfolioHolding(
-  cardId: 1,
-  name: 'Pikachu',
-  collectorNumber: '025/165',
-  expansionCode: 'SV2a',
-  rarity: 'Rare',
-  packSlug: 'sv2a',
-  quantity: 2,
-  unitPrice: 50000,
+const _oneCard = CollectionSummary(
+  totalValue: 100000,
+  uniqueCount: 1,
+  totalCount: 2,
+  valueNow: 100000,
+  value7dAgo: 100000,
 );
 
 Widget _host({
   required List<PortfolioValuePoint> series,
-  List<PortfolioHolding> holdings = const [_holding],
+  CollectionSummary summary = _oneCard,
 }) {
   return ProviderScope(
     overrides: [
-      portfolioHoldingsProvider.overrideWith((ref) async => holdings),
+      collectionSummaryProvider.overrideWith((ref) async => summary),
       portfolioValueSeriesProvider.overrideWith((ref) async => series),
     ],
     child: MaterialApp(
@@ -72,7 +70,7 @@ void main() {
   });
 
   testWidgets('a single day is drawn, not withheld', (tester) async {
-    // Today's value is computed live from the priced holdings, so it exists
+    // Today's value is computed live from the collection summary, so it exists
     // as soon as a card is added — it does not wait for the nightly
     // snapshot. Showing "no history yet" for a number already printed above
     // the chart told the reader to come back tomorrow for something they
@@ -86,7 +84,9 @@ void main() {
   });
 
   testWidgets('an empty portfolio says so instead', (tester) async {
-    await tester.pumpWidget(_host(series: const [], holdings: const []));
+    await tester.pumpWidget(
+      _host(series: const [], summary: CollectionSummary.empty),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Belum ada kartu di portofolio ini'), findsOneWidget);
@@ -123,7 +123,17 @@ void main() {
 
   group('PortfolioHolding', () {
     test('values a line by quantity', () {
-      expect(_holding.value, 100000);
+      const holding = PortfolioHolding(
+        cardId: 1,
+        name: 'Pikachu',
+        collectorNumber: '025/165',
+        expansionCode: 'SV2a',
+        rarity: 'Rare',
+        packSlug: 'sv2a',
+        quantity: 2,
+        unitPrice: 50000,
+      );
+      expect(holding.value, 100000);
     });
   });
 }

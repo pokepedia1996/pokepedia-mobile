@@ -4,12 +4,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/deck_model.dart';
+import '../../../shared/models/pokemon_type.dart';
+import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
+import '../../../shared/utils/paged_rows.dart';
 import '../../../shared/utils/primary_collection.dart';
+import 'models/collection_page.dart';
 import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
 import 'models/wantlist_model.dart';
 import '../../../core/errors/user_message.dart';
+
+export '../../../shared/utils/paged_rows.dart' show maxCollectionRows;
 
 const _deckSelect =
     'id, name, description, share_code, created_at, updated_at, deck_cards(quantity)';
@@ -47,42 +53,64 @@ String generateShareCode() {
   return buffer.toString();
 }
 
+/// `PORTFOLIO_BATCH_SIZE` on web.
+const collectionPageSize = 48;
+
+/// The sorts `get_collection_cards` can continue from a cursor. The number
+/// and set sorts have no cursor key and page by offset — a cursor sent with
+/// one of them is ignored and the first page comes back again.
+const _keysetSorts = {
+  CardSortOption.priceAsc,
+  CardSortOption.priceDesc,
+  CardSortOption.nameAsc,
+  CardSortOption.nameDesc,
+  CardSortOption.rarityAsc,
+  CardSortOption.rarityDesc,
+};
+
+/// The `get_collection_cards` arguments for one page. Every facet is null
+/// rather than empty when unused: the RPC reads an empty array as "match
+/// nothing".
+Map<String, dynamic> collectionPageParams({
+  required String? collectionId,
+  required CardSortOption sort,
+  required CardFilters filters,
+  CollectionFacets facets = const CollectionFacets(),
+  CollectionCardRow? after,
+  int offset = 0,
+  int limit = collectionPageSize,
+}) {
+  List<String>? orNull(Iterable<String> values) =>
+      values.isEmpty ? null : values.toList();
+  final cursor = _keysetSorts.contains(sort) ? after : null;
+  final search = filters.search.trim();
+
+  return {
+    'p_collection_id': collectionId,
+    'p_sort': sort.raw,
+    'p_limit': limit,
+    'p_offset': cursor == null ? offset : 0,
+    'p_search': search.isEmpty ? null : search,
+    'p_categories': orNull(filters.categories.map((c) => c.raw)),
+    'p_types': orNull(filters.types.map((t) => t.assetName)),
+    'p_rarities': orNull(filters.rarities),
+    'p_evolution_stages': orNull(
+      facets.evolutionStagesFor(filters.evolutionStages),
+    ),
+    'p_trainer_subtypes': orNull(
+      facets.trainerSubtypesFor(filters.trainerSubtypes),
+    ),
+    'p_regulation_marks': orNull(filters.regulationMarks),
+    'p_cursor_id': cursor?.collectionCardId,
+    'p_cursor_num': cursor?.cursorNum,
+    'p_cursor_text': cursor?.cursorText,
+    'p_cursor_ts': cursor?.cursorTs?.toUtc().toIso8601String(),
+  };
+}
+
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
 /// `fetchUserDecks` / `lib/products/wishlist.ts` / the web's collection API.
-/// How many cards a collection may carry into the app.
-///
-/// PostgREST answers at most a page at a time — Supabase's "Max rows" is
-/// 1000 by default — and a query with no `range` silently stops there rather
-/// than erroring. That is why a 8,495-card collection reported "1000 kartu
-/// unik": not a chart limit, a truncated read that every total downstream
-/// then agreed on.
-const maxCollectionRows = 15000;
-
-/// One page of a PostgREST read.
-const _collectionPageSize = 1000;
-
-/// Reads every row [page] describes, a page at a time, up to [max].
-///
-/// Client-side paging rather than a bigger `limit`: the server cap wins over
-/// whatever the client asks for, so the only way past it is to ask again.
-Future<List<Map<String, dynamic>>> _pagedRows(
-  Future<dynamic> Function(int from, int to) page, {
-  int max = maxCollectionRows,
-}) async {
-  final all = <Map<String, dynamic>>[];
-  for (var from = 0; from < max; from += _collectionPageSize) {
-    final to = min(from + _collectionPageSize, max) - 1;
-    final rows = await page(from, to);
-    if (rows is! List || rows.isEmpty) break;
-    all.addAll(rows.cast<Map<String, dynamic>>());
-    // A short page is the last page — asking again would spend a round trip
-    // to be told the same thing.
-    if (rows.length < to - from + 1) break;
-  }
-  return all;
-}
-
 class PortfolioRepository {
   PortfolioRepository(this._client);
 
@@ -95,15 +123,15 @@ class PortfolioRepository {
   Future<List<CardModel>> fetchCollection(String userId) async {
     final collectionId = await primaryCollectionId(_client, userId);
     if (collectionId == null) return const [];
-    final rows = await _pagedRows(
+    final rows = await pagedRows(
       (from, to) => _client
           .from('collection_cards')
           .select('quantity, cards!inner($_cardColumns)')
           .eq('collection_id', collectionId)
           .gt('quantity', 0)
-          // Ordered, because paging without one lets the server return the
-          // same row twice across two pages and drop another entirely.
+          // A card held under two variant keys has two rows with one card_id.
           .order('card_id', ascending: true)
+          .order('id', ascending: true)
           .range(from, to),
     );
     final cards = rows.map((r) {
@@ -113,6 +141,62 @@ class PortfolioRepository {
     // `cards` carries no price, so an unpriced collection made every tile
     // blank and every total zero. One batch call covers the whole thing.
     return priceCards(_client, cards);
+  }
+
+  /// One page of a collection, searched, filtered and sorted on the server —
+  /// `get_collection_cards`, the RPC web's Koleksi page reads.
+  ///
+  /// A null [collectionId] is the primary collection; the RPC resolves it
+  /// and checks ownership either way.
+  Future<CollectionCardsPage> fetchCollectionPage({
+    required String? collectionId,
+    required CardSortOption sort,
+    required CardFilters filters,
+    CollectionFacets facets = const CollectionFacets(),
+    CollectionCardRow? after,
+    int offset = 0,
+    int limit = collectionPageSize,
+  }) async {
+    final rows =
+        await _client.rpc(
+              'get_collection_cards',
+              params: collectionPageParams(
+                collectionId: collectionId,
+                sort: sort,
+                filters: filters,
+                facets: facets,
+                after: after,
+                offset: offset,
+                limit: limit,
+              ),
+            )
+            as List;
+    final parsed = rows
+        .cast<Map<String, dynamic>>()
+        .map(CollectionCardRow.fromRpc)
+        .toList();
+    return CollectionCardsPage(
+      rows: parsed,
+      total: (rows.isEmpty ? null : rows.first['total_count'] as num?)?.toInt(),
+    );
+  }
+
+  Future<CollectionSummary> fetchCollectionSummary(String? collectionId) async {
+    final json = await _client.rpc(
+      'get_collection_summary',
+      params: {'p_collection_id': collectionId},
+    );
+    if (json is! Map<String, dynamic>) return CollectionSummary.empty;
+    return CollectionSummary.fromJson(json);
+  }
+
+  Future<CollectionFacets> fetchCollectionFacets(String? collectionId) async {
+    final json = await _client.rpc(
+      'get_collection_facets',
+      params: {'p_collection_id': collectionId},
+    );
+    if (json is! Map<String, dynamic>) return const CollectionFacets();
+    return CollectionFacets.fromJson(json);
   }
 
   /// Ports `fetchUserDecks` (`lib/products/decks.ts`) — card count is the
@@ -287,13 +371,21 @@ class PortfolioRepository {
   }
 
   Future<List<CardModel>> fetchWishlist(String userId) async {
-    final cardIds = await fetchWishlistedCardIds();
+    final cardIds = (await fetchWishlistedCardIds()).toList();
     if (cardIds.isEmpty) return const [];
-    final rows = await _client
-        .from('cards')
-        .select(_cardColumns)
-        .inFilter('id', cardIds.toList())
-        .range(0, maxCollectionRows - 1);
+    // Chunked so every request stays under the server's row cap and its id
+    // list stays a sane URL length.
+    final rows = <Map<String, dynamic>>[];
+    for (var start = 0; start < cardIds.length; start += _bulkCardLimit) {
+      final chunk = cardIds.sublist(
+        start,
+        min(start + _bulkCardLimit, cardIds.length),
+      );
+      rows.addAll(
+        (await _client.from('cards').select(_cardColumns).inFilter('id', chunk))
+            .cast<Map<String, dynamic>>(),
+      );
+    }
     // The wishlist draws the same tiles as the collection, so it prices the
     // same way — otherwise half the app's cards show a value and half don't.
     return priceCards(_client, rows.map(CardModel.fromRow).toList());
@@ -328,24 +420,32 @@ class PortfolioRepository {
   /// Ports `fetchInventoryRecords` — confirmed (non-draft) `user_inventory`
   /// rows. This is the "Database" view: what's actually in the inventory.
   Future<List<InventoryEntry>> fetchInventoryRecords(String userId) async {
-    final rows = await _client
-        .from('user_inventory')
-        .select(_inventorySelect)
-        .eq('user_id', userId)
-        .eq('is_draft', false)
-        .order('created_at', ascending: false);
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('user_inventory')
+          .select(_inventorySelect)
+          .eq('user_id', userId)
+          .eq('is_draft', false)
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to),
+    );
     return rows.map(_mapInventoryRow).toList();
   }
 
   /// Ports `fetchDraftRecords` — rows staged via "Tambahkan" but not yet
   /// confirmed into the collection.
   Future<List<InventoryEntry>> fetchDraftRecords(String userId) async {
-    final rows = await _client
-        .from('user_inventory')
-        .select(_inventorySelect)
-        .eq('user_id', userId)
-        .eq('is_draft', true)
-        .order('created_at', ascending: false);
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('user_inventory')
+          .select(_inventorySelect)
+          .eq('user_id', userId)
+          .eq('is_draft', true)
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to),
+    );
     return rows.map(_mapInventoryRow).toList();
   }
 
@@ -448,13 +548,17 @@ class PortfolioRepository {
   Future<List<InventoryActivityEntry>> fetchInventoryActivity(
     String userId,
   ) async {
-    final rows = await _client
-        .from('user_inventory_activity')
-        .select(
-          'id, card_id, action, quantity, unit_price, created_at, cards!inner($_cardColumns)',
-        )
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('user_inventory_activity')
+          .select(
+            'id, card_id, action, quantity, unit_price, created_at, cards!inner($_cardColumns)',
+          )
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to),
+    );
     return rows.map((r) {
       return InventoryActivityEntry(
         id: r['id'] as int,
@@ -547,13 +651,15 @@ class PortfolioRepository {
   /// A collection's cards, in the order they were filed (`created_at`
   /// ascending) — the same order `get_public_collection_cards` returns.
   Future<List<CardModel>> fetchListCards(String listId) async {
-    final rows = await _client
-        .from('collection_cards')
-        .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
-        .eq('collection_id', listId)
-        .order('created_at', ascending: true)
-        // A list is a collection too, and hits the same page ceiling.
-        .range(0, maxCollectionRows - 1);
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('collection_cards')
+          .select('id, quantity, notes, created_at, cards!inner($_cardColumns)')
+          .eq('collection_id', listId)
+          .order('created_at', ascending: true)
+          .order('id', ascending: true)
+          .range(from, to),
+    );
     final cards = rows.map((r) {
       final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
       // The list's own quantity, not an ownership count — the detail grid

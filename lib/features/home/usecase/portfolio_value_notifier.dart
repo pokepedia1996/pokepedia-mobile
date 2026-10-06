@@ -4,9 +4,15 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/primary_collection.dart';
+import '../../portfolio/usecase/collection_page_notifier.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../repository/models/portfolio_value.dart';
 import '../repository/portfolio_value_repository.dart';
+
+/// Re-exported so the Beranda widgets read the summary without reaching into
+/// the portfolio feature.
+export '../../portfolio/usecase/collection_page_notifier.dart'
+    show collectionSummaryProvider;
 
 /// Which portfolio the Beranda header is valuing: what the user picked this
 /// session, otherwise the whole collection.
@@ -66,10 +72,9 @@ final selectedPortfolioCardsProvider = FutureProvider<List<CardModel>>((ref) {
   return ref.watch(listCardsProvider(target.listId!).future);
 });
 
-/// The selected portfolio's cards, priced.
-///
-/// Derived from the same provider the grid renders, so the headline value
-/// and the cards on screen can't disagree about what's in the portfolio.
+/// The selected portfolio's cards, priced — every one of them, which is a
+/// full read of the collection. Only "Nilai Tertinggi" needs that; the
+/// headline figures come from [collectionSummaryProvider].
 final portfolioHoldingsProvider = FutureProvider<List<PortfolioHolding>>((
   ref,
 ) async {
@@ -93,12 +98,10 @@ final portfolioHoldingsProvider = FutureProvider<List<PortfolioHolding>>((
   ];
 });
 
-/// Today's headline number under "Portofolio Utama" — the same arithmetic
-/// the Koleksi page totals with, so the two screens can't disagree.
+/// Today's headline number under "Portofolio Utama" — the same summary the
+/// Koleksi header reads, so the two screens can't disagree.
 final portfolioValueProvider = Provider<int>((ref) {
-  final holdings = ref.watch(portfolioHoldingsProvider).valueOrNull;
-  if (holdings == null) return 0;
-  return holdings.fold(0, (sum, holding) => sum + holding.value);
+  return ref.watch(collectionSummaryProvider).valueOrNull?.totalValue ?? 0;
 });
 
 /// "Nilai Tertinggi" — the holdings worth the most, biggest first.
@@ -124,7 +127,7 @@ final selectedCollectionIdProvider = FutureProvider<String?>((ref) async {
 /// The chart series for the selected portfolio and range.
 ///
 /// Yesterday and earlier come from `collection_value_snapshots`; **today is
-/// always computed live** from the priced holdings.
+/// always computed live** from the collection summary.
 ///
 /// Today is deliberately not read from the table. The snapshot is taken once
 /// at 00:20 UTC, so a card added at noon would not move the chart until the
@@ -148,12 +151,12 @@ final portfolioValueSeriesProvider = FutureProvider<List<PortfolioValuePoint>>((
       .read(portfolioValueRepositoryProvider)
       .fetchValueSeries(range: range, collectionId: collectionId);
 
-  final holdings = await ref.watch(portfolioHoldingsProvider.future);
-  if (holdings.isEmpty) return history;
+  final summary = await ref.watch(collectionSummaryProvider.future);
+  if (summary.isEmpty) return history;
 
   final now = DateTime.now().toUtc();
   final today = DateTime.utc(now.year, now.month, now.day);
-  final live = holdings.fold(0, (sum, holding) => sum + holding.value);
+  final live = summary.totalValue;
 
   // Today's snapshot, if the cron already wrote one, is replaced rather than
   // appended to: two points for one day would draw a vertical step.
@@ -187,11 +190,8 @@ final portfolioDeltaProvider = Provider<PortfolioDelta?>((ref) {
 
 /// Convenience for the "N kartu" caption next to the value.
 final portfolioCardCountProvider = Provider<({int unique, int total})>((ref) {
-  final holdings = ref.watch(portfolioHoldingsProvider).valueOrNull ?? const [];
-  return (
-    unique: holdings.length,
-    total: holdings.fold(0, (sum, h) => sum + h.quantity),
-  );
+  final summary = ref.watch(collectionSummaryProvider).valueOrNull;
+  return (unique: summary?.uniqueCount ?? 0, total: summary?.totalCount ?? 0);
 });
 
 /// Re-exported so the Beranda widgets don't reach into the portfolio feature

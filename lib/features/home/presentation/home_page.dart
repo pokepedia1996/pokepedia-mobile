@@ -35,9 +35,10 @@ class HomePage extends ConsumerWidget {
                 child: RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(portfolioHoldingsProvider);
+                    ref.invalidate(collectionSummaryProvider);
                     ref.invalidate(portfolioValueSeriesProvider);
                     ref.invalidate(homeFeedProvider);
-                    await ref.read(portfolioHoldingsProvider.future);
+                    await ref.read(collectionSummaryProvider.future);
                   },
                   child: ListView(
                     // Bottom padding rather than a fixed spacer: the last

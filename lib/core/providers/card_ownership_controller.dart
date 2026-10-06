@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/expansions/usecase/expansions_notifier.dart';
+import '../../features/portfolio/usecase/collection_page_notifier.dart';
 import '../../features/portfolio/usecase/portfolio_notifier.dart';
 import '../../shared/models/deck_model.dart';
 
@@ -136,6 +137,7 @@ class CardOwnershipController {
   void _revalidateList(String listId) {
     _ref.invalidate(listCardsProvider(listId));
     _ref.invalidate(listsProvider);
+    invalidateCollectionViews(_ref.invalidate);
   }
 
   /// Ports `handleBulkRemove`. Because the target is the primary collection,
@@ -159,6 +161,7 @@ class CardOwnershipController {
       _ref.invalidate(ownedQuantityProvider(cardId));
     }
     _ref.invalidate(collectionProvider);
+    invalidateCollectionViews(_ref.invalidate);
     // Family-wide: the controller doesn't know which pack slug the caller
     // acted on, and a card can appear in only one expansion anyway.
     _ref.invalidate(packOwnedQuantitiesProvider);
@@ -213,6 +216,7 @@ class CardOwnershipController {
     if (error == null) {
       _revalidateInventory();
       _ref.invalidate(collectionProvider);
+      invalidateCollectionViews(_ref.invalidate);
       for (final item in items) {
         _ref.invalidate(ownedQuantityProvider(item.cardId));
       }
@@ -223,6 +227,7 @@ class CardOwnershipController {
   void _revalidateOwnership(int cardId) {
     _ref.invalidate(ownedQuantityProvider(cardId));
     _ref.invalidate(collectionProvider);
+    invalidateCollectionViews(_ref.invalidate);
   }
 
   void _revalidateWishlist(int cardId) {

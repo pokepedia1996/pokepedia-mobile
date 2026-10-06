@@ -5,6 +5,7 @@ import '../../../core/utils/image_url.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
+import '../../../shared/utils/paged_rows.dart';
 import '../../../shared/utils/primary_collection.dart';
 import 'models/profile_models.dart';
 import '../../../core/errors/user_message.dart';
@@ -121,13 +122,16 @@ class UserRepository {
   Future<List<Map<String, dynamic>>> _ownCollectionRows(String userId) async {
     final collectionId = await primaryCollectionId(_client, userId);
     if (collectionId == null) return const [];
-    final rows = await _client
-        .from('collection_cards')
-        .select(_collectionColumns)
-        .eq('collection_id', collectionId)
-        .gt('quantity', 0)
-        .order('card_id', ascending: true);
-    return rows.cast<Map<String, dynamic>>();
+    return pagedRows(
+      (from, to) => _client
+          .from('collection_cards')
+          .select(_collectionColumns)
+          .eq('collection_id', collectionId)
+          .gt('quantity', 0)
+          .order('card_id', ascending: true)
+          .order('id', ascending: true)
+          .range(from, to),
+    );
   }
 
   /// `p_slug` null means "whichever collection is primary" — the same
