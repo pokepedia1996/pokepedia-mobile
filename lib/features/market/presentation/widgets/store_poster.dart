@@ -328,22 +328,26 @@ class _PosterTile extends StatelessWidget {
           CardArt(imageUrl: listing.card.imageUrl, borderRadius: AppRadius.md),
 
           // Condition, abbreviated — "NM" reads at poster scale where "Near
-          // Mint" would wrap or shrink.
-          Positioned(
-            top: 6,
-            right: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Text(
-                listing.condition.short,
-                style: AppTypography.badge(Colors.white).copyWith(fontSize: 16),
+          // Mint" would wrap or shrink. A sealed product has none to show, as
+          // `drawTile` skips the badge for it.
+          if (!listing.card.isSealed)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Text(
+                  listing.condition.short,
+                  style: AppTypography.badge(
+                    Colors.white,
+                  ).copyWith(fontSize: 16),
+                ),
               ),
             ),
-          ),
 
           // Price sits *on* the art rather than under it, which buys the
           // grid a full row of height. The scrim is what keeps it legible

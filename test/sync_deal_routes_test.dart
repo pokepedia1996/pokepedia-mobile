@@ -14,7 +14,7 @@ SupabaseClient _client() => SupabaseClient('http://localhost', 'anon-key');
 const _fingerprint = '0123456789abcdef0123456789abcdef';
 
 class _FixedFingerprint extends DeviceFingerprint {
-  _FixedFingerprint() : super(_client());
+  _FixedFingerprint();
 
   @override
   Future<String> value() async => _fingerprint;

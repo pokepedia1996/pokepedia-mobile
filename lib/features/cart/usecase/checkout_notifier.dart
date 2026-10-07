@@ -39,15 +39,17 @@ class SellerShipping {
     List<CourierOption>? options,
     CourierOption? selected,
     String? error,
+    RatesReason? reason,
     bool clearSelected = false,
     bool clearError = false,
+    bool clearReason = false,
   }) {
     return SellerShipping(
       loading: loading ?? this.loading,
       options: options ?? this.options,
       selected: clearSelected ? null : (selected ?? this.selected),
       error: clearError ? null : (error ?? this.error),
-      reason: reason,
+      reason: clearReason ? null : (reason ?? this.reason),
     );
   }
 }
@@ -193,6 +195,11 @@ class CheckoutState {
 /// carries in `?d=`, so [checkoutProvider] is scoped along with it.
 final checkoutDealIdsProvider = Provider<List<String>>((ref) => const []);
 
+/// Whether the deals of [checkoutDealIdsProvider] are paid together with the
+/// lines ticked in the cart — web's `?s=&d=` from the cart page — rather
+/// than on their own. Scoped by `dealCheckoutRoute` alongside the ids.
+final checkoutWithCartSelectionProvider = Provider<bool>((ref) => false);
+
 /// Drives the native WTS checkout: address, per-seller courier and
 /// insurance, coupons, note, payment choice, and the totals that follow from
 /// them. Ports `checkout-client.tsx` together with the `useShippingRates`,
@@ -202,6 +209,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   @override
   CheckoutState build() {
     _dealIds = ref.watch(checkoutDealIdsProvider);
+    _withCartSelection = ref.watch(checkoutWithCartSelectionProvider);
     Future.microtask(loadContext);
     Future.microtask(loadLastPaidChannel);
 
@@ -245,10 +253,18 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   bool _disposed = false;
 
   List<String> _dealIds = const [];
+  bool _withCartSelection = false;
 
   /// A deal checkout pays for its deals alone, as web's proposal-only
   /// checkout does — never the cart lines sitting beside them.
-  bool get isDealCheckout => _dealIds.isNotEmpty;
+  bool get isDealCheckout => _dealIds.isNotEmpty && !_withCartSelection;
+
+  /// The deals actually loaded, which is what gets priced and invoiced: one
+  /// that lapsed since the cart page was read is left out rather than
+  /// failing the whole submit.
+  List<String> get _loadedDealIds => [
+    for (final deal in state.deals) deal.externalId,
+  ];
 
   List<CartItem> get _items =>
       isDealCheckout ? const [] : ref.read(selectedCartItemsProvider);
@@ -291,14 +307,14 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final results = await Future.wait([
         gateway.fetchContext(),
         gateway.fetchSellerOrigins(),
-        if (isDealCheckout) gateway.fetchDeals(externalIds: _dealIds),
+        if (_dealIds.isNotEmpty) gateway.fetchDeals(externalIds: _dealIds),
       ]);
       if (_disposed) return;
       state = state.copyWith(
         contextLoading: false,
         phoneVerified: (results[0] as CheckoutContext).phoneVerified,
         sellerOrigins: results[1] as Map<String, SellerOrigin>,
-        deals: isDealCheckout ? results[2] as List<CheckoutDeal> : null,
+        deals: _dealIds.isNotEmpty ? results[2] as List<CheckoutDeal> : null,
       );
       await _refreshAllRates();
     } on ApiException catch (e) {
@@ -584,7 +600,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   String get _currentCouponSignature =>
       '$itemsSubtotal|$shippingTotal|${state.paymentChannel?.code ?? '-'}|'
       '${[for (final item in _items) item.cartItemId].join(',')}|'
-      '${_dealIds.join(',')}';
+      '${_loadedDealIds.join(',')}';
 
   /// Auto-apply needs the catalog before the picker is ever opened, so it
   /// is fetched as soon as the cart and a courier are both settled.
@@ -622,7 +638,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
             shippingTotal: shippingTotal,
             paymentChannel: state.paymentChannel,
             selectedCartItemIds: [for (final item in _items) item.cartItemId],
-            dealExternalIds: _dealIds,
+            dealExternalIds: _loadedDealIds,
           );
       if (_disposed || generation != _couponGeneration) return;
       _couponSignature = signature;
@@ -735,6 +751,9 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
           ? 'Penawaran ini sudah tidak tersedia.'
           : 'Gagal memuat penawaran.';
     }
+    if (_dealIds.isNotEmpty && state.contextLoading) {
+      return 'Memuat penawaran...';
+    }
     if (_items.isEmpty && state.deals.isEmpty) return 'Keranjang kosong.';
     if (state.address == null) return 'Pilih alamat pengiriman dulu.';
     if (!state.phoneVerified) {
@@ -785,11 +804,21 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       }
 
       final gateway = ref.read(checkoutGatewayProvider);
+      final dealIds = _loadedDealIds;
       final result = isDealCheckout
           ? await gateway.submitDeals(
-              dealExternalIds: [
-                for (final deal in state.deals) deal.externalId,
-              ],
+              dealExternalIds: dealIds,
+              courierChoices: choices,
+              deliveryAddressSlug: state.address!.slug,
+              paymentMethod: state.paymentMethod,
+              paymentChannel: state.paymentChannel,
+              buyerNote: state.buyerNote,
+              couponIds: coupons.ids,
+            )
+          : dealIds.isNotEmpty
+          ? await gateway.submitCartWithDeals(
+              selectedCartItemIds: [for (final item in _items) item.cartItemId],
+              dealExternalIds: dealIds,
               courierChoices: choices,
               deliveryAddressSlug: state.address!.slug,
               paymentMethod: state.paymentMethod,
@@ -881,5 +910,8 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 final checkoutProvider =
     NotifierProvider.autoDispose<CheckoutNotifier, CheckoutState>(
       CheckoutNotifier.new,
-      dependencies: [checkoutDealIdsProvider],
+      dependencies: [
+        checkoutDealIdsProvider,
+        checkoutWithCartSelectionProvider,
+      ],
     );

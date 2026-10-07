@@ -191,7 +191,8 @@ class SellerGroupCard extends StatelessWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            ConditionBadge(condition: item.listing.condition),
+                            if (!item.listing.card.isSealed)
+                              ConditionBadge(condition: item.listing.condition),
                             Text(
                               'Qty: ${item.quantity}',
                               style: AppTypography.caption(
@@ -412,7 +413,8 @@ class _DealLineRow extends StatelessWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (condition != null) ConditionBadge(condition: condition),
+                    if (condition != null && !line.isSealed)
+                      ConditionBadge(condition: condition),
                     Text(
                       'Qty: ${line.quantity}',
                       style: AppTypography.caption(context.mutedForeground),

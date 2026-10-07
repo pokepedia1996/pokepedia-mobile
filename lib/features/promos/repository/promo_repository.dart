@@ -21,6 +21,8 @@ const _popupColumns =
 /// ever compared across clients.
 const _stateKey = 'pokepedia:promo-popup:v1';
 
+const _eventsPath = '/api/promos/events';
+
 /// Data access for interstitial campaigns. Ports
 /// `features/promos/api/promos.client.ts` and `promo-events.client.ts`.
 ///
@@ -59,16 +61,18 @@ class PromoRepository {
   /// Best-effort, like web's `sendBeacon`: a lost event never touches the
   /// popup.
   ///
-  /// Only sent with a session — [PokepediaApi] authenticates every call, and
-  /// sending one signed out would spend a refresh attempt on a session that
-  /// does not exist.
+  /// Signed out goes through [PokepediaApi.postAnonymous]: the route records
+  /// anonymous events with a null `user_id`, and the authenticated path
+  /// would refuse to send without a session. Signed in keeps the session so
+  /// the event is attributed, as the browser's cookie does.
   Future<void> logEvent(int popupId, PromoPopupEvent event) async {
-    if (_client.auth.currentUser == null) return;
+    final body = {'popupId': popupId, 'event': event.name};
     try {
-      await _api.post('/api/promos/events', {
-        'popupId': popupId,
-        'event': event.name,
-      });
+      if (_client.auth.currentUser == null) {
+        await _api.postAnonymous(_eventsPath, body);
+      } else {
+        await _api.post(_eventsPath, body);
+      }
     } on ApiException catch (error) {
       // The route answers 204 with no body, which the client reports as an
       // unrecognised response; anything else is a genuinely lost event.

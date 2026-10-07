@@ -22,6 +22,7 @@ import '../repository/checkout_gateway.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_deal.dart';
 import '../repository/models/checkout_models.dart';
+import '../usecase/cart_deals.dart';
 import '../usecase/cart_notifier.dart';
 import '../usecase/cart_selection.dart';
 import '../../orders/usecase/orders_notifier.dart';
@@ -59,17 +60,23 @@ class CheckoutPage extends ConsumerStatefulWidget {
   ConsumerState<CheckoutPage> createState() => _CheckoutPageState();
 }
 
-/// Checkout for accepted bid proposals alone — web's `/cart/checkout?s=&d=`.
+/// Checkout for accepted bid proposals — web's `/cart/checkout?s=&d=`.
 ///
 /// The deal ids are scoped onto this one page, so the checkout behind it is
-/// its own and the cart's selection never leaks into what gets invoiced.
-Route<void> dealCheckoutRoute(List<String> dealExternalIds) =>
-    MaterialPageRoute<void>(
-      builder: (_) => ProviderScope(
-        overrides: [checkoutDealIdsProvider.overrideWithValue(dealExternalIds)],
-        child: const CheckoutPage(),
-      ),
-    );
+/// its own. Alone, the cart's selection never leaks into what gets invoiced;
+/// with [withCartSelection] the cart page's ticked lines are paid alongside.
+Route<void> dealCheckoutRoute(
+  List<String> dealExternalIds, {
+  bool withCartSelection = false,
+}) => MaterialPageRoute<void>(
+  builder: (_) => ProviderScope(
+    overrides: [
+      checkoutDealIdsProvider.overrideWithValue(dealExternalIds),
+      checkoutWithCartSelectionProvider.overrideWithValue(withCartSelection),
+    ],
+    child: const CheckoutPage(),
+  ),
+);
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Falls back to the primary address until the buyer picks another, then
@@ -201,6 +208,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // too — after the refresh below it prices an empty cart.
       final paidFromSaldo = notifier.totals.walletAmountDue;
       final method = ref.read(checkoutProvider).paymentMethod;
+      final paidDeals = ref.read(checkoutProvider).deals.isNotEmpty;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
       // Paying from the wallet is settled by the time `submit` returns, so
@@ -209,7 +217,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // confirmation that anything happened. `submit` has already revalidated
       // the wallet and the order list; the saldo is spent.
       if (method == PaymentMethod.wallet) {
-        if (isDealCheckout) ref.invalidate(myPendingCheckoutsProvider);
+        if (paidDeals) {
+          ref.invalidate(myPendingCheckoutsProvider);
+          ref.invalidate(cartDealsProvider);
+        }
         await ref.read(cartProvider.notifier).refresh();
         if (mounted) {
           context.goHomeThen(
@@ -247,6 +258,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // The checkout now exists as an unpaid cart, which is what Pesanan
         // shows under Belum Bayar.
         ref.invalidate(myPendingCheckoutsProvider);
+        if (paidDeals) ref.invalidate(cartDealsProvider);
 
         await closed;
         if (mounted) setState(() => _paying = false);

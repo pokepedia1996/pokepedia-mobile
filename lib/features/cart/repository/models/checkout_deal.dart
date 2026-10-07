@@ -1,4 +1,5 @@
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/models/card_model.dart';
 
 /// An accepted bid proposal waiting to be paid: a `carts` row of
 /// `kind = 'bid'` that `accept_bid_proposal` opened with no invoice yet.
@@ -111,4 +112,7 @@ class CheckoutDealLine {
   final String? sellerId;
 
   int get subtotal => price * quantity;
+
+  /// A sealed product carries no grade worth showing — `isSealedCardId`.
+  bool get isSealed => isSealedCardId(cardId);
 }

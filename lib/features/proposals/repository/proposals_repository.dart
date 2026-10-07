@@ -44,6 +44,15 @@ bid:listings!bid_order_id(id, price, user_id, cards($_cardColumns)),
 match:order_items!order_item_id(bid_user_id, card:cards($_cardColumns))
 ''';
 
+/// What accepting a proposal came back with: a buyer-facing [error], or the
+/// `INV-BID-…` deal cart the accept opened, which `dealCheckoutRoute` pays.
+class AcceptBidProposalResult {
+  const AcceptBidProposalResult({this.error, this.externalId});
+
+  final String? error;
+  final String? externalId;
+}
+
 /// Data access for the buyer's side of negotiation, backed by Supabase.
 ///
 /// Ports `/api/listing-offers*` and `/api/bid-proposals*`, which are thin
@@ -442,8 +451,35 @@ class ProposalsRepository {
     }).toList();
   }
 
-  Future<String?> acceptBidProposal(String proposalSlug) =>
-      _callRpc('accept_bid_proposal', {'p_proposal_slug': proposalSlug});
+  /// Ports `POST /api/bid-proposals/[slug]/accept`, keeping the deal cart's
+  /// `externalId` the route hands back so the buyer can pay that deal.
+  Future<AcceptBidProposalResult> acceptBidProposal(String proposalSlug) async {
+    try {
+      final result = await _client.rpc(
+        'accept_bid_proposal',
+        params: {'p_proposal_slug': proposalSlug},
+      );
+      return parseAcceptBidProposal(result);
+    } on PostgrestException catch (e) {
+      return AcceptBidProposalResult(error: userFacingError(e));
+    }
+  }
+
+  /// Reads `accept_bid_proposal`'s `{ ok, checkout_id, external_id }` or
+  /// `{ error }` answer.
+  AcceptBidProposalResult parseAcceptBidProposal(Object? result) {
+    if (result is! Map) return const AcceptBidProposalResult();
+    final error = result['error'];
+    if (error is String) {
+      return AcceptBidProposalResult(error: _messageFor(error));
+    }
+    final externalId = result['external_id'];
+    return AcceptBidProposalResult(
+      externalId: externalId is String && externalId.isNotEmpty
+          ? externalId
+          : null,
+    );
+  }
 
   Future<String?> rejectBidProposal({
     required String proposalSlug,

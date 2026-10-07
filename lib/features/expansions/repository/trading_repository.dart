@@ -24,7 +24,7 @@ class TradingRepository {
     PokepediaApi? api,
     DeviceFingerprint? fingerprint,
   }) : _api = api ?? PokepediaApi(_client),
-       _fingerprint = fingerprint ?? DeviceFingerprint(_client);
+       _fingerprint = fingerprint ?? DeviceFingerprint();
 
   final SupabaseClient _client;
   final PokepediaApi _api;

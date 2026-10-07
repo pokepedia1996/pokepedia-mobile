@@ -16,11 +16,8 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/photo_strip.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
-import '../../../core/errors/user_message.dart';
-import '../../../core/network/pokepedia_api.dart';
 import '../../cart/presentation/checkout_page.dart';
-import '../../cart/repository/checkout_gateway.dart';
-import '../../cart/repository/models/checkout_deal.dart';
+import '../../cart/usecase/cart_deals.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../../orders/usecase/orders_notifier.dart';
 import '../repository/models/bid_proposal_model.dart';
@@ -230,17 +227,18 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
   }
 
   /// Accepts, then offers the way to pay. Web sends the buyer to the cart,
-  /// where the deal waits as its own group; the app has no deal group in its
-  /// cart, so the toast opens that deal's checkout directly.
+  /// where the deal waits as its own group; the toast here opens the deal the
+  /// accept just opened straight into its checkout.
   Future<void> _accept(BidProposalModel proposal) async {
     setState(() => _busySlug = proposal.slug);
-    final error = await ref
+    final result = await ref
         .read(proposalsRepositoryProvider)
         .acceptBidProposal(proposal.slug);
     if (!mounted) return;
     setState(() => _busySlug = null);
 
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final error = result.error;
     if (error != null) {
       messenger.showSnackBar(SnackBar(content: Text(error), persist: false));
       return;
@@ -250,52 +248,31 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     ref.invalidate(myBidsProvider);
     ref.invalidate(proposalsSummaryProvider);
     ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
+    final externalId = result.externalId;
     messenger.showSnackBar(
       SnackBar(
         content: const Text('Proposal diterima. Bayar dalam 24 jam.'),
         duration: const Duration(seconds: 6),
         persist: false,
-        action: SnackBarAction(
-          label: 'Bayar',
-          onPressed: () => _payAcceptedDeal(proposal.card.id),
-        ),
+        action: externalId == null
+            ? null
+            : SnackBarAction(
+                label: 'Bayar',
+                onPressed: () => _payAcceptedDeal(externalId),
+              ),
       ),
     );
   }
 
-  /// `accept_bid_proposal` hands back the new cart's external id, but the
-  /// repository keeps only the error, so the deal is found again: the
-  /// newest payable one for this card, which is the one just opened.
-  Future<void> _payAcceptedDeal(int cardId) async {
+  Future<void> _payAcceptedDeal(String externalId) async {
     // The snack bar outlives the page on the root messenger.
     if (!mounted) return;
-    final List<CheckoutDeal> deals;
-    try {
-      deals = await ref.read(checkoutGatewayProvider).fetchDeals();
-    } on ApiException catch (e) {
-      if (mounted) _toast(userFacingError(e));
-      return;
-    }
-    if (!mounted) return;
-    final deal =
-        deals
-            .where((d) => d.lines.any((line) => line.cardId == cardId))
-            .firstOrNull ??
-        deals.firstOrNull;
-    if (deal == null) {
-      _toast('Penawaran ini sudah tidak tersedia.');
-      return;
-    }
-    await Navigator.of(context).push(dealCheckoutRoute([deal.externalId]));
+    await Navigator.of(context).push(dealCheckoutRoute([externalId]));
     if (!mounted) return;
     ref.invalidate(myBidsProvider);
     ref.invalidate(myPendingCheckoutsProvider);
-  }
-
-  void _toast(String message) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(message), persist: false));
+    ref.invalidate(cartDealsProvider);
   }
 
   Future<void> _editBid(MyBidModel bid) async {

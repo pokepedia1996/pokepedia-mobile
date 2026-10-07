@@ -26,6 +26,7 @@ import '../../cart/presentation/checkout_page.dart';
 import '../../cart/presentation/payment_webview_page.dart';
 import '../../cart/repository/checkout_gateway.dart';
 import '../../cart/repository/models/checkout_deal.dart';
+import '../../cart/usecase/cart_deals.dart';
 import '../repository/models/order_model.dart';
 import '../repository/models/pending_checkout.dart';
 import '../usecase/orders_notifier.dart';
@@ -150,6 +151,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     ).push(dealCheckoutRoute([for (final deal in deals) deal.externalId]));
     if (!mounted) return;
     ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
     _reload();
   }
 
@@ -185,6 +187,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     }
     _toast('Pembayaran dibatalkan');
     ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
     _reload();
   }
 

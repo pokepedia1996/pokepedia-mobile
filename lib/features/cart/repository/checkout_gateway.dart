@@ -332,6 +332,36 @@ class CheckoutGateway {
     return _resultFrom(json);
   }
 
+  /// Pays the ticked cart lines and the accepted proposals ticked beside
+  /// them in one invoice — web's `/cart/checkout?s=&d=` from the cart page.
+  ///
+  /// The line selection is always sent, even empty, for the reason
+  /// [submitDeals] gives.
+  Future<CheckoutResult> submitCartWithDeals({
+    required List<int> selectedCartItemIds,
+    required List<String> dealExternalIds,
+    required List<CourierChoice> courierChoices,
+    required String deliveryAddressSlug,
+    required PaymentMethod paymentMethod,
+    PaymentChannel? paymentChannel,
+    String buyerNote = '',
+    List<int> couponIds = const [],
+  }) async {
+    final json = await _postCheckout(
+      checkoutRequestBody(
+        courierChoices: courierChoices,
+        deliveryAddressSlug: deliveryAddressSlug,
+        paymentMethod: paymentMethod,
+        paymentChannel: paymentChannel,
+        buyerNote: buyerNote,
+        couponIds: couponIds,
+        selectedCartItemIds: selectedCartItemIds,
+        selectedDealExternalIds: dealExternalIds,
+      ),
+    );
+    return _resultFrom(json);
+  }
+
   /// Pays accepted bid proposals and nothing else from the cart.
   ///
   /// `selectedCartItemIds` goes out as an explicit empty list: the route
