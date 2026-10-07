@@ -77,11 +77,13 @@ class _OrderBookWidgetState extends ConsumerState<OrderBookWidget> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ConditionGradePicker(
-                  value: _condition,
-                  onChanged: (value) => setState(() => _condition = value),
-                ),
+                if (!widget.card.isSealed) ...[
+                  const SizedBox(height: 8),
+                  ConditionGradePicker(
+                    value: _condition,
+                    onChanged: (value) => setState(() => _condition = value),
+                  ),
+                ],
               ],
             ),
           ),
@@ -399,8 +401,10 @@ class _LadderRow extends ConsumerWidget {
                           _OwnBadge(color: semantic.bid),
                           const SizedBox(width: 4),
                         ],
-                        ConditionBadge(condition: bid.condition, dense: true),
-                        const SizedBox(width: 4),
+                        if (!card.isSealed) ...[
+                          ConditionBadge(condition: bid.condition, dense: true),
+                          const SizedBox(width: 4),
+                        ],
                         Text(
                           formatRupiah(bid.price),
                           style: AppTypography.captionSemibold(
@@ -423,8 +427,10 @@ class _LadderRow extends ConsumerWidget {
                           formatRupiah(ask.price),
                           style: AppTypography.captionSemibold(colors.error),
                         ),
-                        const SizedBox(width: 4),
-                        ConditionBadge(condition: ask.condition, dense: true),
+                        if (!card.isSealed) ...[
+                          const SizedBox(width: 4),
+                          ConditionBadge(condition: ask.condition, dense: true),
+                        ],
                       ],
                     ),
                   ),

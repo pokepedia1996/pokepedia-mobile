@@ -78,6 +78,8 @@ DeckValidationResult validateDeck(List<DeckCardEntry> entries) {
         trainerCount += e.quantity;
       case CardCategory.energy:
         energyCount += e.quantity;
+      case CardCategory.sealed:
+        break;
     }
     if (!isBasicEnergy(e.card)) {
       final baseName = stripCardNameBrackets(e.card.name);

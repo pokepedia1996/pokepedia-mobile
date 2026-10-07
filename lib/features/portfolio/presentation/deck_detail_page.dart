@@ -13,7 +13,9 @@ import '../../../core/providers/card_ownership_controller.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/models/card_market_price.dart';
 import '../../../shared/models/card_model.dart';
+import '../../../shared/utils/variant_label.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -21,6 +23,7 @@ import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/deck_card_entry.dart';
 import '../usecase/portfolio_notifier.dart';
+import '../utils/deck_pricing.dart';
 import '../utils/deck_validation.dart';
 import 'deck_form_sheet.dart';
 
@@ -268,6 +271,13 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: _DeckValidityBar(validation: validation),
                     ),
+                    if (entries.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: _DeckPriceTotal(
+                          summary: summarizeDeckPrice(entries),
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Row(
@@ -428,6 +438,46 @@ class _DeckValidityBar extends StatelessWidget {
   }
 }
 
+/// "Total harga" under the validity bar — `deck-panel.tsx`.
+class _DeckPriceTotal extends StatelessWidget {
+  const _DeckPriceTotal({required this.summary});
+
+  final DeckPriceSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Expanded(
+          child: Text(
+            summary.caption,
+            style: AppTypography.caption(context.mutedForeground),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          summary.totalLabel,
+          style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+        ),
+      ],
+    );
+  }
+}
+
+/// Web greys any price not built from sales — an ask or a bid is one
+/// person's number (`marketPrice?.source === "confirmed"`).
+Color _priceColor(BuildContext context, CardModel card) =>
+    card.priceSource == CardPriceSource.confirmed
+    ? context.appColors.onSurface
+    : context.mutedForeground;
+
+/// `VariantLabel`'s faded italic caption.
+TextStyle _variantStyle(BuildContext context) => AppTypography.caption(
+  context.mutedForeground.withValues(alpha: 0.7),
+).copyWith(fontStyle: FontStyle.italic);
+
 class _SearchPane extends StatelessWidget {
   const _SearchPane({
     required this.controller,
@@ -458,9 +508,7 @@ class _SearchPane extends StatelessWidget {
       builder: (context, ref, _) {
         final trimmed = query.trim();
         final resultsAsync = trimmed.length >= 2
-            ? ref.watch(
-                cardSearchPickerProvider((query: trimmed, language: null)),
-              )
+            ? ref.watch(deckCardSearchProvider(trimmed))
             : null;
         final nameQuantities = _nameQuantities();
 
@@ -507,7 +555,7 @@ class _SearchPane extends StatelessWidget {
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
-                          childAspectRatio: 0.62,
+                          childAspectRatio: 0.54,
                         ),
                     itemBuilder: (context, i) {
                       final card = results[i];
@@ -635,6 +683,17 @@ class _DeckSearchCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
+              if (formatCardVariant(card.variant) case final variant?)
+                Text(
+                  variant,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _variantStyle(context),
+                ),
+              Text(
+                deckSearchPriceLabel(card),
+                style: AppTypography.bodySmSemibold(_priceColor(context, card)),
               ),
               Row(
                 children: [
@@ -788,6 +847,19 @@ class _DeckCardRow extends StatelessWidget {
                 Text(
                   '${entry.card.expansionCode} ${entry.card.collectorNumber}',
                   style: AppTypography.caption(context.mutedForeground),
+                ),
+                if (formatCardVariant(entry.card.variant) case final variant?)
+                  Text(
+                    variant,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _variantStyle(context),
+                  ),
+                Text(
+                  deckRowPriceLabel(entry),
+                  style: AppTypography.captionSemibold(
+                    _priceColor(context, entry.card),
+                  ),
                 ),
               ],
             ),

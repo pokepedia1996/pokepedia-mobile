@@ -3,25 +3,32 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/network/pokepedia_api.dart';
+import '../../../core/providers/device_fingerprint.dart';
 import '../../../shared/models/card_condition.dart';
 import 'models/store_identity.dart';
 import 'models/trading_models.dart';
 import '../../../core/errors/user_message.dart';
 
-/// Writes to the order book. Ports `POST /api/listings` — which is itself a
-/// thin wrapper over the `place_order` RPC — straight onto Supabase, since
-/// that RPC is `SECURITY DEFINER` and granted to `authenticated`, so every
-/// gate (phone verification, seller profile, self-trade, duplicates) is
-/// enforced server-side exactly as it is for the web.
+/// Writes to the order book.
 ///
-/// The web route additionally records a device fingerprint for its
-/// linked-account self-trade heuristic; the app has no fingerprint source,
-/// and `place_order`'s own `device_users` join still covers accounts linked
-/// by any previously recorded device.
+/// Placing an order goes through `POST /api/listings` rather than straight
+/// to `place_order`: the route drops photo URLs outside the caller's own
+/// `listing-photos/{uid}/` prefix (`isOwnedPhotoUrl`), records the device
+/// fingerprint the same-device guard joins on, and runs
+/// `auto_propose_to_matching_bids` for a new ask — none of which the RPC
+/// does on its own. The proposal RPCs below are still called directly.
 class TradingRepository {
-  TradingRepository(this._client);
+  TradingRepository(
+    this._client, {
+    PokepediaApi? api,
+    DeviceFingerprint? fingerprint,
+  }) : _api = api ?? PokepediaApi(_client),
+       _fingerprint = fingerprint ?? DeviceFingerprint(_client);
 
   final SupabaseClient _client;
+  final PokepediaApi _api;
+  final DeviceFingerprint _fingerprint;
 
   /// Places a bid (WTB) or ask (WTS). [replace] expires the user's existing
   /// open order on this side first — the "duplicate" recovery path.
@@ -34,39 +41,100 @@ class TradingRepository {
     String? variantKey,
     bool replace = false,
     bool autoRelist = false,
+    bool acceptsOffers = false,
     List<String> photoUrls = const [],
   }) async {
+    String? deviceFingerprint;
     try {
-      final result = await _client.rpc(
-        'place_order',
-        params: {
-          'p_card_id': cardId,
-          'p_variant_key': variantKey,
-          'p_side': side,
-          'p_price': price,
-          'p_condition': condition.raw,
-          'p_quantity': quantity,
-          'p_replace': replace,
-          'p_auto_relist': autoRelist,
-          'p_photo_urls': side == 'ask' ? photoUrls : null,
-        },
+      deviceFingerprint = await _fingerprint.value();
+    } catch (_) {
+      // Best effort: a missing fraud signal must never block the listing.
+    }
+
+    try {
+      final json = await _api.post(
+        '/api/listings',
+        placeOrderBody(
+          cardId: cardId,
+          side: side,
+          price: price,
+          condition: condition,
+          quantity: quantity,
+          variantKey: variantKey,
+          replace: replace,
+          autoRelist: autoRelist,
+          acceptsOffers: acceptsOffers,
+          photoUrls: photoUrls,
+          deviceFingerprint: deviceFingerprint,
+        ),
       );
-
-      final payload = result as Map<String, dynamic>?;
-      if (payload == null) return const PlaceOrderResult.failed('unknown');
-      if (payload['ok'] == true) return const PlaceOrderResult.ok();
-
-      final error = payload['error'] as String? ?? 'unknown';
-      if (error == 'duplicate') {
-        return PlaceOrderResult.duplicate(
-          (payload['existing_price'] as num?)?.toInt() ?? 0,
-        );
-      }
-      return PlaceOrderResult.failed(error, side: side);
-    } on PostgrestException {
-      return const PlaceOrderResult.failed('unknown');
+      return json['ok'] == true
+          ? const PlaceOrderResult.ok()
+          : const PlaceOrderResult.failed('unknown');
+    } on ApiException catch (e) {
+      return placeOrderResultFromApi(e, side: side);
     }
   }
+
+  /// The `PlaceOrderBodySchema` body.
+  static Map<String, dynamic> placeOrderBody({
+    required int cardId,
+    required String side,
+    required int price,
+    required CardCondition condition,
+    required int quantity,
+    String? variantKey,
+    bool replace = false,
+    bool autoRelist = false,
+    bool acceptsOffers = false,
+    List<String> photoUrls = const [],
+    String? deviceFingerprint,
+  }) => {
+    'cardId': cardId,
+    'variantKey': variantKey,
+    'side': side,
+    'price': price,
+    'condition': condition.raw,
+    'quantity': quantity,
+    'replaceExisting': replace,
+    'autoRelist': autoRelist,
+    'acceptsOffers': acceptsOffers,
+    'photoUrls': side == 'ask' ? photoUrls : const <String>[],
+    if (deviceFingerprint != null) 'deviceFingerprint': deviceFingerprint,
+  };
+
+  /// Maps a `POST /api/listings` refusal back onto `place_order`'s codes, so
+  /// [PlaceOrderResult.messageId] keeps doing the wording per side.
+  ///
+  /// Most refusals name their code; three answer with only a sentence — the
+  /// route's own phone gate (403), `Jumlah tidak valid` and the graded-photo
+  /// rule (both 400) — and are recognised by it.
+  static PlaceOrderResult placeOrderResultFromApi(
+    ApiException e, {
+    required String side,
+  }) {
+    if (e is ApiAuthException) {
+      return PlaceOrderResult.failed('unauthorized', side: side);
+    }
+    if (e.code == 'duplicate') {
+      return PlaceOrderResult.duplicate(
+        (e.payload?['existingPrice'] as num?)?.toInt() ?? 0,
+      );
+    }
+    final code =
+        e.code ??
+        switch (e.message) {
+          _gradedPhotoRequired => 'photo_required',
+          _invalidQuantity => 'invalid_quantity',
+          _ when e.statusCode == 403 => 'phone_not_verified',
+          _ => 'unknown',
+        };
+    return PlaceOrderResult.failed(code, side: side);
+  }
+
+  /// `GRADED_PHOTO_REQUIRED_MESSAGE` in `lib/seller/listing-drafts.ts`.
+  static const _gradedPhotoRequired = 'Foto wajib untuk kartu graded (slab).';
+  static const _invalidQuantity = 'Jumlah tidak valid';
 
   /// Uploads a seller's own photos of the card to the `listing-photos`
   /// bucket and returns their public URLs, for `place_order`'s

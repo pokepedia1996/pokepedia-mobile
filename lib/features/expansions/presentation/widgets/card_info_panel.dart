@@ -257,6 +257,8 @@ class _CardInfoPanelState extends State<CardInfoPanel> {
         return 'Energy';
       case CardCategory.pokemon:
         return card.details.evolutionStage?.labelId;
+      case CardCategory.sealed:
+        return CardCategory.sealed.labelId;
     }
   }
 }
@@ -274,6 +276,7 @@ class _TypeFamilyChip extends StatelessWidget {
       CardCategory.trainer => semantic.bid,
       CardCategory.energy => semantic.gold,
       CardCategory.pokemon => context.mutedForeground,
+      CardCategory.sealed => context.appColors.primary,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

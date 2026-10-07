@@ -141,6 +141,8 @@ class CardDetailsSection extends StatelessWidget {
             style: AppTypography.bodySm(context.appColors.onSurface),
           ),
         );
+      case CardCategory.sealed:
+        return const SizedBox.shrink();
       case CardCategory.energy:
         final type = card.details.energyType;
         return InfoCard(

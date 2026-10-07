@@ -8,17 +8,20 @@ import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/seller_avatar.dart';
 import '../../repository/checkout_pricing.dart';
+import '../../repository/models/checkout_deal.dart';
 import '../../repository/models/checkout_models.dart';
 import '../../repository/models/cart_item.dart';
 import 'courier_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// One seller's items within the cart, plus their shipping/insurance
-/// choices. Ports `features/checkout/ui/SellerGroupCard.tsx`.
+/// choices. Ports `features/checkout/ui/SellerGroupCard.tsx`, deals
+/// (`DealItemGroup`) included.
 class SellerGroupCard extends StatelessWidget {
   const SellerGroupCard({
     super.key,
     required this.items,
+    this.deals = const [],
     required this.courierOptions,
     required this.selectedCourier,
     required this.onSelectCourier,
@@ -27,10 +30,15 @@ class SellerGroupCard extends StatelessWidget {
     required this.hasAddress,
     this.ratesLoading = false,
     this.ratesError,
+    this.ratesReason,
     this.onRetryRates,
   });
 
   final List<CartItem> items;
+
+  /// Accepted bid proposals from this seller, drawn under the cart lines at
+  /// the price the deal fixed. A deal-only seller has no [items] at all.
+  final List<CheckoutDeal> deals;
   final List<CourierOption> courierOptions;
   final CourierOption? selectedCourier;
   final ValueChanged<CourierOption> onSelectCourier;
@@ -45,14 +53,25 @@ class SellerGroupCard extends StatelessWidget {
   /// Why the quote failed, if it did. Biteship is a live third-party call,
   /// so this is a normal outcome and needs a retry rather than a dead card.
   final String? ratesError;
+
+  /// Why the quote came back short, which decides the empty-list copy.
+  final RatesReason? ratesReason;
   final VoidCallback? onRetryRates;
 
-  int get _subtotal => items.fold(0, (sum, item) => sum + item.subtotal);
+  int get _subtotal =>
+      items.fold(0, (sum, item) => sum + item.subtotal) +
+      deals.fold(0, (sum, deal) => sum + deal.subtotal);
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final first = items.first.listing;
+    final first = items.firstOrNull?.listing;
+    final deal = deals.firstOrNull;
+    final storeName =
+        first?.storeName ??
+        (deal?.storeName?.isNotEmpty == true ? deal!.storeName! : 'Penjual');
+    final storeImageUrl = first?.sellerImageUrl ?? deal?.storeLogoUrl;
+    final cityName = first?.cityName ?? '';
     final mandatory = isInsuranceMandatory(_subtotal);
     final hasSelection = selectedCourier != null;
     final insuranceAvailable = selectedCourier?.insuranceAvailable ?? false;
@@ -83,8 +102,8 @@ class SellerGroupCard extends StatelessWidget {
             child: Row(
               children: [
                 SellerAvatar(
-                  name: first.storeName,
-                  imageUrl: first.sellerImageUrl,
+                  name: storeName,
+                  imageUrl: storeImageUrl,
                   size: 32,
                 ),
                 const SizedBox(width: 10),
@@ -96,7 +115,7 @@ class SellerGroupCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              first.storeName,
+                              storeName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.bodySmSemibold(
@@ -104,7 +123,7 @@ class SellerGroupCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (first.isVerified) ...[
+                          if (first?.isVerified ?? false) ...[
                             const SizedBox(width: 4),
                             Icon(
                               LucideIcons.badgeCheck,
@@ -114,7 +133,7 @@ class SellerGroupCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      if (first.cityName.isNotEmpty)
+                      if (cityName.isNotEmpty)
                         Row(
                           children: [
                             Icon(
@@ -124,7 +143,7 @@ class SellerGroupCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              first.cityName,
+                              cityName,
                               style: AppTypography.caption(
                                 context.mutedForeground,
                               ),
@@ -193,6 +212,9 @@ class SellerGroupCard extends StatelessWidget {
               ),
             ),
 
+          for (final deal in deals)
+            for (final line in deal.lines) _DealLineRow(line: line),
+
           // Shipping + insurance.
           Container(
             padding: const EdgeInsets.all(14),
@@ -249,12 +271,25 @@ class SellerGroupCard extends StatelessWidget {
                         ),
                     ],
                   )
-                else
+                else if (courierOptions.isEmpty)
+                  Text(
+                    emptyCourierMessage(ratesReason),
+                    style: AppTypography.caption(context.mutedForeground),
+                  )
+                else ...[
+                  if (ratesReason == RatesReason.sellerRestrictedPartial) ...[
+                    Text(
+                      partialCourierListHint,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   CourierPicker(
                     options: courierOptions,
                     selected: selectedCourier,
                     onSelect: onSelectCourier,
                   ),
+                ],
                 if (hasAddress && hasSelection) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -328,6 +363,71 @@ class SellerGroupCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One line of an accepted proposal. Ports `DealItemGroup`'s row: the card,
+/// its condition and quantity, and the price the deal settled on.
+class _DealLineRow extends StatelessWidget {
+  const _DealLineRow({required this.line});
+
+  final CheckoutDealLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final condition = line.condition;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: context.borderColor)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 56,
+            child: CardArt(imageUrl: line.imageUrl, borderRadius: AppRadius.sm),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  line.cardName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (condition != null) ConditionBadge(condition: condition),
+                    Text(
+                      'Qty: ${line.quantity}',
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                    Text(
+                      'Proposal diterima',
+                      style: AppTypography.captionSemibold(colors.primary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  formatRupiah(line.subtotal),
+                  style: AppTypography.bodySmSemibold(colors.primary),
+                ),
               ],
             ),
           ),
