@@ -17,8 +17,7 @@ import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/trading_notifier.dart';
 
-/// Photos become mandatory at this price — `PHOTO_REQUIRED_THRESHOLD`.
-const _photoRequiredThreshold = 100000;
+/// `MIN_PROPOSAL_PHOTOS` in `proposal-photo-picker.tsx`.
 const _minPhotos = 1;
 const _maxPhotos = 4;
 const _maxMessage = 280;
@@ -148,7 +147,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   int get _askValue =>
       int.tryParse(_askPrice.text.replaceAll(RegExp(r'\D'), '')) ??
       widget.price;
-  bool get _photosRequired => _askValue >= _photoRequiredThreshold;
+  bool get _photosRequired => widget.condition.requiresListingPhoto;
 
   Future<void> _pickPhoto() async {
     final picked = await ImagePicker().pickImage(
@@ -162,9 +161,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   Future<void> _submit() async {
     if (_photosRequired && _photos.length < _minPhotos) {
       setState(() {
-        _error =
-            'Unggah minimal $_minPhotos foto untuk kartu di atas '
-            '${formatRupiah(_photoRequiredThreshold)}';
+        _error = 'Unggah minimal $_minPhotos foto untuk kartu graded';
       });
       return;
     }
@@ -331,7 +328,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                     const SizedBox(width: 6),
                     if (_photosRequired)
                       Text(
-                        'wajib di atas ${formatRupiah(_photoRequiredThreshold)}',
+                        'wajib untuk kartu graded',
                         style: AppTypography.caption(colors.error),
                       ),
                   ],

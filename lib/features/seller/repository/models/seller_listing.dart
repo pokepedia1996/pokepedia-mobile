@@ -85,7 +85,7 @@ class SellerListing {
   final DateTime? expiresAt;
 
   /// The seller's own photos of this copy. Web badges the thumbnail with
-  /// how many there are, because a listing over Rp100rb needs at least one.
+  /// how many there are, because a graded listing needs at least one.
   final List<String> photoUrls;
 
   bool get isArchived => archivedAt != null;

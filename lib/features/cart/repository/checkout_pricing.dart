@@ -37,16 +37,22 @@ bool isChannelAllowedForAmount(PaymentChannel channel, int grandTotalIdr) =>
 /// 3. Among the VA banks, [lastPaidChannel] — what the buyer actually paid
 ///    with last time — in preference to whichever heads the list.
 ///
+/// [walletAmountDue] is what saldo would actually be debited — the total
+/// less any free-shipping discount, as [CheckoutTotals.walletAmountDue]
+/// computes it. It defaults to [grandTotalIdr], which still decides which
+/// gateway channels exist.
+///
 /// [holdsFeeWaiver] blocks the jump to Saldo: a coupon that waives the
 /// gateway fee is worth nothing on a method that never charged one, and
 /// voiding a coupon the buyer just applied is not a default's job.
 ({PaymentMethod method, PaymentChannel? channel}) autoSelectPayment({
   required int grandTotalIdr,
   required int walletBalance,
+  int? walletAmountDue,
   PaymentChannel? lastPaidChannel,
   bool holdsFeeWaiver = false,
 }) {
-  if (walletBalance >= grandTotalIdr && !holdsFeeWaiver) {
+  if (walletBalance >= (walletAmountDue ?? grandTotalIdr) && !holdsFeeWaiver) {
     return (method: PaymentMethod.wallet, channel: null);
   }
 
@@ -63,26 +69,44 @@ class CheckoutTotals {
     required this.gatewayFee,
     required this.gatewayFeeWaived,
     required this.gatewayFeeCharged,
+    required this.shippingDiscount,
+    required this.totalDiscount,
     required this.grandTotal,
-    required this.effectiveDiscount,
+    required this.walletAmountDue,
   });
 
   final int grandTotalBeforeFee;
   final int gatewayFee;
   final bool gatewayFeeWaived;
   final int gatewayFeeCharged;
+  final int shippingDiscount;
+
+  /// The free-shipping discount plus the waived fee — the "Hemat" figure.
+  final int totalDiscount;
   final int grandTotal;
-  final int effectiveDiscount;
+
+  /// What a saldo payment debits: no gateway fee, less the shipping discount.
+  final int walletAmountDue;
 }
 
-/// Mirrors `computeCheckoutTotals`.
+/// Mirrors `shippingDiscountFor` (and `_coupon_discount.sql` behind it):
+/// derived from the coupon's own cap, never from a cached amount.
+int shippingDiscountFor(AppliedCoupon? coupon, int shippingTotal) {
+  if (coupon == null) return 0;
+  final cap = coupon.value ?? 0;
+  return shippingTotal < cap ? shippingTotal : cap;
+}
+
+/// Mirrors `computeCheckoutTotals` in `features/checkout/utils/pricing.ts`,
+/// which mirrors the invoice math in the lock RPCs — disagree with them and
+/// `commit_cart_match` rejects the payment.
 CheckoutTotals computeCheckoutTotals({
   required int itemsSubtotal,
   required int shippingTotal,
   required int insuranceTotal,
   required PaymentMethod paymentMethod,
   required PaymentChannel? paymentChannel,
-  required AppliedCoupon? appliedCoupon,
+  CouponSelection coupons = CouponSelection.empty,
 }) {
   final grandTotalBeforeFee = itemsSubtotal + shippingTotal + insuranceTotal;
 
@@ -94,7 +118,9 @@ CheckoutTotals computeCheckoutTotals({
       : platformBuyerFeeFlatIdr;
 
   final gatewayFeeWaived =
-      (appliedCoupon?.waivesGatewayFee ?? false) && paymentChannel != null;
+      coupons.fee != null &&
+      paymentChannel != null &&
+      paymentMethod != PaymentMethod.wallet;
 
   final gatewayFeeCharged = paymentMethod == PaymentMethod.wallet
       ? 0
@@ -102,18 +128,22 @@ CheckoutTotals computeCheckoutTotals({
       ? 0
       : gatewayFee;
 
-  final grandTotal = grandTotalBeforeFee + gatewayFeeCharged;
+  final shippingDiscount = shippingDiscountFor(coupons.shipping, shippingTotal);
 
-  final effectiveDiscount = gatewayFeeWaived
-      ? gatewayFee
-      : (appliedCoupon?.discountAmount ?? 0);
+  final grandTotal = _atLeastZero(
+    grandTotalBeforeFee + gatewayFeeCharged - shippingDiscount,
+  );
 
   return CheckoutTotals(
     grandTotalBeforeFee: grandTotalBeforeFee,
     gatewayFee: gatewayFee,
     gatewayFeeWaived: gatewayFeeWaived,
     gatewayFeeCharged: gatewayFeeCharged,
+    shippingDiscount: shippingDiscount,
+    totalDiscount: shippingDiscount + (gatewayFeeWaived ? gatewayFee : 0),
     grandTotal: grandTotal,
-    effectiveDiscount: effectiveDiscount,
+    walletAmountDue: _atLeastZero(grandTotalBeforeFee - shippingDiscount),
   );
 }
+
+int _atLeastZero(int value) => value < 0 ? 0 : value;

@@ -356,7 +356,7 @@ List<Widget> _listingCells(
             ),
           ),
           // Web gives photos their own column; here the count rides on the
-          // thumbnail, since a listing over Rp100rb needs at least one and
+          // thumbnail, since a graded listing needs at least one and
           // its absence is what the seller is scanning for.
           if (listing.photoUrls.isNotEmpty)
             Positioned(

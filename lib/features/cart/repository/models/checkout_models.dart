@@ -251,15 +251,162 @@ const paymentChannels = [
 /// "xendit" pays via a [PaymentChannel]; "wallet" pays from saldo balance.
 enum PaymentMethod { xendit, wallet }
 
-/// Ports `AppliedCoupon` from `features/checkout/types.ts`.
-class AppliedCoupon {
-  const AppliedCoupon({
+/// `CouponType` in `lib/schemas/coupons.ts`. Card-discount coupons were
+/// removed on web; these two are the whole vocabulary.
+enum CouponType {
+  freeShipping('free_shipping'),
+  waiveGatewayFee('waive_gateway_fee');
+
+  const CouponType(this.wire);
+
+  final String wire;
+
+  static CouponType? fromWire(Object? value) {
+    for (final type in values) {
+      if (type.wire == value) return type;
+    }
+    return null;
+  }
+}
+
+/// `CouponSlot` in `lib/schemas/coupons.ts`: a checkout holds at most one
+/// coupon per slot. [values] is `COUPON_SLOT_ORDER`, so the picker lists and
+/// the request sends them in the same order web does.
+enum CouponSlot {
+  shipping,
+  fee;
+
+  static CouponSlot? fromWire(Object? value) {
+    for (final slot in values) {
+      if (slot.name == value) return slot;
+    }
+    return null;
+  }
+}
+
+/// `CouponIneligibleReason` in `lib/schemas/coupons.ts`.
+enum CouponIneligibleReason {
+  usageLimit('usage_limit'),
+  perUserLimit('per_user_limit'),
+  minPurchase('min_purchase'),
+  notApplicable('not_applicable');
+
+  const CouponIneligibleReason(this.wire);
+
+  final String wire;
+
+  static CouponIneligibleReason? fromWire(Object? value) {
+    for (final reason in values) {
+      if (reason.wire == value) return reason;
+    }
+    return null;
+  }
+}
+
+/// One row of `list_available_coupons`, as `POST /api/coupons/available`
+/// returns it. Ports `AvailableCouponSchema`; ineligible coupons are listed
+/// too, with the [reason] the buyer can't use them yet.
+class AvailableCoupon {
+  const AvailableCoupon({
+    required this.couponId,
     required this.code,
-    required this.waivesGatewayFee,
+    required this.type,
+    required this.slot,
+    required this.value,
+    required this.minPurchase,
+    required this.validUntil,
     required this.discountAmount,
+    required this.eligible,
+    required this.reason,
+    required this.remainingUses,
   });
 
+  final int couponId;
   final String code;
-  final bool waivesGatewayFee;
+  final CouponType type;
+  final CouponSlot slot;
+
+  /// The free-shipping cap; null for the fee waiver, which has no amount.
+  final int? value;
+  final int minPurchase;
+  final DateTime? validUntil;
   final int discountAmount;
+  final bool eligible;
+  final CouponIneligibleReason? reason;
+  final int remainingUses;
+
+  /// Null for a row this client can't read — a type added server-side after
+  /// this build. Dropped rather than guessed at, as web's `safeParse` does.
+  static AvailableCoupon? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = (raw['coupon_id'] as num?)?.toInt();
+    final type = CouponType.fromWire(raw['type']);
+    final slot = CouponSlot.fromWire(raw['slot']);
+    if (id == null || type == null || slot == null) return null;
+    return AvailableCoupon(
+      couponId: id,
+      code: raw['code'] as String? ?? '',
+      type: type,
+      slot: slot,
+      value: (raw['value'] as num?)?.toInt(),
+      minPurchase: (raw['min_purchase'] as num?)?.toInt() ?? 0,
+      validUntil: DateTime.tryParse(raw['valid_until'] as String? ?? ''),
+      discountAmount: (raw['discount_amount'] as num?)?.toInt() ?? 0,
+      eligible: raw['eligible'] == true,
+      reason: CouponIneligibleReason.fromWire(raw['reason']),
+      remainingUses: (raw['remaining_uses'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  AppliedCoupon toApplied() => AppliedCoupon(
+    couponId: couponId,
+    type: type,
+    slot: slot,
+    value: value,
+    minPurchase: minPurchase,
+  );
+}
+
+/// Ports `AppliedCoupon` from `features/checkout/types`. Carries the coupon's
+/// own [value] rather than a quoted amount, so the discount is re-derived
+/// from the live shipping total the way the lock RPCs derive it.
+class AppliedCoupon {
+  const AppliedCoupon({
+    required this.couponId,
+    required this.type,
+    required this.slot,
+    required this.value,
+    required this.minPurchase,
+  });
+
+  final int couponId;
+  final CouponType type;
+  final CouponSlot slot;
+  final int? value;
+  final int minPurchase;
+
+  bool get waivesGatewayFee => type == CouponType.waiveGatewayFee;
+}
+
+/// Ports `CouponSelection`: what each slot holds right now.
+class CouponSelection {
+  const CouponSelection({this.shipping, this.fee});
+
+  static const empty = CouponSelection();
+
+  final AppliedCoupon? shipping;
+  final AppliedCoupon? fee;
+
+  AppliedCoupon? operator [](CouponSlot slot) => switch (slot) {
+    CouponSlot.shipping => shipping,
+    CouponSlot.fee => fee,
+  };
+
+  /// The `couponIds` `/api/cart/checkout` takes, in slot order.
+  List<int> get ids => [
+    for (final slot in CouponSlot.values)
+      if (this[slot] case final coupon?) coupon.couponId,
+  ];
+
+  int get count => ids.length;
 }

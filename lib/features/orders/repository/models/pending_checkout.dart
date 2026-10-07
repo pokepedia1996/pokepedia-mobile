@@ -1,3 +1,5 @@
+import '../../utils/package_payment.dart';
+
 /// A checkout a buyer started against this seller's listings and hasn't paid
 /// for yet — one row of web's "Menunggu pembayaran" tab.
 ///
@@ -57,8 +59,9 @@ class PendingCheckout {
   /// business reopening someone else's invoice.
   final String? invoiceUrl;
 
-  /// `carts.total_amount`. Preferred over summing the lines, which omits the
-  /// gateway fee and any coupon.
+  /// What the buyer is billed: `carts.invoice_amount`, falling back to
+  /// `total_amount` (see [cartChargedAmount]). Preferred over summing the
+  /// lines, which omits the gateway fee and any coupon.
   final int? totalAmount;
 
   /// Who the cart is with. Carried on every snapshot line; a cart is locked to
@@ -268,7 +271,7 @@ PendingCheckout pendingCheckoutFromCart(Map<String, dynamic> row) {
     hasInvoice: (row['invoice_url'] as String?)?.isNotEmpty ?? false,
     items: items,
     invoiceUrl: row['invoice_url'] as String?,
-    totalAmount: (row['total_amount'] as num?)?.toInt(),
+    totalAmount: cartChargedAmount(row),
     sellerId: items.isEmpty ? null : items.first.sellerId,
   );
 }

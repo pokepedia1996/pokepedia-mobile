@@ -7,15 +7,20 @@ import '../../../../shared/models/card_condition.dart';
 enum PlaceOrderStatus { ok, duplicate, failed }
 
 class PlaceOrderResult {
-  const PlaceOrderResult._(this.status, {this.code, this.existingPrice});
+  const PlaceOrderResult._(
+    this.status, {
+    this.code,
+    this.existingPrice,
+    this.side,
+  });
 
   const PlaceOrderResult.ok() : this._(PlaceOrderStatus.ok);
 
   const PlaceOrderResult.duplicate(int existingPrice)
     : this._(PlaceOrderStatus.duplicate, existingPrice: existingPrice);
 
-  const PlaceOrderResult.failed(String code)
-    : this._(PlaceOrderStatus.failed, code: code);
+  const PlaceOrderResult.failed(String code, {String? side})
+    : this._(PlaceOrderStatus.failed, code: code, side: side);
 
   final PlaceOrderStatus status;
 
@@ -24,6 +29,9 @@ class PlaceOrderResult {
 
   /// Price of the open listing that collided, for the "replace it?" prompt.
   final int? existingPrice;
+
+  /// `bid` or `ask` — `listing_reserved_by_deal` reads differently per side.
+  final String? side;
 
   bool get isOk => status == PlaceOrderStatus.ok;
 
@@ -52,7 +60,13 @@ class PlaceOrderResult {
       case 'no_couriers':
         return 'Pilih minimal satu kurir di pengaturan penjual.';
       case 'photo_required':
-        return 'Ask di atas Rp100.000 wajib menyertakan foto kartu.';
+        return gradedPhotoRequiredMessage;
+      case 'listing_reserved_by_deal':
+        return side == 'bid'
+            ? 'Bid ini sedang dipakai di checkout yang belum selesai. '
+                  'Selesaikan atau batalkan pembayarannya dulu.'
+            : 'Listing ini sedang dipakai di checkout pembeli. Tunggu sampai '
+                  'pembayarannya selesai.';
       case 'cross_side_self_trade':
         return 'Kamu sudah punya order di sisi berlawanan untuk kartu dan '
             'kondisi ini.';

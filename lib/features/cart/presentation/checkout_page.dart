@@ -5,10 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/router/navigation.dart';
 import '../../../app/router/routes.dart';
+import '../../../core/errors/user_message.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import 'widgets/empty_cart_card.dart';
@@ -16,6 +18,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../account/presentation/widgets/address_form_sheet.dart';
 import '../../account/repository/models/address_model.dart';
 import '../../account/usecase/address_notifier.dart';
+import '../repository/checkout_gateway.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
 import '../usecase/cart_notifier.dart';
@@ -23,6 +26,7 @@ import '../usecase/cart_selection.dart';
 import '../../orders/usecase/orders_notifier.dart';
 import '../usecase/checkout_notifier.dart';
 import 'checkout/buyer_note_box.dart';
+import 'checkout/coupon_section.dart';
 import 'checkout/order_summary.dart';
 import 'checkout/payment_method_picker.dart';
 import 'checkout/payment_section.dart';
@@ -32,7 +36,7 @@ import 'payment_webview_page.dart';
 
 /// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
 /// the order grouped per seller, delivery address, live courier quotes,
-/// shipping insurance, promo code, buyer note, payment choice and totals.
+/// shipping insurance, promo coupons, buyer note, payment choice and totals.
 ///
 /// Only the last screen isn't native, by design — a card or VA payment is
 /// completed on Xendit's own hosted invoice page, which is the gateway's
@@ -55,14 +59,6 @@ class CheckoutPage extends ConsumerStatefulWidget {
 }
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
-  final _couponInput = TextEditingController();
-
-  @override
-  void dispose() {
-    _couponInput.dispose();
-    super.dispose();
-  }
-
   /// Falls back to the primary address until the buyer picks another, then
   /// pushes it into the notifier so shipping is quoted against it.
   AddressModel? _syncAddress(List<AddressModel> addresses) {
@@ -181,7 +177,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
       // Totals derive from the same selection, so this has to be read here
       // too — after the refresh below it prices an empty cart.
-      final paidFromSaldo = notifier.totals.grandTotalBeforeFee;
+      final paidFromSaldo = notifier.totals.walletAmountDue;
       final method = ref.read(checkoutProvider).paymentMethod;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
@@ -302,10 +298,66 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (!mounted) return;
       _toast(e.message);
       context.push(Routes.login);
+    } on PendingInvoiceException catch (e) {
+      if (!mounted) return;
+      await _offerPendingInvoice(e);
     } on ApiException catch (e) {
       if (!mounted) return;
-      _toast(e.message);
+      _toast(userFacingError(e));
     }
+  }
+
+  /// `409 pending_invoice`: the buyer still owes an invoice opened earlier,
+  /// and the server will not open another until it is settled or expires.
+  /// Web only says so and sends the buyer back to the cart; here the buyer
+  /// can pick that invoice up again, since its page is all it takes.
+  Future<void> _offerPendingInvoice(PendingInvoiceException pending) async {
+    final invoiceUrl = pending.invoiceUrl;
+    if (invoiceUrl == null) {
+      _toast(pending.message);
+      return;
+    }
+    final total = pending.totalAmount;
+    final resume = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Masih ada pembayaran tertunda'),
+        content: Text(
+          total == null
+              ? pending.message
+              : '${pending.message} (${formatRupiah(total)}).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Nanti'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Lanjutkan pembayaran'),
+          ),
+        ],
+      ),
+    );
+    if (resume != true || !mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<PaymentOutcome>(
+        builder: (_) => PaymentWebViewPage(invoiceUrl: invoiceUrl),
+      ),
+    );
+    if (!mounted) return;
+    ref.invalidate(myPendingCheckoutsProvider);
+
+    final externalId = pending.externalId;
+    if (externalId == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CheckoutStatusPage(externalId: externalId),
+      ),
+    );
+    if (!mounted) return;
+    await ref.read(cartProvider.notifier).refresh();
   }
 
   void _toast(String message) {
@@ -427,6 +479,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
                   PaymentSection(
                     grandTotalBeforeFee: totals.grandTotalBeforeFee,
+                    walletAmountDue: totals.walletAmountDue,
                     paymentMethod: state.paymentMethod,
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
@@ -446,34 +499,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     paymentMethod: state.paymentMethod,
                     hasChannel: state.paymentChannel != null,
                     totals: totals,
-                    appliedCoupon: state.coupon,
-                    couponInput: _couponInput.text,
-                    onCouponInputChanged: (value) =>
-                        setState(() => _couponInput.text = value),
-                    couponLoading: state.couponLoading,
-                    couponError: state.couponError,
-                    // Same three conditions web applies, in the same order.
-                    couponApplyDisabled:
-                        _couponInput.text.trim().isEmpty ||
-                        state.paymentChannel == null ||
-                        state.paymentMethod == PaymentMethod.wallet,
-                    // An empty box explains itself; the other two do not.
-                    couponDisabledHint:
-                        state.paymentMethod == PaymentMethod.wallet
-                        ? 'Kupon tidak berlaku untuk pembayaran dari saldo.'
-                        : state.paymentChannel == null
-                        ? 'Pilih metode pembayaran dulu untuk memakai kupon.'
-                        : null,
-                    onApplyCoupon: () =>
-                        notifier.applyCoupon(_couponInput.text),
-                    onRemoveCoupon: notifier.removeCoupon,
+                    coupons: notifier.coupons,
+                    couponSlot: const CouponSection(),
                     submitting: state.submitting,
                     payDisabled: blockedReason != null,
                     onCheckout: _pay,
                   ),
 
-                  // The coupon's own error now sits under its field, where
-                  // the code that caused it is still on screen.
                   if (blockedReason != null) ...[
                     const SizedBox(height: 8),
                     Text(

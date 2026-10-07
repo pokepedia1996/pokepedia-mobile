@@ -30,7 +30,7 @@ class _FakeGateway implements CheckoutGateway {
     required PaymentMethod paymentMethod,
     PaymentChannel? paymentChannel,
     String buyerNote = '',
-    String? couponCode,
+    List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
   }) async => const CheckoutResult(redirect: '/orders');
 

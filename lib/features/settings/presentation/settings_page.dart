@@ -21,6 +21,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../user/repository/models/profile_models.dart';
 import '../../user/usecase/user_notifier.dart';
+import '../../user/utils/delete_account_errors.dart';
 import '../../../core/errors/user_message.dart';
 
 /// Handles accepted by web's `handleSaveSocial` — plain usernames only.
@@ -365,6 +366,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       _bioSection(user.id),
                       const SizedBox(height: 16),
                       _socialSection(user.id),
+                      const SizedBox(height: 16),
+                      const _DeleteAccountSection(),
                     ],
                   );
                 },
@@ -596,6 +599,169 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           label: 'Simpan',
           loading: _savingSocial,
           onPressed: _savingSocial ? null : () => _saveSocial(userId),
+        ),
+      ],
+    );
+  }
+}
+
+/// Ports `DeleteAccountSection.tsx` — the in-app account deletion App Store
+/// guideline 5.1.1(v) requires, gated behind typing
+/// [deleteAccountConfirmationWord].
+class _DeleteAccountSection extends ConsumerWidget {
+  const _DeleteAccountSection();
+
+  Future<void> _openDialog(BuildContext context, WidgetRef ref) async {
+    final deleted = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (deleted != true || !context.mounted) return;
+    // Captured first: signing out rebuilds this page without this section.
+    final router = GoRouter.of(context);
+    try {
+      // The server session is already gone, and signOut's local scope never
+      // waits on it.
+      await ref.read(authProvider.notifier).signOut();
+    } catch (_) {
+      // The local session is cleared before the network call that failed.
+    }
+    router.go(Routes.home);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.error.withValues(alpha: 0.05),
+        border: Border.all(color: colors.error.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.triangleAlert, size: 16, color: colors.error),
+              const SizedBox(width: 8),
+              Text(
+                'Hapus Akun',
+                style: AppTypography.bodySemibold(colors.error),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Akun dan data pribadimu dihapus permanen dari pokepedia.id. '
+            'Tidak bisa dibatalkan.',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+          const SizedBox(height: 14),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: colors.error),
+            onPressed: () => _openDialog(context, ref),
+            child: const Text('Hapus Akun'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The confirm step of `DeleteAccountSection.tsx`. Pops true once
+/// `delete_my_account` has gone through; a refusal stays on the dialog so
+/// the user can read why.
+class _DeleteAccountDialog extends ConsumerStatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  ConsumerState<_DeleteAccountDialog> createState() =>
+      _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
+  final _confirmation = TextEditingController();
+  bool _deleting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _confirmation.dispose();
+    super.dispose();
+  }
+
+  bool get _confirmed => _confirmation.text == deleteAccountConfirmationWord;
+
+  Future<void> _delete() async {
+    setState(() {
+      _deleting = true;
+      _error = null;
+    });
+    final error = await ref.read(userRepositoryProvider).deleteMyAccount();
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _deleting = false;
+        _error = error;
+      });
+      return;
+    }
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    const label = 'Ketik $deleteAccountConfirmationWord untuk konfirmasi';
+    return AlertDialog(
+      backgroundColor: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      title: Text(
+        'Hapus akun secara permanen?',
+        style: AppTypography.h3(colors.onSurface),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Akun kamu akan dihapus dan tidak bisa dikembalikan.',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+          const SizedBox(height: 14),
+          LabeledField(
+            label: label,
+            child: TextField(
+              controller: _confirmation,
+              enabled: !_deleting,
+              autocorrect: false,
+              enableSuggestions: false,
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: deleteAccountConfirmationWord,
+              ),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: AppTypography.bodySm(colors.error)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: colors.error),
+          onPressed: _deleting || !_confirmed ? null : _delete,
+          child: Text(_deleting ? 'Menghapus...' : 'Hapus Akun'),
         ),
       ],
     );

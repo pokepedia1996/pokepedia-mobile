@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
+import 'cart_repository.dart';
 import 'models/checkout_models.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -43,6 +44,7 @@ class CheckoutResult {
   /// Lines the server refused at lock time — sold out underneath the buyer,
   /// price moved, seller went on vacation. The order went ahead without
   /// them, so the buyer has to be told rather than silently shortchanged.
+  /// One Indonesian sentence per line; see [parseDroppedItems].
   final List<String> droppedItems;
 
   /// Named fields rather than the default `Instance of 'CheckoutResult'`:
@@ -63,8 +65,8 @@ enum CheckoutStatus {
   /// The webhook settled it. This is the only success.
   paid,
 
-  /// `cancelled | expired | refunded | failed | refund_required` — the
-  /// `CancelledCheckoutStatus` union in `lib/cart/shared.ts`.
+  /// Every terminal `carts.status` other than `paid` — see
+  /// [CheckoutGateway.terminalUnpaidStatuses].
   cancelled,
 }
 
@@ -114,6 +116,48 @@ class QrisUnavailableException extends ApiException {
   /// error state, because "QRIS belum tersedia" on its own can't be told
   /// apart from a misparse or an invoice that never got a channel.
   final String? diagnostic;
+}
+
+/// `/api/cart/checkout` refused because the buyer already has an unpaid
+/// invoice open (`409 pending_invoice`). Carries that invoice so the buyer
+/// can finish it instead of being stuck behind it.
+class PendingInvoiceException extends ApiException {
+  const PendingInvoiceException({
+    required String message,
+    required this.externalId,
+    required this.invoiceUrl,
+    this.totalAmount,
+  }) : super(message, statusCode: 409, code: 'pending_invoice');
+
+  final String? externalId;
+  final String? invoiceUrl;
+  final int? totalAmount;
+}
+
+/// `/api/cart/checkout` refused a coupon at lock time (`400 coupon_invalid`).
+/// [couponId] names the offender; null means the server could not say, and
+/// every coupon should be cleared — `invalidateCoupon` in `useCoupon.ts`.
+class CouponInvalidException extends ApiException {
+  const CouponInvalidException({required String message, this.couponId})
+    : super(message, statusCode: 400, code: 'coupon_invalid');
+
+  final int? couponId;
+}
+
+/// Turns the route's `droppedItems` (`[{reason, available}]`) into one
+/// sentence per line, with the same copy the pre-submit cart check uses.
+List<String> parseDroppedItems(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        cartLineProblemMessage(
+          item['reason'] as String?,
+          available: (item['available'] as num?)?.toInt(),
+        )
+      else if (item is String)
+        cartLineProblemMessage(item),
+  ];
 }
 
 /// The checkout steps that cannot run in the app.
@@ -229,10 +273,10 @@ class CheckoutGateway {
     required PaymentMethod paymentMethod,
     PaymentChannel? paymentChannel,
     String buyerNote = '',
-    String? couponCode,
+    List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
   }) async {
-    final json = await _api.post('/api/cart/checkout', {
+    final json = await _postCheckout({
       'courierChoices': [
         for (final choice in courierChoices)
           {
@@ -249,21 +293,69 @@ class CheckoutGateway {
       if (paymentMethod == PaymentMethod.xendit && paymentChannel != null)
         'paymentChannel': paymentChannel.code,
       if (buyerNote.trim().isNotEmpty) 'buyerNote': buyerNote.trim(),
-      if (couponCode != null) 'couponCode': couponCode,
+      if (couponIds.isNotEmpty) 'couponIds': couponIds,
       if (selectedCartItemIds.isNotEmpty)
         'selectedCartItemIds': selectedCartItemIds,
     });
 
-    final dropped = json['droppedItems'];
     return CheckoutResult(
       invoiceUrl: json['invoiceUrl'] as String?,
       redirect: json['redirect'] as String?,
       externalId: json['externalId'] as String?,
       totalAmount: (json['totalAmount'] as num?)?.round(),
-      droppedItems: dropped is List
-          ? dropped.map((e) => e.toString()).toList()
-          : const [],
+      droppedItems: parseDroppedItems(json['droppedItems']),
     );
+  }
+
+  /// Raises the two refusals checkout acts on as their own types; every
+  /// other failure stays a plain [ApiException] carrying the server's text.
+  Future<Map<String, dynamic>> _postCheckout(Map<String, dynamic> body) async {
+    try {
+      return await _api.post('/api/cart/checkout', body);
+    } on ApiException catch (e) {
+      final payload = e.payload;
+      if (e.code == 'pending_invoice') {
+        final pending = payload?['pendingInvoice'];
+        final invoice = pending is Map ? pending : const {};
+        throw PendingInvoiceException(
+          message: e.message,
+          externalId: invoice['externalId'] as String?,
+          invoiceUrl: invoice['invoiceUrl'] as String?,
+          totalAmount: (invoice['totalAmount'] as num?)?.round(),
+        );
+      }
+      if (e.code == 'coupon_invalid') {
+        throw CouponInvalidException(
+          message: e.message,
+          couponId: (payload?['couponId'] as num?)?.toInt(),
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// The buyer's coupons for this checkout, eligible or not — the same
+  /// `POST /api/coupons/available` web's `fetchAvailableCoupons` calls.
+  ///
+  /// Through the route rather than `list_available_coupons` directly: the
+  /// route prices the items subtotal itself from [selectedCartItemIds], so
+  /// eligibility is never judged against a number the client supplied.
+  Future<List<AvailableCoupon>> fetchAvailableCoupons({
+    required int shippingTotal,
+    required PaymentChannel? paymentChannel,
+    required List<int> selectedCartItemIds,
+  }) async {
+    final json = await _api.post('/api/coupons/available', {
+      'shippingTotal': shippingTotal,
+      'paymentChannel': paymentChannel?.code,
+      'selectedCartItemIds': selectedCartItemIds,
+    });
+    final rows = json['coupons'];
+    if (rows is! List) return const [];
+    return [
+      for (final row in rows)
+        if (AvailableCoupon.tryParse(row) case final coupon?) coupon,
+    ];
   }
 
   /// The QRIS payload for a checkout, so the app can draw the code itself
@@ -347,18 +439,27 @@ class CheckoutGateway {
     return null;
   }
 
-  /// Success is keyed off `paid_at` rather than a status spelling — the
-  /// webhook stamps it, and the cancelled vocabulary is the part that's
-  /// enumerated.
-  Future<CheckoutProgress> fetchProgress(String externalId) async {
-    const cancelled = {
-      'cancelled',
-      'expired',
-      'refunded',
-      'failed',
-      'refund_required',
-    };
+  /// Every `carts.status` the `carts_status_check` constraint allows that
+  /// ends a checkout without an order: web's `CancelledCheckoutStatus` plus
+  /// the refund-bound states `commit_cart_match` narrows a paid-but-
+  /// unfulfillable cart to (`REFUNDABLE_CART_STATUSES`) and `refund_failed`.
+  static const terminalUnpaidStatuses = {
+    'cancelled',
+    'expired',
+    'refunded',
+    'failed',
+    'refund_required',
+    'failed_unavailable',
+    'failed_buyer_ineligible',
+    'refund_failed',
+  };
 
+  /// Success is keyed off `paid_at` rather than a status spelling — the
+  /// webhook stamps it — except for the terminal states, which are checked
+  /// first: a cart that was paid and then failed or refunded keeps its
+  /// `paid_at`, and calling that "paid" would promise an order that never
+  /// came to exist.
+  Future<CheckoutProgress> fetchProgress(String externalId) async {
     final row = await _client
         .from('carts')
         .select('status, paid_at')
@@ -374,12 +475,23 @@ class CheckoutGateway {
       );
     }
 
-    final raw = row['status'] as String? ?? 'pending';
-    if (row['paid_at'] != null) {
-      return CheckoutProgress(status: CheckoutStatus.paid, raw: raw);
-    }
-    if (cancelled.contains(raw)) {
+    return progressFromRow(
+      status: row['status'] as String?,
+      paidAt: row['paid_at'],
+    );
+  }
+
+  /// The decision [fetchProgress] makes from one `carts` row.
+  static CheckoutProgress progressFromRow({
+    required String? status,
+    required Object? paidAt,
+  }) {
+    final raw = status ?? 'pending';
+    if (terminalUnpaidStatuses.contains(raw)) {
       return CheckoutProgress(status: CheckoutStatus.cancelled, raw: raw);
+    }
+    if (paidAt != null) {
+      return CheckoutProgress(status: CheckoutStatus.paid, raw: raw);
     }
     return CheckoutProgress(status: CheckoutStatus.pending, raw: raw);
   }

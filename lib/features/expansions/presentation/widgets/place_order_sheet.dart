@@ -69,7 +69,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
   String? _error;
 
   /// Photos of the actual copy being sold — `place_order` requires at least
-  /// one on asks of Rp100.000 and up. Capped at 4, like the seller form.
+  /// one on asks of graded slabs. Capped at 4, like the seller form.
   final List<File> _photos = [];
 
   bool get _isBid => widget.side == 'bid';
@@ -114,6 +114,10 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
     final price = _priceValue;
     if (price <= 0) {
       setState(() => _error = 'Masukkan harga.');
+      return;
+    }
+    if (!_isBid && _condition.requiresListingPhoto && _photos.isEmpty) {
+      setState(() => _error = gradedPhotoRequiredMessage);
       return;
     }
     setState(() {
@@ -457,9 +461,9 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                 style: AppTypography.captionSemibold(context.mutedForeground),
               ),
               const SizedBox(width: 6),
-              if (_priceValue >= 100000)
+              if (_condition.requiresListingPhoto)
                 Text(
-                  'wajib di atas Rp100.000',
+                  'wajib untuk kartu graded',
                   style: AppTypography.caption(colors.error),
                 ),
             ],

@@ -8,9 +8,9 @@ import '../../../../core/utils/formatters.dart';
 import '../../repository/checkout_pricing.dart';
 import '../../repository/models/checkout_models.dart';
 
-/// Ports `features/checkout/ui/OrderSummary.tsx` — the cost breakdown,
-/// coupon input, and the final "Bayar Sekarang" action.
-class OrderSummary extends StatefulWidget {
+/// Ports `features/checkout/components/sections/order-summary.tsx` — the
+/// cost breakdown, the coupon slot, and the final "Bayar Sekarang" action.
+class OrderSummary extends StatelessWidget {
   const OrderSummary({
     super.key,
     required this.itemsSubtotal,
@@ -19,15 +19,8 @@ class OrderSummary extends StatefulWidget {
     required this.paymentMethod,
     required this.hasChannel,
     required this.totals,
-    required this.appliedCoupon,
-    required this.couponInput,
-    required this.onCouponInputChanged,
-    required this.couponLoading,
-    this.couponDisabledHint,
-    this.couponError,
-    required this.couponApplyDisabled,
-    required this.onApplyCoupon,
-    required this.onRemoveCoupon,
+    required this.coupons,
+    required this.couponSlot,
     required this.submitting,
     required this.payDisabled,
     required this.onCheckout,
@@ -39,57 +32,18 @@ class OrderSummary extends StatefulWidget {
   final PaymentMethod paymentMethod;
   final bool hasChannel;
   final CheckoutTotals totals;
-  final AppliedCoupon? appliedCoupon;
-  final String couponInput;
-  final ValueChanged<String> onCouponInputChanged;
-  final bool couponLoading;
+  final CouponSelection coupons;
 
-  /// What the server said about the code just tried. Rendered against the
-  /// field rather than at the foot of the card: it used to sit below the
-  /// "Bayar Sekarang" button, far enough from the box that it read as a
-  /// complaint about the order rather than about the code.
-  final String? couponError;
-
-  /// Why "Pakai" is greyed out, when the reason is not simply an empty box.
-  /// Web leaves this unexplained and gets away with it because its payment
-  /// picker sits beside the coupon; on a phone the two are screens apart, so
-  /// a dead button with a code typed into it reads as broken.
-  final String? couponDisabledHint;
-  final bool couponApplyDisabled;
-  final VoidCallback onApplyCoupon;
-  final VoidCallback onRemoveCoupon;
+  /// The promo trigger, rendered between the fees and the total as web's
+  /// `couponSlot` is.
+  final Widget couponSlot;
   final bool submitting;
   final bool payDisabled;
   final VoidCallback onCheckout;
 
   @override
-  State<OrderSummary> createState() => _OrderSummaryState();
-}
-
-class _OrderSummaryState extends State<OrderSummary> {
-  late final _controller = TextEditingController(text: widget.couponInput);
-
-  @override
-  void didUpdateWidget(covariant OrderSummary oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.couponInput != _controller.text) {
-      _controller.value = TextEditingValue(
-        text: widget.couponInput,
-        selection: TextSelection.collapsed(offset: widget.couponInput.length),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final totals = widget.totals;
     final success = context.appSemantic.success;
 
     return Container(
@@ -107,126 +61,33 @@ class _OrderSummaryState extends State<OrderSummary> {
             style: AppTypography.bodySemibold(colors.onSurface),
           ),
           const SizedBox(height: 12),
-          _Row(
-            label: 'Subtotal kartu',
-            value: formatRupiah(widget.itemsSubtotal),
-          ),
-          _Row(
-            label: 'Ongkos kirim',
-            value: formatRupiah(widget.shippingTotal),
-          ),
-          if (widget.insuranceTotal > 0)
+          _Row(label: 'Subtotal kartu', value: formatRupiah(itemsSubtotal)),
+          _Row(label: 'Ongkos kirim', value: formatRupiah(shippingTotal)),
+          if (totals.shippingDiscount > 0 && coupons.shipping != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: _Row(
+                label: 'Diskon ongkir',
+                value: '- ${formatRupiah(totals.shippingDiscount)}',
+                color: success,
+              ),
+            ),
+          if (insuranceTotal > 0)
             _Row(
               label: 'Asuransi pengiriman',
-              value: formatRupiah(widget.insuranceTotal),
+              value: formatRupiah(insuranceTotal),
             ),
-          if (widget.paymentMethod == PaymentMethod.xendit)
+          if (paymentMethod == PaymentMethod.xendit)
             _Row(
               label: 'Biaya Platform',
-              value: !widget.hasChannel ? '-' : formatRupiah(totals.gatewayFee),
+              value: !hasChannel ? '-' : formatRupiah(totals.gatewayFee),
               strikethrough: totals.gatewayFeeWaived,
-            ),
-          if (widget.appliedCoupon != null && !totals.gatewayFeeWaived)
-            _Row(
-              label: 'Diskon (${widget.appliedCoupon!.code})',
-              value: '- ${formatRupiah(totals.effectiveDiscount)}',
-              color: success,
             ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),
           ),
-          if (widget.appliedCoupon != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: success.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.appliedCoupon!.code,
-                          style: AppTypography.captionSemibold(success),
-                        ),
-                        Text(
-                          'Hemat ${formatRupiah(totals.effectiveDiscount)}',
-                          style: AppTypography.caption(success),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: widget.onRemoveCoupon,
-                    child: Text(
-                      'Lepas',
-                      style: AppTypography.captionSemibold(success),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    textCapitalization: TextCapitalization.characters,
-                    onChanged: (v) {
-                      final cleaned = v.toUpperCase().replaceAll(
-                        RegExp(r'[^A-Z0-9_-]'),
-                        '',
-                      );
-                      widget.onCouponInputChanged(
-                        cleaned.length > 40
-                            ? cleaned.substring(0, 40)
-                            : cleaned,
-                      );
-                    },
-                    style: AppTypography.bodySm(colors.onSurface),
-                    decoration: const InputDecoration(
-                      hintText: 'gunakan POKEPEDIA',
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: widget.couponApplyDisabled || widget.couponLoading
-                      ? null
-                      : widget.onApplyCoupon,
-                  child: widget.couponLoading
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Pakai'),
-                ),
-              ],
-            ),
-          if (widget.appliedCoupon == null && widget.couponError != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              widget.couponError!,
-              style: AppTypography.caption(colors.error),
-            ),
-          ]
-          // Only when there is no error to show: two lines under one small
-          // field is noise, and the failure is the more urgent of the two.
-          else if (widget.appliedCoupon == null &&
-              widget.couponDisabledHint != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              widget.couponDisabledHint!,
-              style: AppTypography.caption(context.mutedForeground),
-            ),
-          ],
+          couponSlot,
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),
@@ -246,13 +107,11 @@ class _OrderSummaryState extends State<OrderSummary> {
           ),
           const SizedBox(height: 14),
           ElevatedButton(
-            onPressed: widget.payDisabled || widget.submitting
-                ? null
-                : widget.onCheckout,
+            onPressed: payDisabled || submitting ? null : onCheckout,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size.fromHeight(48),
             ),
-            child: widget.submitting
+            child: submitting
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,

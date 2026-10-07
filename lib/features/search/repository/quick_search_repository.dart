@@ -18,14 +18,12 @@ class QuickSearchResults {
   bool get isEmpty => cards.isEmpty && stores.isEmpty;
 }
 
-/// One page of the full results list, plus the spelling web would have
-/// corrected the query to.
+/// One page of the full results list.
 class FullSearchPage {
   const FullSearchPage({
     required this.cards,
     required this.total,
     required this.hasNext,
-    this.correctedQuery,
   });
 
   static const empty = FullSearchPage(cards: [], total: 0, hasNext: false);
@@ -33,17 +31,6 @@ class FullSearchPage {
   final List<CardModel> cards;
   final int total;
   final bool hasNext;
-
-  /// Set when nothing matched what was typed and these results are for a
-  /// corrected spelling instead — web's "did you mean".
-  final String? correctedQuery;
-
-  FullSearchPage withCorrection(String corrected) => FullSearchPage(
-    cards: cards,
-    total: total,
-    hasNext: hasNext,
-    correctedQuery: corrected,
-  );
 }
 
 /// The two lookups behind the search bar's suggestions.
@@ -111,12 +98,7 @@ class QuickSearchRepository {
   /// One page of full results — `search_cards_fuzzy`, the RPC behind web's
   /// `/search?q=`, which matches names, numbers, expansion codes,
   /// illustrators, rarities, attacks and abilities in one pass and ranks them
-  /// by relevance.
-  ///
-  /// When the first page comes back empty it retries once with each word run
-  /// through `suggest_search_correction`, which is how web offers "menampilkan
-  /// hasil untuk …" on a typo. Later pages skip that: the correction is
-  /// already folded into [FullSearchPage.correctedQuery] and passed back in.
+  /// by relevance. Typos are absorbed by its trigram fallback.
   Future<FullSearchPage> searchAll(
     String query, {
     int offset = 0,
@@ -126,33 +108,6 @@ class QuickSearchRepository {
     final needle = query.trim();
     if (needle.length < minQueryLength) return FullSearchPage.empty;
 
-    final page = await _fuzzyPage(
-      needle,
-      offset: offset,
-      limit: limit,
-      sort: sort,
-    );
-    if (page.cards.isNotEmpty || offset > 0) return page;
-
-    final corrected = await _correct(needle);
-    if (corrected == null) return page;
-
-    final retry = await _fuzzyPage(
-      corrected,
-      offset: offset,
-      limit: limit,
-      sort: sort,
-    );
-    if (retry.cards.isEmpty) return page;
-    return retry.withCorrection(corrected);
-  }
-
-  Future<FullSearchPage> _fuzzyPage(
-    String needle, {
-    required int offset,
-    required int limit,
-    required CardSortOption? sort,
-  }) async {
     final rows =
         await _client.rpc(
               'search_cards_fuzzy',
@@ -192,26 +147,6 @@ class QuickSearchRepository {
       total: (maps.first['total_count'] as num?)?.toInt() ?? cards.length,
       hasNext: maps.first['has_next'] as bool? ?? false,
     );
-  }
-
-  /// The query with each word spell-corrected, or null when nothing changed.
-  Future<String?> _correct(String needle) async {
-    // Web caps the correction at eight words; past that the query is prose,
-    // not a card name.
-    final words = needle.split(RegExp(r'\s+')).take(8).toList();
-    try {
-      final corrected = await Future.wait([
-        for (final word in words)
-          _client
-              .rpc('suggest_search_correction', params: {'p_word': word})
-              .then((value) => value as String? ?? word)
-              .catchError((_) => word),
-      ]);
-      final joined = corrected.join(' ');
-      return joined.toLowerCase() == needle.toLowerCase() ? null : joined;
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<List<StoreModel>> _searchStores(String needle) async {

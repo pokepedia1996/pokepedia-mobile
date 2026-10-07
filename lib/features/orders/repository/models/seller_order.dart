@@ -49,8 +49,23 @@ class ShipmentStatusEntry {
 }
 
 /// `UNTRACKABLE_COURIER_CODES` — couriers whose tracking the platform can't
-/// read, so a shipment with one never receives status updates.
-const untrackableCourierCodes = {'jne', 'idexpress', 'pos', 'tiki', 'paxel'};
+/// read, so a shipment with one never receives status updates. Hand-synced
+/// with `lib/shipping/core/untrackable.ts` and its SQL twins in
+/// `confirm_receipt` and `get_buyer_action_counts`.
+const untrackableCourierCodes = {
+  'jne',
+  'idexpress',
+  'pos',
+  'tiki',
+  'paxel',
+  'sicepat',
+};
+
+/// Ports `isUntrackableCourier`.
+bool isUntrackableCourier(String? courierCode) {
+  if (courierCode == null) return false;
+  return untrackableCourierCodes.contains(courierCode.trim().toLowerCase());
+}
 
 /// `UNTRACKABLE_CONFIRM_DELAY_MS` — how long after dispatch a buyer may
 /// confirm receipt when no courier history is coming.

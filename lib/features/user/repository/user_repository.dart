@@ -7,6 +7,7 @@ import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/utils/card_pricing.dart';
 import '../../../shared/utils/paged_rows.dart';
 import '../../../shared/utils/primary_collection.dart';
+import '../utils/delete_account_errors.dart';
 import 'models/profile_models.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -456,6 +457,24 @@ class UserRepository {
       return null;
     } on PostgrestException catch (e) {
       return userFacingError(e);
+    }
+  }
+
+  /// Deletes (anonymises) the caller's account through `delete_my_account`,
+  /// the RPC behind web's `DeleteAccountSection`. Returns null on success, or
+  /// the Indonesian reason it was refused.
+  Future<String?> deleteMyAccount() async {
+    try {
+      await _client.rpc('delete_my_account');
+      return null;
+    } on PostgrestException catch (e) {
+      if (!isDeleteAccountRefusal(e.message)) {
+        debugPrint('[delete-account] delete_my_account failed: ${e.message}');
+      }
+      return translateDeleteAccountError(e.message);
+    } catch (e) {
+      debugPrint('[delete-account] delete_my_account failed: $e');
+      return translateDeleteAccountError('');
     }
   }
 }

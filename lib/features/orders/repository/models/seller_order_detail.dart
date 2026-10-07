@@ -1,4 +1,5 @@
 import '../../../../shared/utils/postgrest_embed.dart';
+import '../../utils/package_payment.dart';
 import 'order_model.dart';
 import 'shipment_destination.dart';
 
@@ -35,9 +36,7 @@ List<String>? _collectionMethods(Object? raw) {
 class SellerOrderDetail {
   const SellerOrderDetail({
     required this.order,
-    required this.subtotal,
-    required this.shippingCost,
-    required this.insuranceFee,
+    required this.payment,
     required this.commissionAmount,
     required this.sellerNetAmount,
     this.buyerUsername,
@@ -60,9 +59,7 @@ class SellerOrderDetail {
     required OrderModel order,
     String? buyerUsername,
   }) {
-    var subtotal = 0;
-    var shipping = 0;
-    var insurance = 0;
+    final lines = <PackagePaymentLine>[];
     var commission = 0;
     var net = 0;
     List<String>? collectionMethods;
@@ -74,14 +71,26 @@ class SellerOrderDetail {
     for (final entry in (row['order_items'] as List?) ?? const []) {
       if (entry is! Map<String, dynamic>) continue;
       final settlement = embeddedRow(entry['settlements']);
-      subtotal +=
-          ((entry['match_price'] as num?)?.toInt() ?? 0) *
-          ((entry['matched_quantity'] as num?)?.toInt() ?? 0);
+      final cancelled = entry['status'] == 'cancelled';
+      lines.add(
+        PackagePaymentLine(
+          subtotal:
+              ((entry['match_price'] as num?)?.toInt() ?? 0) *
+              ((entry['matched_quantity'] as num?)?.toInt() ?? 0),
+          shippingCost: (settlement?['shipping_cost'] as num?)?.toInt() ?? 0,
+          shippingDiscount:
+              (settlement?['shipping_discount_idr'] as num?)?.toInt() ?? 0,
+          insurance: (settlement?['insurance_fee_idr'] as num?)?.toInt() ?? 0,
+          cancelled: cancelled,
+        ),
+      );
       if (settlement == null) continue;
-      shipping += (settlement['shipping_cost'] as num?)?.toInt() ?? 0;
-      insurance += (settlement['insurance_premium_idr'] as num?)?.toInt() ?? 0;
-      commission += (settlement['commission_amount'] as num?)?.toInt() ?? 0;
-      net += (settlement['seller_net_amount'] as num?)?.toInt() ?? 0;
+      // Web's aggregate commission and net skip cancelled lines: nothing of
+      // theirs reaches the seller.
+      if (!cancelled) {
+        commission += (settlement['commission_amount'] as num?)?.toInt() ?? 0;
+        net += (settlement['seller_net_amount'] as num?)?.toInt() ?? 0;
+      }
       // One courier carries the whole order, so the first settlement that
       // names one speaks for all of them.
       collectionMethods ??= _collectionMethods(
@@ -111,9 +120,9 @@ class SellerOrderDetail {
       destination: destination != null && !destination.isEmpty
           ? destination
           : null,
-      subtotal: subtotal,
-      shippingCost: shipping,
-      insuranceFee: insurance,
+      // `carts_select_own` hides the checkout from the seller, so web's page
+      // gets no checkout fees either and shows the package's own lines.
+      payment: computePackagePayment(lines, null),
       commissionAmount: commission,
       sellerNetAmount: net,
     );
@@ -175,10 +184,18 @@ class SellerOrderDetail {
   /// Whether the seller may drop the parcel off and type the resi in.
   bool get allowsManualResi => !isInstantCourier;
 
-  /// What the cards themselves came to, before shipping.
-  final int subtotal;
-  final int shippingCost;
-  final int insuranceFee;
+  /// Ports the seller page's `computePackagePayment` over this order's lines.
+  final PackagePaymentBreakdown payment;
+
+  /// What the active cards came to, before shipping.
+  int get subtotal => payment.subtotal;
+
+  /// Gross ongkir; [shippingDiscount] is the coupon netted off it.
+  int get shippingCost => payment.shippingGross;
+  int get shippingDiscount => payment.shippingDiscount;
+
+  /// `settlements.insurance_fee_idr`, the premium the buyer was charged.
+  int get insuranceFee => payment.insurance;
 
   /// The platform's cut, already deducted from [sellerNetAmount].
   final int commissionAmount;
@@ -188,12 +205,10 @@ class SellerOrderDetail {
 
   /// What the buyer was charged for this seller's part of the checkout.
   ///
-  /// Deliberately excludes the gateway fee and any coupon: those live on
-  /// `carts`, which `carts_select_own` reserves for the buyer. Web's page
-  /// reads them with the seller's own session too, so it shows the same
-  /// figure — naming this "what the buyer paid you" rather than "what the
-  /// buyer paid" is the honest version.
-  int get buyerPaid => subtotal + shippingCost + insuranceFee;
+  /// Net of the ongkir coupon but without the gateway fee: that lives on
+  /// `carts`, which `carts_select_own` reserves for the buyer, so web's page
+  /// reading with the seller's session shows the same `paidTotal`.
+  int get buyerPaid => payment.paidTotal;
 
   /// Whether the money is still the platform's to hold.
   bool get inEscrow => order.items.any(

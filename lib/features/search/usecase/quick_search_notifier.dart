@@ -37,7 +37,6 @@ class FullSearchState {
     this.cards = const [],
     this.total = 0,
     this.hasNext = false,
-    this.correctedQuery,
     this.loading = true,
     this.loadingMore = false,
     this.failed = false,
@@ -50,10 +49,6 @@ class FullSearchState {
   final List<CardModel> cards;
   final int total;
   final bool hasNext;
-
-  /// The spelling these results are actually for, when nothing matched what
-  /// was typed.
-  final String? correctedQuery;
   final bool loading;
   final bool loadingMore;
   final bool failed;
@@ -76,7 +71,6 @@ class FullSearchState {
     List<CardModel>? cards,
     int? total,
     bool? hasNext,
-    String? correctedQuery,
     bool? loading,
     bool? loadingMore,
     bool? failed,
@@ -88,7 +82,6 @@ class FullSearchState {
     cards: cards ?? this.cards,
     total: total ?? this.total,
     hasNext: hasNext ?? this.hasNext,
-    correctedQuery: correctedQuery ?? this.correctedQuery,
     loading: loading ?? this.loading,
     loadingMore: loadingMore ?? this.loadingMore,
     failed: failed ?? this.failed,
@@ -125,7 +118,6 @@ class FullSearchNotifier
         cards: page.cards,
         total: page.total,
         hasNext: page.hasNext,
-        correctedQuery: page.correctedQuery,
         loading: false,
         filters: filters,
         ownership: ownership,
@@ -171,13 +163,7 @@ class FullSearchNotifier
     try {
       final page = await ref
           .read(quickSearchRepositoryProvider)
-          // Paging continues on the corrected spelling when that is what the
-          // first page answered with.
-          .searchAll(
-            state.correctedQuery ?? arg,
-            offset: state.cards.length,
-            sort: state.sort,
-          );
+          .searchAll(arg, offset: state.cards.length, sort: state.sort);
       state = state.copyWith(
         cards: [...state.cards, ...page.cards],
         hasNext: page.hasNext,

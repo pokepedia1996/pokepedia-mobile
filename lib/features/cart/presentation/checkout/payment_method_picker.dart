@@ -25,6 +25,7 @@ class PaymentMethodPicker extends StatelessWidget {
   const PaymentMethodPicker({
     super.key,
     required this.grandTotal,
+    this.walletAmountDue,
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
@@ -32,6 +33,10 @@ class PaymentMethodPicker extends StatelessWidget {
   });
 
   final int grandTotal;
+
+  /// What saldo would be debited — [grandTotal] less a free-shipping
+  /// discount. Saldo is judged against this, as web's picker judges it.
+  final int? walletAmountDue;
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
@@ -46,6 +51,7 @@ class PaymentMethodPicker extends StatelessWidget {
       ),
       builder: (_) => _PaymentMethodSheet(
         grandTotal: grandTotal,
+        walletAmountDue: walletAmountDue ?? grandTotal,
         paymentMethod: paymentMethod,
         selectedChannel: selectedChannel,
         walletBalance: walletBalance,
@@ -143,12 +149,14 @@ class PaymentMethodPicker extends StatelessWidget {
 class _PaymentMethodSheet extends StatelessWidget {
   const _PaymentMethodSheet({
     required this.grandTotal,
+    required this.walletAmountDue,
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
   });
 
   final int grandTotal;
+  final int walletAmountDue;
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
@@ -167,7 +175,7 @@ class _PaymentMethodSheet extends StatelessWidget {
     // way an insufficient one does, but must not accuse the buyer of being
     // short when nobody has looked yet.
     final balance = walletBalance;
-    final walletInsufficient = balance != null && balance < grandTotal;
+    final walletInsufficient = balance != null && balance < walletAmountDue;
     final walletDisabled = balance == null || walletInsufficient;
 
     return DraggableScrollableSheet(
