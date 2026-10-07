@@ -166,7 +166,7 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
       onRefresh: () async {
         ref.invalidate(sellerDashboardProvider);
         ref.invalidate(sellerIdentityProvider);
-        ref.invalidate(sellerListingCountsProvider);
+        ref.invalidate(sellerListingTabCountsProvider);
         await ref.read(sellerDashboardProvider.future);
       },
       child: ListView(

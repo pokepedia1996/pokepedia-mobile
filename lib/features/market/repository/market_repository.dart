@@ -4,6 +4,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
+import '../../expansions/repository/models/store_identity.dart';
 import '../usecase/market_filters.dart';
 import 'models/listing_facets.dart';
 import 'models/market_page.dart';
@@ -334,10 +335,10 @@ class MarketRepository {
   /// A direct read rather than one of the marketplace RPCs: none of them can
   /// be asked for a single listing. `get_card_listings` is ask-only, and
   /// `get_recent_marketplace_listings` filters to a seller rather than to a
-  /// slug. The card and the buyer's storefront row are fetched alongside it,
-  /// the same two-step every other listing query here does —
-  /// `listings.user_id` and `seller_profiles.user_id` both point at
-  /// `auth.users`, so PostgREST can't embed one in the other.
+  /// slug. The card and the buyer's storefront are fetched alongside it —
+  /// the latter through `get_store_identities`, since `seller_profiles` is
+  /// self-select only and a direct read comes back empty for anyone else's
+  /// bid. That RPC has no city or verified flag, so those stay unset.
   ///
   /// The [CardModel] on the result is display-only, like the one
   /// [ListingModel.fromMarketplaceRow] builds: enough for the artwork and
@@ -373,15 +374,8 @@ class MarketRepository {
     // one. `get_recent_marketplace_listings` joins both for the same reason;
     // this is that join, done by hand for a single row.
     final storeFuture = buyerId == null
-        ? Future<Map<String, dynamic>?>.value(null)
-        : _client
-              .from('seller_profiles')
-              .select(
-                'store_slug, store_name, is_verified, city_name, '
-                'store_logo_url',
-              )
-              .eq('user_id', buyerId)
-              .maybeSingle();
+        ? Future.value(const <String, StoreIdentity>{})
+        : fetchStoreIdentities(_client, [buyerId]);
     final profileFuture = buyerId == null
         ? Future<Map<String, dynamic>?>.value(null)
         : _client
@@ -392,28 +386,25 @@ class MarketRepository {
 
     final cardRow = await cardFuture;
     if (cardRow == null) return null;
-    final store = await storeFuture;
+    final store = (await storeFuture)[buyerId];
     final profile = await profileFuture;
-
-    final storeName = store?['store_name'] as String?;
-    final username = profile?['username'] as String?;
 
     return ListingModel.fromRow(
       row,
       card: CardModel.fromRow(cardRow),
       // Both fall through to the username, so a buyer who never opened a
       // storefront is named by their handle and still links to it.
-      storeSlug: store?['store_slug'] as String?,
-      storeName: storeName,
-      sellerUsername: username,
+      storeSlug: store?.storeSlug,
+      storeName: store?.storeName,
+      sellerUsername: profile?['username'] as String?,
       // "Pembeli" only when the buyer has neither a shop nor a username —
       // a deleted or half-registered account, not the common case it used
       // to stand in for.
       nameFallback: 'Pembeli',
-      isVerified: store?['is_verified'] as bool? ?? false,
-      cityName: store?['city_name'] as String? ?? '',
+      isVerified: false,
+      cityName: '',
       sellerAvatarUrl: profile?['avatar_url'] as String?,
-      storeLogoUrl: store?['store_logo_url'] as String?,
+      storeLogoUrl: store?.storeLogoUrl,
     );
   }
 
@@ -429,53 +420,42 @@ class MarketRepository {
     return StoreFeedbackSummary.fromMatrix(Map<String, dynamic>.from(result));
   }
 
-  /// The reviews themselves, newest first.
+  /// The reviews a seller received, newest first, one per transaction.
   ///
-  /// Read straight from `trade_ratings` (`ratings_select_public`) rather
-  /// than through `get_feedback_list`: that RPC is in the web repo but isn't
-  /// deployed to this project, and PostgREST answers PGRST202 for it.
+  /// Ports `fetchFeedbackForUser` (`features/feedback/api/server.ts`) over
+  /// `get_feedback_list`, with the same defaults: received, auto-feedback
+  /// included, all periods. The RPC groups sibling items of one order into a
+  /// single review and joins the rater's username itself. [filter] is
+  /// `positive` / `neutral` / `negative`; [period] is `1mo` / `6mo` / `12mo` /
+  /// `all`; [sort] is `recent` / `oldest`.
   Future<List<StoreFeedback>> fetchFeedback(
     String userId, {
     int limit = 20,
+    int page = 1,
+    String? filter,
+    String period = 'all',
+    String sort = 'recent',
+    String? search,
+    bool includeAuto = true,
   }) async {
-    final rows =
-        await _client
-                .from('trade_ratings')
-                .select(
-                  'id, rater_id, feedback, comment, reply, created_at, is_auto',
-                )
-                .eq('rated_id', userId)
-                .order('created_at', ascending: false)
-                .limit(limit)
-            as List;
-    if (rows.isEmpty) return const [];
-
-    // Two queries rather than an embed: `trade_ratings.rater_id` references
-    // `auth.users`, not `profiles`, so PostgREST has no relationship to
-    // traverse (PGRST200).
-    final raterIds = rows
-        .map((r) => (r as Map<String, dynamic>)['rater_id'] as String?)
-        .whereType<String>()
-        .toSet()
-        .toList();
-    final profiles =
-        await _client
-                .from('profiles')
-                .select('id, username')
-                .inFilter('id', raterIds)
-            as List;
-    final usernames = {
-      for (final row in profiles.cast<Map<String, dynamic>>())
-        row['id'] as String: row['username'] as String?,
-    };
-
-    return rows.map((r) {
-      final row = r as Map<String, dynamic>;
-      return StoreFeedback.fromRow(
-        row,
-        raterUsername: usernames[row['rater_id']],
-      );
-    }).toList();
+    final trimmedSearch = search?.trim();
+    final result = await _client.rpc(
+      'get_feedback_list',
+      params: {
+        'p_user_id': userId,
+        'p_as': 'received',
+        'p_include_auto': includeAuto,
+        'p_filter': filter,
+        'p_period': period,
+        'p_sort': sort,
+        'p_search': (trimmedSearch == null || trimmedSearch.isEmpty)
+            ? null
+            : trimmedSearch,
+        'p_page': page,
+        'p_page_size': limit,
+      },
+    );
+    return StoreFeedback.parseList(result);
   }
 
   /// `user_reputation`'s precomputed positive-feedback percentage and

@@ -12,9 +12,8 @@ import '../../../core/errors/user_message.dart';
 /// The web mutates these through `/api/seller/listings*`, but those routes
 /// are thin wrappers over RPCs that are themselves granted to
 /// `authenticated` — and they were never converted to accept a bearer token,
-/// so the app couldn't call them anyway. Reading is the same story:
-/// `listings_select_own` is `auth.uid() = user_id`. So this talks to
-/// Postgres directly, the way the cart already does with `add_to_cart`.
+/// so the app couldn't call them anyway. So this talks to Postgres directly,
+/// the way the cart already does with `add_to_cart`.
 ///
 /// Every RPC here takes `listings.slug` (a uuid), not the integer id.
 class SellerListingsRepository {
@@ -22,58 +21,55 @@ class SellerListingsRepository {
 
   final SupabaseClient _client;
 
-  static const _columns =
-      'id, slug, price, condition, quantity, qty_locked, status, '
-      'accepts_offers, auto_relist, view_count, created_at, archived_at, '
-      'expires_at, photo_urls, '
-      'cards!inner(id, name_id, expansion_code, collector_number, rarity, '
-      'category, image_url, illustrator, regulation_mark, language, variant, '
-      'details)';
-
-  Future<List<SellerListing>> fetchListings({
+  /// One page of a bucket through `get_seller_listings_page`, web's
+  /// `fetchSellerListingsPage`.
+  ///
+  /// Bucketing, search, sort and the offers filter all run in SQL, so a
+  /// soft-deleted row never reaches the client and paging covers every
+  /// listing rather than whichever came back first.
+  Future<SellerListingsPage> fetchListingsPage({
     required SellerListingBucket bucket,
     String query = '',
-    int limit = 100,
+    ListingSort sort = const ListingSort(ListingSortCol.price),
+    bool withOffers = false,
+    int offset = 0,
+    int limit = 30,
   }) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return const [];
+    final rpcBucket = bucket.rpcValue;
+    if (_client.auth.currentUser == null ||
+        rpcBucket == null ||
+        !bucket.isListingBucket) {
+      return const SellerListingsPage();
+    }
 
-    var request = _client
-        .from('listings')
-        .select(_columns)
-        .eq('user_id', userId)
-        .eq('side', 'ask');
+    final needle = query.trim();
+    final result = await _client.rpc(
+      'get_seller_listings_page',
+      params: {
+        'p_bucket': rpcBucket,
+        'p_offset': offset,
+        'p_limit': limit,
+        'p_search': needle.isEmpty ? null : needle,
+        'p_sort_col': sort.col.rpcValue,
+        'p_sort_dir': sort.rpcDirection,
+        'p_with_offers': withOffers,
+      },
+    );
+    if (result is! Map<String, dynamic>) {
+      throw StateError(
+        'get_seller_listings_page returned ${result.runtimeType}',
+      );
+    }
+    return SellerListingsPage.fromJson(result);
+  }
 
-    // Archiving is the only predicate SQL can settle here: "active" also
-    // depends on `expires_at` against now, and mixing that into PostgREST
-    // filters would still leave the bucketing split across two places. The
-    // rest is decided by `SellerListing.bucket`, which is the one copy of
-    // the rule.
-    request = bucket.isArchived
-        ? request.not('archived_at', 'is', null)
-        : request.isFilter('archived_at', null);
-
-    final rows = await request
-        .order('created_at', ascending: false)
-        .limit(limit);
-    final listings = rows
-        .map(SellerListing.fromRow)
-        .where((listing) => listing.bucket == bucket)
-        .toList();
-
-    // Filtered here rather than in SQL: the searchable text lives on the
-    // joined card, and PostgREST can't filter an embedded resource without
-    // dropping the rows that don't match into a separate request.
-    final needle = query.trim().toLowerCase();
-    if (needle.isEmpty) return listings;
-    return listings
-        .where(
-          (l) =>
-              l.card.name.toLowerCase().contains(needle) ||
-              l.card.collectorNumber.toLowerCase().contains(needle) ||
-              l.card.expansionCode.toLowerCase().contains(needle),
-        )
-        .toList();
+  /// Per-tab counts through `get_seller_listing_tab_counts`, web's
+  /// `fetchSellerListingTabCounts`.
+  Future<Map<SellerListingBucket, int>> fetchTabCounts() async {
+    if (_client.auth.currentUser == null) return parseSellerTabCounts(null);
+    return parseSellerTabCounts(
+      await _client.rpc('get_seller_listing_tab_counts'),
+    );
   }
 
   /// The two toggles web's Preferensi tab writes.

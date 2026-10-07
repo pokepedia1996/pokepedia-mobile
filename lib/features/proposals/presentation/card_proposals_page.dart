@@ -401,8 +401,10 @@ class _CardHeader extends StatelessWidget {
                   style: AppTypography.h3(colors.onSurface),
                 ),
                 Text(
-                  '${card.expansionCode.toUpperCase()} #'
-                  '${card.collectorNumber}',
+                  card.id == unavailableProposalCard.id
+                      ? 'Bid pembeli sudah tidak aktif'
+                      : '${card.expansionCode.toUpperCase()} #'
+                            '${card.collectorNumber}',
                   style: AppTypography.caption(context.mutedForeground),
                 ),
               ],
@@ -680,13 +682,17 @@ class _SentRow extends StatelessWidget {
                       spacing: 5,
                       runSpacing: 2,
                       children: [
-                        Text(
-                          formatRupiah(proposal.effectivePrice),
-                          style: AppTypography.bodySmSemibold(colors.onSurface),
-                        ),
-                        if (proposal.effectivePrice != proposal.bidPrice)
+                        if (proposal.effectivePrice case final price?)
                           Text(
-                            formatRupiah(proposal.bidPrice),
+                            formatRupiah(price),
+                            style: AppTypography.bodySmSemibold(
+                              colors.onSurface,
+                            ),
+                          ),
+                        if (proposal.bidPrice case final bidPrice?
+                            when bidPrice != proposal.effectivePrice)
+                          Text(
+                            formatRupiah(bidPrice),
                             style: AppTypography.caption(
                               context.mutedForeground,
                             ).copyWith(decoration: TextDecoration.lineThrough),

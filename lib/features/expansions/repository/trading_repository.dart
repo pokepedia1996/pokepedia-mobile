@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/models/card_condition.dart';
-import '../../../shared/utils/seller_identity.dart';
+import 'models/store_identity.dart';
 import 'models/trading_models.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -99,43 +99,32 @@ class TradingRepository {
   /// How much a bid price level can still absorb, and how many buyers are
   /// behind it — what the proposal sheet caps its quantity to.
   ///
-  /// Ports `fetchLevel` in `bid-proposal-modal.tsx`. The caller's own bids
-  /// are excluded: you can't propose to yourself, and counting them would
-  /// promise quantity the broadcast will never reach.
-  Future<({int buyerCount, int availableQty})> fetchBidLevel({
+  /// Ports `fetchLevel` in `bid-proposal-modal.tsx`. The RPC applies the
+  /// same live-bid predicate `submit_bid_proposal_broadcast` does (not
+  /// expired, archived or deleted; not the caller's own) and splits out the
+  /// bids the caller already proposed to. Signed out or on error, the level
+  /// reads as empty.
+  Future<BidProposalLevel> fetchBidLevel({
     required int cardId,
     required CardCondition condition,
     required int price,
     String? variantKey,
   }) async {
-    final me = _client.auth.currentUser?.id;
-    if (me == null) return (buyerCount: 0, availableQty: 0);
-
-    var query = _client
-        .from('listings')
-        .select('quantity, qty_locked, user_id')
-        .eq('side', 'bid')
-        .eq('status', 'open')
-        .eq('card_id', cardId)
-        .eq('condition', condition.raw)
-        .eq('price', price)
-        .neq('user_id', me);
-    query = variantKey == null
-        ? query.isFilter('variant_key', null)
-        : query.eq('variant_key', variantKey);
-
-    final rows = await query as List;
-    var available = 0;
-    var buyers = 0;
-    for (final row in rows.cast<Map<String, dynamic>>()) {
-      final remaining =
-          ((row['quantity'] as num?)?.toInt() ?? 0) -
-          ((row['qty_locked'] as num?)?.toInt() ?? 0);
-      if (remaining <= 0) continue;
-      available += remaining;
-      buyers++;
+    if (_client.auth.currentUser == null) return const BidProposalLevel();
+    try {
+      final result = await _client.rpc(
+        'get_bid_proposal_level',
+        params: {
+          'p_card_id': cardId,
+          'p_variant_key': variantKey,
+          'p_condition': condition.raw,
+          'p_price': price,
+        },
+      );
+      return BidProposalLevel.fromRow(result);
+    } on PostgrestException {
+      return const BidProposalLevel();
     }
-    return (buyerCount: buyers, availableQty: available);
   }
 
   /// Offers the caller's card to every buyer bidding at one price level.
@@ -308,10 +297,13 @@ class TradingRepository {
     }
   }
 
-  /// Ports `GET /api/listings/matching-asks` — open asks of the same card
-  /// and condition at or below the bid price, cheapest first, so the buyer
-  /// is offered "buy now" before their bid goes on the book. Own listings
-  /// are excluded (the RPC would reject a self-trade anyway).
+  /// Ports `GET /api/listings/matching-asks` — open asks of the same card,
+  /// variant and condition at or below the bid price, cheapest first, so the
+  /// buyer is offered "buy now" before their bid goes on the book.
+  ///
+  /// Same filters as the route: live rows only (not archived, deleted or
+  /// expired), own listings excluded, and fully reserved rows dropped after
+  /// the limit. Signed out, nothing matches — the route answers 401.
   Future<List<MatchingAsk>> fetchMatchingAsks({
     required int cardId,
     required int price,
@@ -320,42 +312,35 @@ class TradingRepository {
     int limit = 5,
   }) async {
     final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const [];
 
     var query = _client
         .from('listings')
         .select(
-          'slug, card_id, price, condition, quantity, qty_locked, user_id, variant_key',
+          'slug, card_id, price, condition, quantity, qty_locked, user_id',
         )
-        .eq('card_id', cardId)
         .eq('side', 'ask')
         .eq('status', 'open')
+        .eq('card_id', cardId)
         .eq('condition', condition.raw)
         .lte('price', price)
-        .isFilter('archived_at', null);
-    if (userId != null) query = query.neq('user_id', userId);
+        .neq('user_id', userId)
+        .isFilter('archived_at', null)
+        .isFilter('deleted_at', null)
+        .or(
+          'expires_at.is.null,'
+          'expires_at.gt.${DateTime.now().toUtc().toIso8601String()}',
+        );
+    query = variantKey == null
+        ? query.isFilter('variant_key', null)
+        : query.eq('variant_key', variantKey);
 
     final rows = await query.order('price', ascending: true).limit(limit);
-
-    final matches = rows.where((row) {
-      final available =
-          (row['quantity'] as int? ?? 0) - (row['qty_locked'] as int? ?? 0);
-      final rowVariant = row['variant_key'] as String?;
-      return available > 0 && (rowVariant ?? '') == (variantKey ?? '');
-    }).toList();
+    final matches = rows.where((row) => _availableOf(row) > 0).toList();
     if (matches.isEmpty) return const [];
 
-    // Store names come from a separate table (`listings.user_id` and
-    // `seller_profiles.user_id` both point at `auth.users`, so PostgREST
-    // can't embed them), same two-step the listings query uses.
-    final sellerIds = matches
-        .map((r) => r['user_id'] as String)
-        .toSet()
-        .toList();
-    final stores = await _client
-        .from('seller_profiles')
-        .select('user_id, store_slug, store_name')
-        .inFilter('user_id', sellerIds);
-    final storeByUser = {for (final s in stores) s['user_id'] as String: s};
+    final sellerIds = matches.map((r) => r['user_id'] as String).toSet();
+    final storesFuture = fetchStoreIdentities(_client, sellerIds);
 
     // Sellers without a storefront are named and linked by their username.
     var usernameByUser = <String, String?>{};
@@ -363,34 +348,26 @@ class TradingRepository {
       final profiles = await _client
           .from('profiles')
           .select('id, username')
-          .inFilter('id', sellerIds);
+          .inFilter('id', sellerIds.toList());
       usernameByUser = {
         for (final p in profiles) p['id'] as String: p['username'] as String?,
       };
     } catch (_) {
       // Best effort — falls back to the storefront fields alone.
     }
+    final storeByUser = await storesFuture;
 
-    return matches.map((row) {
-      final sellerId = row['user_id'] as String;
-      final store = storeByUser[sellerId];
-      final username = usernameByUser[sellerId];
-      return MatchingAsk(
-        slug: row['slug'] as String? ?? '',
-        cardId: (row['card_id'] as num).toInt(),
-        price: (row['price'] as num?)?.toInt() ?? 0,
-        condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
-        available:
-            (row['quantity'] as int? ?? 0) - (row['qty_locked'] as int? ?? 0),
-        storeSlug: resolveSellerHandle(
-          storeSlug: store?['store_slug'] as String?,
-          username: username,
+    return [
+      for (final row in matches)
+        MatchingAsk.fromRow(
+          row,
+          store: storeByUser[row['user_id']],
+          username: usernameByUser[row['user_id']],
         ),
-        storeName: resolveSellerName(
-          storeName: store?['store_name'] as String?,
-          username: username,
-        ),
-      );
-    }).toList();
+    ];
   }
+
+  static int _availableOf(Map<String, dynamic> row) =>
+      ((row['quantity'] as num?)?.toInt() ?? 0) -
+      ((row['qty_locked'] as num?)?.toInt() ?? 0);
 }

@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../app/router/routes.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -15,12 +17,17 @@ import '../../../../shared/models/card_model.dart';
 import '../../../../shared/utils/price_input_formatter.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
+import '../../repository/models/trading_models.dart';
 import '../../usecase/trading_notifier.dart';
 
 /// `MIN_PROPOSAL_PHOTOS` in `proposal-photo-picker.tsx`.
 const _minPhotos = 1;
 const _maxPhotos = 4;
 const _maxMessage = 280;
+
+/// `QuantitySelector`'s `max={Math.min(99, level.eligibleQty)}` in
+/// `bid-proposal-modal.tsx`.
+const _maxProposalQty = 99;
 
 /// The one bid a proposal is aimed at, when it is aimed at one.
 ///
@@ -95,9 +102,9 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   bool _submitting = false;
   String? _error;
 
-  /// How deep the level is, and how many buyers stand behind it.
-  int _buyerCount = 0;
-  int _availableQty = 0;
+  /// How deep the level is, how many buyers stand behind it, and how many
+  /// of them the seller already has a pending proposal with.
+  BidProposalLevel _level = const BidProposalLevel();
 
   @override
   void initState() {
@@ -109,8 +116,12 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
     }
     // One named bid: its depth is already on screen behind this sheet, so
     // there is nothing to look up and nothing to wait for.
-    _buyerCount = 1;
-    _availableQty = target.available;
+    _level = BidProposalLevel(
+      buyerCount: 1,
+      availableQty: target.available,
+      eligibleCount: 1,
+      eligibleQty: target.available,
+    );
     _loading = false;
   }
 
@@ -132,9 +143,8 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
         );
     if (!mounted) return;
     setState(() {
-      _buyerCount = level.buyerCount;
-      _availableQty = level.availableQty;
-      _quantity = level.availableQty < 1 ? 1 : 1;
+      _level = level;
+      _quantity = 1;
       _loading = false;
     });
   }
@@ -148,6 +158,20 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
       int.tryParse(_askPrice.text.replaceAll(RegExp(r'\D'), '')) ??
       widget.price;
   bool get _photosRequired => widget.condition.requiresListingPhoto;
+
+  /// What one proposal may offer: the quantity still open across the bids
+  /// that haven't heard from this seller yet.
+  int get _maxQuantity {
+    final eligible = _level.eligibleQty;
+    if (eligible < 1) return 1;
+    return eligible > _maxProposalQty ? _maxProposalQty : eligible;
+  }
+
+  void _openProposals() {
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.push(Routes.proposals);
+  }
 
   Future<void> _pickPhoto() async {
     final picked = await ImagePicker().pickImage(
@@ -233,7 +257,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final canSend = !_submitting && !_loading && _buyerCount > 0;
+    final canSend = !_submitting && !_loading && _level.eligibleCount > 0;
 
     return SafeArea(
       child: Padding(
@@ -258,14 +282,22 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
 
               _LevelSummary(
                 loading: _loading,
-                buyerCount: _buyerCount,
-                availableQty: _availableQty,
+                buyerCount: _level.buyerCount,
+                availableQty: _level.availableQty,
                 price: widget.price,
                 condition: widget.condition,
                 buyerName: widget.target?.buyerName,
               ),
 
-              if (!_loading && _buyerCount == 0) ...[
+              if (!_loading && _level.alreadyProposedCount > 0) ...[
+                const SizedBox(height: 8),
+                _AlreadyProposedNotice(
+                  level: _level,
+                  onViewProposals: _openProposals,
+                ),
+              ],
+
+              if (!_loading && _level.isEmpty) ...[
                 const SizedBox(height: 14),
                 Text(
                   'Tidak ada bid di harga ini lagi.',
@@ -286,7 +318,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                     QuantitySelector(
                       value: _quantity,
                       min: 1,
-                      max: _availableQty < 1 ? 1 : _availableQty,
+                      max: _maxQuantity,
                       onChanged: (value) => setState(() => _quantity = value),
                     ),
                   ],
@@ -400,8 +432,8 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                         ),
                       )
                     : Text(
-                        _buyerCount > 1
-                            ? 'Kirim ke $_buyerCount pembeli'
+                        _level.eligibleCount > 1
+                            ? 'Kirim ke ${_level.eligibleCount} pembeli'
                             : 'Kirim Proposal',
                       ),
               ),
@@ -489,6 +521,50 @@ class _LevelSummary extends StatelessWidget {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tells the seller which buyers at the level already have their proposal —
+/// the broadcast skips them, so the count it sends to is smaller than the
+/// level's. Copy from `bid-proposal-modal.tsx`.
+class _AlreadyProposedNotice extends StatelessWidget {
+  const _AlreadyProposedNotice({
+    required this.level,
+    required this.onViewProposals,
+  });
+
+  final BidProposalLevel level;
+  final VoidCallback onViewProposals;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final text = level.allProposed
+        ? 'Kamu sudah mengirim proposal ke pembeli di harga ini.'
+        : '${level.alreadyProposedCount} dari ${level.buyerCount} pembeli '
+              'sudah kamu kirimi proposal.';
+
+    return Text.rich(
+      TextSpan(
+        text: '$text ',
+        style: AppTypography.caption(context.mutedForeground),
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: GestureDetector(
+              onTap: onViewProposals,
+              child: Text(
+                'Lihat proposal',
+                style: AppTypography.captionSemibold(
+                  colors.onSurface,
+                ).copyWith(decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
         ],
       ),
     );

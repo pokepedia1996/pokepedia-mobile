@@ -185,9 +185,11 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     );
   }
 
-  /// Re-reads the drafts after a card or the bulk menu writes one.
+  /// Re-reads the drafts after a card or the bulk menu writes one. Posting a
+  /// draft makes a listing, so the list and the tab counts are re-read too.
   Future<void> _refreshDrafts() async {
     ref.invalidate(sellerDraftsProvider);
+    refreshSellerListingsFromWidget(ref);
     await ref.read(sellerDraftsProvider.future);
   }
 
@@ -237,7 +239,9 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     final colors = context.appColors;
     final user = ref.watch(authProvider).valueOrNull;
     final bucket = ref.watch(sellerBucketProvider);
-    final async = ref.watch(sellerListingsProvider);
+    final feed = ref.watch(sellerListingsFeedProvider);
+    final tabCounts =
+        ref.watch(sellerListingTabCountsProvider).valueOrNull ?? const {};
 
     if (user == null) {
       return Scaffold(
@@ -267,194 +271,217 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         bottom: false,
         child: Stack(
           children: [
-            CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SellerHeader(controller: _workspaceSearch),
-                      const SizedBox(height: 12),
-                      // Web's order: the tabs come first, then the heading and the
-                      // line that explains the tab you're on, then the one primary
-                      // action.
-                      SizedBox(
-                        height: 36,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            for (final b in SellerListingBucket.values) ...[
-                              _BucketChip(
-                                bucket: b,
-                                selected: b == bucket,
-                                onTap: () =>
-                                    ref
-                                            .read(sellerBucketProvider.notifier)
-                                            .state =
-                                        b,
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Kelola Listing',
-                              style: AppTypography.h3(colors.onSurface),
-                            ),
-                            if (bucket != SellerListingBucket.preferences) ...[
-                              const SizedBox(height: 12),
-                              // Full width and stacked rather than a lone button on
-                              // the left: these are the two ways a listing starts, and
-                              // the page is otherwise a list of listings that already
-                              // exist. Importing comes first because it is the one
-                              // that turns a collection into a shop in one go.
-                              OutlinedButton.icon(
-                                onPressed: _importFromPortfolio,
-                                icon: const Icon(
-                                  LucideIcons.folderOpen,
-                                  size: 15,
-                                ),
-                                label: const Text('Impor dari Portofolio'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: colors.onSurface,
-                                  backgroundColor: Theme.of(context).cardColor,
-                                  side: BorderSide(color: context.borderColor),
-                                  minimumSize: const Size.fromHeight(40),
-                                  textStyle: AppTypography.bodySmSemibold(
-                                    colors.onSurface,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: _addListing,
-                                icon: const Icon(LucideIcons.plus, size: 15),
-                                label: const Text('Tambahkan Listing'),
-                                // Black, not the brand red the theme gives an
-                                // ElevatedButton. Red is the app's "careful" colour,
-                                // and it sits directly under a red-dotted bell and a
-                                // row of white chips — the one filled control on this
-                                // screen should read as the primary action, not as an
-                                // alert.
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: colors.onSurface,
-                                  foregroundColor: Theme.of(context).cardColor,
-                                  minimumSize: const Size.fromHeight(40),
-                                  textStyle: AppTypography.bodySmSemibold(
-                                    Theme.of(context).cardColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      if (bucket == SellerListingBucket.draft) ...[
+            NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (bucket.isListingBucket &&
+                    notification.metrics.extentAfter < 600) {
+                  ref.read(sellerListingsFeedProvider.notifier).loadMore();
+                }
+                return false;
+              },
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SellerHeader(controller: _workspaceSearch),
                         const SizedBox(height: 12),
-                        _DraftFilterChips(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                          child: Row(
+                        // Web's order: the tabs come first, then the heading and the
+                        // line that explains the tab you're on, then the one primary
+                        // action.
+                        SizedBox(
+                          height: 36,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             children: [
-                              Expanded(
-                                child: AppSearchField(
-                                  hintText: 'Cari nama kartu...',
-                                  controller: _draftSearch,
-                                  onChanged: (v) =>
-                                      ref
-                                              .read(draftQueryProvider.notifier)
-                                              .state =
-                                          v,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              DraftBulkMenu(onChanged: _refreshDrafts),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (bucket.isListingBucket) ...[
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: AppSearchField(
-                                  hintText:
-                                      'Cari nama, ekspansi, nomor, kondisi...',
-                                  controller: _search,
-                                  onChanged: (v) =>
+                              for (final b in SellerListingBucket.values) ...[
+                                _BucketChip(
+                                  bucket: b,
+                                  count: tabCounts[b],
+                                  selected: b == bucket,
+                                  onTap: () =>
                                       ref
                                               .read(
-                                                sellerListingQueryProvider
-                                                    .notifier,
+                                                sellerBucketProvider.notifier,
                                               )
                                               .state =
-                                          v,
+                                          b,
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              _SortMenuButton(
-                                sort: ref.watch(sellerSortProvider),
-                                onChanged: (col) => ref
-                                    .read(sellerSortProvider.notifier)
-                                    .update((s) => s.toggled(col)),
-                              ),
+                                const SizedBox(width: 6),
+                              ],
                             ],
                           ),
                         ),
-                        // How much is being shown, and the one filter worth a chip.
-                        // The count used to live nowhere: a seller filtering a hundred
-                        // listings down to four had no way to tell that was the whole
-                        // answer rather than the top of a longer one.
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          // Both ends give way rather than a `Spacer` holding
-                          // them apart: "1-24 dari 24 listing" beside
-                          // "Dengan penawaran 12" is wider than a narrow
-                          // phone, and the row had nowhere to overflow to.
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  _rangeLabel(async),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.bodySm(
-                                    context.mutedForeground,
+                              Text(
+                                'Kelola Listing',
+                                style: AppTypography.h3(colors.onSurface),
+                              ),
+                              if (bucket !=
+                                  SellerListingBucket.preferences) ...[
+                                const SizedBox(height: 12),
+                                // Full width and stacked rather than a lone button on
+                                // the left: these are the two ways a listing starts, and
+                                // the page is otherwise a list of listings that already
+                                // exist. Importing comes first because it is the one
+                                // that turns a collection into a shop in one go.
+                                OutlinedButton.icon(
+                                  onPressed: _importFromPortfolio,
+                                  icon: const Icon(
+                                    LucideIcons.folderOpen,
+                                    size: 15,
+                                  ),
+                                  label: const Text('Impor dari Portofolio'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: colors.onSurface,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).cardColor,
+                                    side: BorderSide(
+                                      color: context.borderColor,
+                                    ),
+                                    minimumSize: const Size.fromHeight(40),
+                                    textStyle: AppTypography.bodySmSemibold(
+                                      colors.onSurface,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              _OfferFilterChip(
-                                active: ref.watch(sellerOfferFilterProvider),
-                                count: ref.watch(offerCountsProvider).length,
-                                onTap: () => ref
-                                    .read(sellerOfferFilterProvider.notifier)
-                                    .update((on) => !on),
-                              ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  onPressed: _addListing,
+                                  icon: const Icon(LucideIcons.plus, size: 15),
+                                  label: const Text('Tambahkan Listing'),
+                                  // Black, not the brand red the theme gives an
+                                  // ElevatedButton. Red is the app's "careful" colour,
+                                  // and it sits directly under a red-dotted bell and a
+                                  // row of white chips — the one filled control on this
+                                  // screen should read as the primary action, not as an
+                                  // alert.
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: colors.onSurface,
+                                    foregroundColor: Theme.of(
+                                      context,
+                                    ).cardColor,
+                                    minimumSize: const Size.fromHeight(40),
+                                    textStyle: AppTypography.bodySmSemibold(
+                                      Theme.of(context).cardColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
+                        if (bucket == SellerListingBucket.draft) ...[
+                          const SizedBox(height: 12),
+                          _DraftFilterChips(),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: AppSearchField(
+                                    hintText: 'Cari nama kartu...',
+                                    controller: _draftSearch,
+                                    onChanged: (v) =>
+                                        ref
+                                                .read(
+                                                  draftQueryProvider.notifier,
+                                                )
+                                                .state =
+                                            v,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                DraftBulkMenu(onChanged: _refreshDrafts),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (bucket.isListingBucket) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: AppSearchField(
+                                    hintText:
+                                        'Cari nama, ekspansi, nomor, kondisi...',
+                                    controller: _search,
+                                    onChanged: (v) =>
+                                        ref
+                                                .read(
+                                                  sellerListingQueryProvider
+                                                      .notifier,
+                                                )
+                                                .state =
+                                            v,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                _SortMenuButton(
+                                  sort: ref.watch(sellerSortProvider),
+                                  onChanged: (col) => ref
+                                      .read(sellerSortProvider.notifier)
+                                      .update((s) => s.toggled(col)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // How much is being shown, and the one filter worth a chip.
+                          // The count used to live nowhere: a seller filtering a hundred
+                          // listings down to four had no way to tell that was the whole
+                          // answer rather than the top of a longer one.
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            // Both ends give way rather than a `Spacer` holding
+                            // them apart: "1-24 dari 24 listing" beside
+                            // "Dengan penawaran 12" is wider than a narrow
+                            // phone, and the row had nowhere to overflow to.
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _rangeLabel(feed),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTypography.bodySm(
+                                      context.mutedForeground,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _OfferFilterChip(
+                                  active: ref.watch(sellerOfferFilterProvider),
+                                  count:
+                                      feed.offersCount ??
+                                      ref.watch(offerCountsProvider).length,
+                                  onTap: () => ref
+                                      .read(sellerOfferFilterProvider.notifier)
+                                      .update((on) => !on),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
                       ],
-                      const SizedBox(height: 10),
-                    ],
+                    ),
                   ),
-                ),
-                ..._bodySlivers(bucket, async),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: AppBottomNav.reservedSpace(context) + 16,
+                  ..._bodySlivers(bucket, feed),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: AppBottomNav.reservedSpace(context) + 16,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (bucket == SellerListingBucket.draft)
               Positioned(
@@ -476,23 +503,22 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   /// the page's one scroll.
   List<Widget> _bodySlivers(
     SellerListingBucket bucket,
-    AsyncValue<List<SellerListing>> async,
+    SellerListingsFeedState feed,
   ) {
     return switch (bucket) {
       SellerListingBucket.preferences => const [
         SliverToBoxAdapter(child: _PreferencesPanel()),
       ],
       SellerListingBucket.draft => _draftSlivers(),
-      _ => _listingSlivers(bucket, async),
+      _ => _listingSlivers(bucket, feed),
     };
   }
 
-  /// "1-2 dari 2 listing" — what is on screen out of what matched.
-  String _rangeLabel(AsyncValue<List<SellerListing>> async) {
-    final listings = async.valueOrNull;
-    if (listings == null) return 'Memuat...';
-    if (listings.isEmpty) return 'Tidak ada listing';
-    return '1-${listings.length} dari ${listings.length} listing';
+  /// "1-30 dari 120 listing" — what is loaded out of what matched.
+  String _rangeLabel(SellerListingsFeedState feed) {
+    if (feed.loading) return 'Memuat...';
+    if (feed.rows.isEmpty) return 'Tidak ada listing';
+    return '1-${feed.rows.length} dari ${feed.totalCount} listing';
   }
 
   /// A message where the cards would be, sized so it sits in the page's
@@ -506,62 +532,68 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
 
   List<Widget> _listingSlivers(
     SellerListingBucket bucket,
-    AsyncValue<List<SellerListing>> async,
+    SellerListingsFeedState feed,
   ) {
-    return async.when(
-      loading: () => [_messageSliver(const PikachuLoader())],
-      error: (_, __) => [
+    if (feed.loading) return [_messageSliver(const PikachuLoader())];
+    if (feed.error) {
+      return [
         _messageSliver(
           Text(
             'Gagal memuat listing',
             style: AppTypography.bodySm(context.mutedForeground),
           ),
         ),
-      ],
-      data: (listings) {
-        if (listings.isEmpty) {
-          return [
-            SliverToBoxAdapter(
-              child: _EmptyCard(
-                title: _emptyTitle(bucket),
-                description: _emptyDescription(bucket),
-              ),
-            ),
-          ];
-        }
-        final offers = ref.watch(offerCountsProvider);
-
-        return [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            sliver: SliverList.builder(
-              itemCount: listings.length,
-              itemBuilder: (context, i) {
-                final listing = listings[i];
-                return ListingCardTile(
-                  key: ValueKey(listing.id),
-                  listing: listing,
-                  offerCount: offers[listing.slug]?.needsResponse ?? 0,
-                  onToggleAutoRelist: (v) => _run(
-                    () => ref
-                        .read(sellerListingActionsProvider)
-                        .setAutoRelist(listing.slug, v),
-                    v ? 'Auto-relist aktif' : 'Auto-relist mati',
-                  ),
-                  onToggleOffers: (v) => _run(
-                    () => ref
-                        .read(sellerListingActionsProvider)
-                        .setAcceptsOffers(listing.slug, v),
-                    v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
-                  ),
-                  onMenu: () => _showListingMenu(listing),
-                );
-              },
-            ),
+      ];
+    }
+    final listings = feed.rows;
+    if (listings.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: _EmptyCard(
+            title: _emptyTitle(bucket),
+            description: _emptyDescription(bucket),
           ),
-        ];
-      },
-    );
+        ),
+      ];
+    }
+    final offers = ref.watch(offerCountsProvider);
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+        sliver: SliverList.builder(
+          itemCount: listings.length,
+          itemBuilder: (context, i) {
+            final listing = listings[i];
+            return ListingCardTile(
+              key: ValueKey(listing.slug),
+              listing: listing,
+              offerCount: offers[listing.slug]?.needsResponse ?? 0,
+              onToggleAutoRelist: (v) => _run(
+                () => ref
+                    .read(sellerListingActionsProvider)
+                    .setAutoRelist(listing.slug, v),
+                v ? 'Auto-relist aktif' : 'Auto-relist mati',
+              ),
+              onToggleOffers: (v) => _run(
+                () => ref
+                    .read(sellerListingActionsProvider)
+                    .setAcceptsOffers(listing.slug, v),
+                v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
+              ),
+              onMenu: () => _showListingMenu(listing),
+            );
+          },
+        ),
+      ),
+      if (feed.loadingMore)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: PikachuLoader()),
+          ),
+        ),
+    ];
   }
 
   List<Widget> _draftSlivers() {
@@ -941,9 +973,14 @@ class _BucketChip extends StatelessWidget {
     required this.bucket,
     required this.selected,
     required this.onTap,
+    this.count,
   });
 
   final SellerListingBucket bucket;
+
+  /// From `get_seller_listing_tab_counts`; null while loading and for
+  /// Preferensi, which has nothing to count.
+  final int? count;
   final bool selected;
   final VoidCallback onTap;
 
@@ -983,6 +1020,10 @@ class _BucketChip extends StatelessWidget {
             Icon(_icon(bucket), size: 13, color: foreground),
             const SizedBox(width: 6),
             Text(bucket.label, style: AppTypography.bodySmSemibold(foreground)),
+            if (count case final n?) ...[
+              const SizedBox(width: 5),
+              Text('$n', style: AppTypography.bodySm(foreground)),
+            ],
           ],
         ),
       ),

@@ -6,6 +6,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/primary_collection.dart';
 import 'models/market_models.dart';
+import 'models/store_identity.dart';
 import '../../../core/errors/user_message.dart';
 
 /// Mirrors `EXPANSION_COLUMNS` in `pokepedia-web/lib/data/client.ts`.
@@ -22,6 +23,37 @@ const _cardColumns =
 /// `bulk_upsert_collection_cards` raises past 500 ids in one call, matching
 /// the web's `BULK_CARD_LIMIT`.
 const _bulkChunkSize = 500;
+
+/// `paginateAll(..., { pageSize: 200, maxPages: 5 })` in web's
+/// `app/api/listings/asks/route.ts`; 200 is also `get_card_listings`' cap.
+const _cardListingsPageSize = 200;
+const _cardListingsMaxPages = 5;
+
+/// One `get_card_listings` row as a [ListingModel]. The RPC returns asks
+/// only, all open, so `side`/`status` default; the seller's [store],
+/// [profile] and [reputation] are fetched alongside it.
+ListingModel cardListingFromRow(
+  Map<String, dynamic> row, {
+  required CardModel card,
+  StoreIdentity? store,
+  Map<String, dynamic>? profile,
+  Map<String, dynamic>? reputation,
+}) {
+  return ListingModel.fromRow(
+    row,
+    card: card,
+    storeSlug: store?.storeSlug,
+    storeName: store?.storeName,
+    sellerUsername: profile?['username'] as String?,
+    isVerified: false,
+    cityName: '',
+    storeLogoUrl: store?.storeLogoUrl,
+    sellerAvatarUrl: profile?['avatar_url'] as String?,
+    sellerFeedbackScore:
+        ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
+        ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),
+  );
+}
 
 /// Data access for the Expansions feature, backed by Supabase. Mirrors
 /// `fetchPacks`/`fetchPacksGroupedBySeries`/`fetchCardsByPack` in
@@ -316,39 +348,48 @@ class ExpansionsRepository {
     }
   }
 
-  /// Open listings for a card, joined with the seller's store info.
-  /// `listings.user_id` and `seller_profiles.user_id` both reference
-  /// `auth.users` rather than one another, so PostgREST can't embed them
-  /// in a single query — this fetches listings+cards, then batches a
-  /// second `seller_profiles` lookup and merges in Dart.
-  Future<List<ListingModel>> fetchListingsForCard(int cardId) async {
-    final rows = await _client
-        .from('listings')
-        .select(
-          'id, slug, side, price, condition, quantity, qty_locked, status, '
-          'accepts_offers, view_count, created_at, user_id, photo_urls, '
-          'card:cards($_cardColumns)',
-        )
-        .eq('card_id', cardId)
-        .eq('status', 'open')
-        .order('created_at', ascending: false);
+  /// Open asks for a card, with each seller's store and reputation.
+  ///
+  /// Ports `GET /api/listings/asks?all=1` (`app/api/listings/asks/route.ts`):
+  /// `get_card_listings` pages through the live asks — not expired, archived,
+  /// deleted or behind a hard vacation — and is granted to `anon`, so the
+  /// list is the same signed out. A direct `listings` read is not: its
+  /// policy needs a session.
+  ///
+  /// The storefront fields come from `get_store_identities`, since
+  /// `seller_profiles` is self-select only. That RPC has no city or verified
+  /// flag (web reads them with its service client), so those stay unset.
+  Future<List<ListingModel>> fetchListingsForCard(
+    int cardId, {
+    String? variantKey,
+  }) async {
+    final cardFuture = fetchCard(cardId);
+    final rows = <Map<String, dynamic>>[];
+    for (var page = 0; page < _cardListingsMaxPages; page++) {
+      final batch = await _client.rpc(
+        'get_card_listings',
+        params: {
+          'p_card_id': cardId,
+          'p_variant_key': variantKey,
+          'p_sort': 'price_asc',
+          'p_offset': page * _cardListingsPageSize,
+          'p_limit': _cardListingsPageSize,
+        },
+      );
+      final pageRows = (batch as List).cast<Map<String, dynamic>>();
+      rows.addAll(pageRows);
+      if (pageRows.length < _cardListingsPageSize) break;
+    }
 
-    if (rows.isEmpty) return const [];
+    final card = await cardFuture;
+    if (rows.isEmpty || card == null) return const [];
 
     final userIds = rows.map((r) => r['user_id'] as String).toSet().toList();
-    final storeRows = await _client
-        .from('seller_profiles')
-        .select(
-          'user_id, store_slug, store_name, store_logo_url, is_verified, city_name',
-        )
-        .inFilter('user_id', userIds);
-    final storesByUser = {for (final s in storeRows) s['user_id'] as String: s};
+    final storesFuture = fetchStoreIdentities(_client, userIds);
 
-    // A seller who never opened a storefront has no `seller_profiles` name or
-    // slug, and is named and linked by their username instead — the same join
-    // `get_recent_marketplace_listings` does for its own rows. Best effort:
-    // if `profiles` is unreadable the rows simply fall back to "Penjual",
-    // rather than the whole listings list failing.
+    // A seller who never opened a storefront is named and linked by their
+    // username instead. Best effort: if `profiles` is unreadable the rows
+    // fall back to "Penjual" rather than the whole list failing.
     var profilesByUser = <String, Map<String, dynamic>>{};
     try {
       final profileRows = await _client
@@ -360,9 +401,8 @@ class ExpansionsRepository {
       // Swallowed — rows fall back to the storefront fields alone.
     }
 
-    // Reputation drives the seller's star on each row. It's a separate table
-    // that a buyer may not be able to read under RLS, so a failure here just
-    // leaves the score at 0 rather than dropping the whole listings list.
+    // Reputation drives the seller's star on each row; a failure here just
+    // leaves the score at 0 rather than dropping the whole list.
     var reputationByUser = <String, Map<String, dynamic>>{};
     try {
       final reputationRows = await _client
@@ -376,27 +416,17 @@ class ExpansionsRepository {
       // Swallowed — rows fall back to a 0 reputation score.
     }
 
-    return rows.map((row) {
-      final card = CardModel.fromRow(row['card'] as Map<String, dynamic>);
-      final userId = row['user_id'] as String;
-      final store = storesByUser[userId];
-      final profile = profilesByUser[userId];
-      final reputation = reputationByUser[userId];
-      return ListingModel.fromRow(
-        row,
-        card: card,
-        storeSlug: store?['store_slug'] as String?,
-        storeName: store?['store_name'] as String?,
-        sellerUsername: profile?['username'] as String?,
-        isVerified: store?['is_verified'] as bool? ?? false,
-        cityName: store?['city_name'] as String? ?? '',
-        storeLogoUrl: store?['store_logo_url'] as String?,
-        sellerAvatarUrl: profile?['avatar_url'] as String?,
-        sellerFeedbackScore:
-            ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
-            ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),
-      );
-    }).toList();
+    final storesByUser = await storesFuture;
+    return [
+      for (final row in rows)
+        cardListingFromRow(
+          row,
+          card: card,
+          store: storesByUser[row['user_id']],
+          profile: profilesByUser[row['user_id']],
+          reputation: reputationByUser[row['user_id']],
+        ),
+    ];
   }
 
   /// Ports `useMarketHeadline` / `MarketActivity`'s chart fetch — the daily
