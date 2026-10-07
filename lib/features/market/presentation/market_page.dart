@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_search_field.dart';
+import '../../../shared/widgets/app_top_bar.dart';
 import '../../../app/tab_reselect.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
@@ -12,17 +13,15 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/catalog_language_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../features/cart/usecase/cart_notifier.dart';
-import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/condition_grade_picker.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/store_card.dart';
+import '../../../shared/widgets/language_filter_chip.dart';
 import '../usecase/market_notifier.dart';
 
 /// Ports `app/market/page.tsx` — marketplace bucket tabs
@@ -127,8 +126,8 @@ class _MarketPageState extends ConsumerState<MarketPage>
     final colors = context.appColors;
 
     return Scaffold(
-      // No AppBar: the title row has to collapse and hand its cart button
-      // down to the search row, which an AppBar can't do. `top: true` puts
+      // No AppBar: the shared top bar's logo row collapses and hands its
+      // cart button down to the search row, which an AppBar can't do. `top: true` puts
       // the header below the status bar now that the AppBar isn't supplying
       // that inset; `bottom: false` still lets the grid run under the
       // floating nav pill.
@@ -157,73 +156,17 @@ class _MarketPageState extends ConsumerState<MarketPage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // The web morph keeps this 8px gap above the header in
-                  // both states; only the gap below the title row animates.
-                  const SizedBox(height: 8),
-                  // Title row — collapses to nothing on scroll. `heightFactor`
-                  // rather than an animated height so the row is clipped as
-                  // it shrinks instead of overflowing its own box.
-                  ClipRect(
-                    child: AnimatedAlign(
-                      alignment: Alignment.topCenter,
-                      heightFactor: _scrolled ? 0 : 1,
-                      duration: _morphDuration,
-                      curve: _morphCurve,
-                      child: AnimatedSlide(
-                        // The timeline's `y: -4` on a 48px row.
-                        offset: _scrolled
-                            ? const Offset(0, -4 / 48)
-                            : Offset.zero,
-                        duration: _morphDuration,
-                        curve: _morphCurve,
-                        child: AnimatedOpacity(
-                          opacity: _scrolled ? 0 : 1,
-                          duration: _morphDuration,
-                          curve: _morphCurve,
-                          child: SizedBox(
-                            height: 48,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 4, 0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Market',
-                                      style: AppTypography.h2(colors.onSurface),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Search row. Its top gap closes as the title row leaves,
-                  // matching the web's `marginTop: 8 -> 0`.
-                  AnimatedPadding(
-                    duration: _morphDuration,
-                    curve: _morphCurve,
-                    padding: EdgeInsets.fromLTRB(16, _scrolled ? 0 : 8, 16, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: AppSearchField(
-                            hintText: 'Cari kartu atau toko...',
-                            onChanged: (v) =>
-                                ref.read(marketQueryProvider.notifier).state =
-                                    v,
-                          ),
-                        ),
-                        // Always beside the field, not sliding in on scroll:
-                        // that width-morph is what let the search box run the
-                        // full width of the screen in the first place.
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8),
-                          child: _CartButton(),
-                        ),
-                      ],
+                  // Beranda's bar: logo and cart above the search field,
+                  // folding to the field alone on scroll, with the scanner in
+                  // the field. Market keeps its own field in it, since typing
+                  // here narrows the feed below rather than opening quick
+                  // search's suggestions over it.
+                  AppTopBar(
+                    searchField: AppSearchField(
+                      hintText: 'Cari kartu atau toko...',
+                      onChanged: (v) =>
+                          ref.read(marketQueryProvider.notifier).state = v,
+                      onScan: () => context.push(Routes.scan),
                     ),
                   ),
                   // The bucket tabs fold away once the grid is moving, the
@@ -273,49 +216,6 @@ class _MarketPageState extends ConsumerState<MarketPage>
           ],
         ),
       ),
-    );
-  }
-}
-
-/// The web mobile header renders `<CartIcon />` twice — once in the title
-/// row, once beside the search — and morphs between the two copies. This is
-/// that icon, badge included.
-class _CartButton extends ConsumerWidget {
-  const _CartButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
-    final cartCount = ref.watch(cartProvider).length;
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(LucideIcons.shoppingCart),
-          onPressed: () => context.push(Routes.cart),
-        ),
-        if (cartCount > 0)
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: colors.primary,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '$cartCount',
-                style: AppTypography.badge(
-                  colors.onPrimary,
-                ).copyWith(fontSize: 9),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -854,7 +754,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                     if (language != catalogLanguages.first)
                       const SizedBox(width: 6),
                     Expanded(
-                      child: _LanguageChip(
+                      child: LanguageFilterChip(
                         language: language,
                         active: _draft.languages.contains(language),
                         onTap: () => setState(
@@ -1197,53 +1097,6 @@ class _WishlistToggle extends StatelessWidget {
 
 /// One of the three catalog languages in the Bahasa row — the flag the rest
 /// of the app marks prints with, over web's outlined toggle.
-class _LanguageChip extends StatelessWidget {
-  const _LanguageChip({
-    required this.language,
-    required this.active,
-    required this.onTap,
-  });
-
-  final CardLanguage language;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Container(
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active
-              ? colors.primary.withValues(alpha: 0.1)
-              : Colors.transparent,
-          border: Border.all(
-            color: active ? colors.primary : context.borderColor,
-          ),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CardLanguageBadge(language: language, size: 14),
-            const SizedBox(width: 6),
-            Text(
-              language.shortLabel,
-              style: active
-                  ? AppTypography.captionSemibold(colors.onSurface)
-                  : AppTypography.caption(context.mutedForeground),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PriceField extends StatelessWidget {
   const _PriceField({required this.controller, required this.hint});
 

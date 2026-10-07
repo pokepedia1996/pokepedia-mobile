@@ -79,6 +79,29 @@ class ChatThreadsNotifier extends AsyncNotifier<List<ChatThread>> {
     });
   }
 
+  /// Re-reads the first page in place, keeping what is on screen meanwhile.
+  ///
+  /// For the inbox to call whenever it comes into view. The list is
+  /// keep-alive and updated over realtime, but a channel only hears what
+  /// happens while it is connected: anything sent while the app sat in the
+  /// background, or across a dropped socket, never arrived, and the inbox
+  /// showed the stale list until it was pulled down by hand.
+  ///
+  /// Not `invalidate`: that disposes the notifier, and its realtime channel
+  /// with it, only to subscribe all over again.
+  Future<void> refresh() async {
+    if (ref.read(authProvider).valueOrNull == null) return;
+    _timer?.cancel();
+    try {
+      final threads = await ref.read(chatRepositoryProvider).fetchThreads();
+      _hasMore = threads.length >= ChatRepository.roomsPerPage;
+      state = AsyncData(threads);
+    } catch (_) {
+      // Keeps the list as it was — a failed refresh on arrival is no reason
+      // to replace a usable inbox with an error.
+    }
+  }
+
   /// Zeroes one room's badge in place, for when the user has just read it.
   ///
   /// A local edit rather than a refetch: invalidating this provider would

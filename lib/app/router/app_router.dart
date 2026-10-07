@@ -36,6 +36,7 @@ import '../../features/portfolio/presentation/list_detail_page.dart';
 import '../../features/portfolio/presentation/lists_page.dart';
 import '../../features/portfolio/presentation/portfolio_page.dart';
 import '../../features/proposals/presentation/card_proposals_page.dart';
+import '../../features/proposals/presentation/my_proposals_page.dart';
 import '../../features/proposals/presentation/offers_page.dart';
 import '../../features/proposals/presentation/proposals_page.dart';
 import '../../features/proposals/repository/models/proposal_card_group.dart';
@@ -298,6 +299,10 @@ final appRouter = GoRouter(
       ],
     ),
     GoRoute(path: Routes.offers, builder: (_, __) => const OffersPage()),
+    GoRoute(
+      path: Routes.myProposals,
+      builder: (_, __) => const MyProposalsPage(),
+    ),
     GoRoute(
       path: '/proposals/card/:cardId',
       builder: (_, state) => CardProposalsPage(

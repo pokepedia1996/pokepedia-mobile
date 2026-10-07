@@ -8,11 +8,13 @@ import 'package:pokepedia_mobile/features/expansions/usecase/expansions_notifier
 import 'package:pokepedia_mobile/features/search/presentation/advanced_search_page.dart';
 import 'package:pokepedia_mobile/features/search/repository/models/advanced_search_query.dart';
 import 'package:pokepedia_mobile/features/search/repository/search_repository.dart';
+import 'package:pokepedia_mobile/features/search/usecase/quick_search_notifier.dart';
 import 'package:pokepedia_mobile/features/search/usecase/search_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/models/pack_model.dart';
 import 'package:pokepedia_mobile/shared/widgets/app_bottom_nav.dart';
 import 'package:pokepedia_mobile/shared/widgets/card_grid_item.dart';
+import 'package:pokepedia_mobile/shared/widgets/quick_search_field.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// The Pencarian tab absorbed the Ekspansi tab. It has to be both things
@@ -41,6 +43,7 @@ class _FakeRepo extends SearchRepository {
     required AdvancedSearchQuery query,
     int offset = 0,
     int limit = 40,
+    String? collectionId,
   }) async {
     searches++;
     return SearchPage(
@@ -74,6 +77,22 @@ class _FakeRepo extends SearchRepository {
   );
 }
 
+/// The top bar's quick search, answering with nothing — what matters here is
+/// that it is the one being asked, not the advanced search.
+class _FakeQuick implements QuickSearchRepository {
+  final queries = <String>[];
+
+  @override
+  Future<QuickSearchResults> search(String query) async {
+    queries.add(query);
+    return QuickSearchResults.empty;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
+
 PackModel _pack(int i) => PackModel(
   slug: 'e$i',
   name: 'Ekspansi $i',
@@ -89,6 +108,7 @@ Future<_FakeRepo> _pump(WidgetTester tester) async {
     ProviderScope(
       overrides: [
         searchRepositoryProvider.overrideWithValue(repo),
+        quickSearchRepositoryProvider.overrideWithValue(_FakeQuick()),
         seriesGroupsProvider.overrideWith(
           (ref) async => [
             SeriesGroup(series: 'Evolusi Mega', packs: [_pack(1), _pack(2)]),
@@ -133,58 +153,51 @@ void main() {
       expect(find.byType(CardGridItem), findsNothing);
     });
 
-    testWidgets('typing hides the expansions and shows the results', (
+    testWidgets('the top bar is Beranda\'s quick search, not the form', (
       tester,
     ) async {
       final repo = await _pump(tester);
 
-      await tester.enterText(find.byType(TextField).first, 'charizard');
-      await tester.pump();
-      // The catalog leaves on a 220ms transition, so it is still on screen
-      // for a moment — fading out, not answering. What matters is that it is
-      // gone before the request goes out, which the 300ms debounce means it
-      // is: this wait is the animation, not the response.
-      await tester.pump(const Duration(milliseconds: 250));
-      expect(find.byType(ExpansionsBrowser), findsNothing);
+      // The same field Beranda carries, suggestions and all.
+      expect(find.byType(QuickSearchField), findsOneWidget);
 
-      // Debounced: nothing has gone out yet.
-      expect(repo.searches, 0);
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(QuickSearchField),
+          matching: find.byType(TextField),
+        ),
+        'charizard',
+      );
+      await tester.pump(const Duration(milliseconds: 600));
       await tester.pump();
+
+      // It no longer drives the advanced search: no query went out, and the
+      // catalog under it stays where it was.
+      expect(repo.searches, 0);
+      expect(find.byType(ExpansionsBrowser), findsOneWidget);
+    });
+
+    testWidgets('the panel\'s own name field runs the advanced search', (
+      tester,
+    ) async {
+      final repo = await _pump(tester);
+
+      await tester.tap(find.bySemanticsLabel('Buka filter pencarian'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cari nama kartu...'),
+        'charizard',
+      );
+      // A frame for the form to rebuild with the typed name, as one always
+      // passes between a user's last keystroke and the submit.
+      await tester.pump();
+      // Submitted from the field — the same `_submit` the Cari button calls,
+      // without depending on the button being on screen in a short surface.
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
       expect(repo.searches, 1);
       expect(find.byType(CardGridItem), findsWidgets);
-    });
-
-    testWidgets('one search per pause, not one per keystroke', (tester) async {
-      final repo = await _pump(tester);
-      final field = find.byType(TextField).first;
-
-      for (final q in ['c', 'ch', 'cha', 'char']) {
-        await tester.enterText(field, q);
-        await tester.pump(const Duration(milliseconds: 80));
-      }
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump();
-
-      expect(repo.searches, 1);
-    });
-
-    testWidgets('clearing the box brings the expansions straight back', (
-      tester,
-    ) async {
-      await _pump(tester);
-      final field = find.byType(TextField).first;
-
-      await tester.enterText(field, 'charizard');
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
-      expect(find.byType(ExpansionsBrowser), findsNothing);
-
-      await tester.enterText(field, '');
-      await tester.pump();
-      // No round trip on the way back: an empty box is not a search that
-      // found nothing.
-      expect(find.byType(ExpansionsBrowser), findsOneWidget);
     });
 
     testWidgets('the filter panel opens and closes from the one button', (

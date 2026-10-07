@@ -1,5 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pokepedia_mobile/features/portfolio/repository/portfolio_repository.dart';
+import 'package:pokepedia_mobile/shared/utils/paged_rows.dart';
 
 /// A collection read with no `range` stops at Supabase's "Max rows" — 1000 by
 /// default — and does so silently. An 8,495-card collection reported "1000
@@ -38,5 +40,20 @@ void main() {
       expect(windows.last.to, 2499);
       expect(windows.length, 3);
     });
+  });
+
+  // The windows above are arithmetic; this runs the loop itself against a
+  // server that caps every response at 1000 rows, the way Supabase does.
+  test('pagedRows reads past a 1000-row server cap', () async {
+    final table = [
+      for (var i = 0; i < 2537; i++) <String, dynamic>{'id': i},
+    ];
+    final rows = await pagedRows((from, to) async {
+      if (from >= table.length) return <Map<String, dynamic>>[];
+      final end = [to + 1, from + 1000, table.length].reduce(min);
+      return table.sublist(from, end);
+    });
+    expect(rows.length, 2537);
+    expect(rows.last['id'], 2536);
   });
 }

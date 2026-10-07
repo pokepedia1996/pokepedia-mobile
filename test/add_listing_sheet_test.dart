@@ -198,4 +198,41 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('3 kartu cocok'), findsOneWidget);
   });
+
+  testWidgets('the tap hint sits beside the first pick only', (tester) async {
+    await _open(tester);
+    await _search(tester, 'pikachu');
+    const hint = 'Ketuk kartu untuk menambah, atur jumlahnya di bawah';
+
+    await tester.tap(find.text('Pikachu 1'));
+    await tester.pump();
+    expect(find.text(hint), findsOneWidget);
+
+    // From the second card the thumbnails ran in under it.
+    await tester.tap(find.text('Pikachu 2'));
+    await tester.pump();
+    expect(find.text(hint), findsNothing);
+  });
+
+  testWidgets('the picked strip steps aside while the keyboard is up', (
+    tester,
+  ) async {
+    await _open(tester);
+    await _search(tester, 'pikachu');
+    await tester.tap(find.text('Pikachu 1'));
+    await tester.pump();
+    expect(find.text('Terpilih'), findsOneWidget);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300 * 3);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+
+    expect(find.text('Terpilih'), findsNothing);
+    // What was picked is still counted, and still one tap from the draft.
+    expect(find.text('Tambahkan 1 kartu ke Draft'), findsOneWidget);
+
+    tester.view.resetViewInsets();
+    await tester.pump();
+    expect(find.text('Terpilih'), findsOneWidget);
+  });
 }

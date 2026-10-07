@@ -245,7 +245,12 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
               value: _language,
               onChanged: (next) => setState(() => _language = next),
             ),
-            if (_selected.isNotEmpty)
+            // Out of the way while typing: with the keyboard up the strip
+            // took most of what was left above it, so the results showed one
+            // row and picking another card meant dismissing the keyboard
+            // first. The bar below still counts what has been picked.
+            if (_selected.isNotEmpty &&
+                MediaQuery.viewInsetsOf(context).bottom == 0)
               _SelectedStrip(
                 selected: _selected,
                 onRemove: _drop,
@@ -560,15 +565,19 @@ class _SelectedStrip extends StatelessWidget {
                   ),
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Text(
-                    'Ketuk kartu untuk menambah, atur jumlahnya di bawah',
-                    style: AppTypography.caption(context.mutedForeground),
+              // Only beside the first pick. It shared the row half and half,
+              // so from the second card on the thumbnails ran in under it;
+              // by then the tapping has been learned and the room is theirs.
+              if (selected.length == 1)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Text(
+                      'Ketuk kartu untuk menambah, atur jumlahnya di bawah',
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

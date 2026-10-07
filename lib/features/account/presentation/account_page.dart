@@ -94,6 +94,11 @@ class AccountPage extends ConsumerWidget {
                             onTap: () => context.push(Routes.proposals),
                           ),
                           _Row(
+                            icon: LucideIcons.send,
+                            label: 'Penawaranku',
+                            onTap: () => context.push(Routes.myProposals),
+                          ),
+                          _Row(
                             icon: LucideIcons.users,
                             label: 'Cari Pengguna',
                             onTap: () => context.push(Routes.users),

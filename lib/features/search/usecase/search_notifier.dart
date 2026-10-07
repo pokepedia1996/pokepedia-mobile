@@ -7,6 +7,8 @@ import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/utils/card_filtering.dart';
+import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../portfolio/usecase/portfolio_counter.dart';
 import '../repository/models/advanced_search_query.dart';
 import '../repository/search_repository.dart';
 
@@ -75,6 +77,16 @@ class SearchNotifier extends Notifier<SearchState> {
   @override
   SearchState build() {
     ref.listen(catalogLanguageProvider, (_, __) => _rerunIfSearched());
+    // A different portfolio changes both the counts and what "Dimiliki"
+    // matches, which the server decides — so the search runs again.
+    //
+    // Deferred a microtask: this fires mid-notification, before the
+    // collection id derived from the switch has been marked stale, and an
+    // immediate re-run read the portfolio that had just been left.
+    ref.listen(
+      selectedPortfolioProvider,
+      (_, __) => Future.microtask(_rerunIfSearched),
+    );
     ref.onDispose(() => _debounce?.cancel());
     return const SearchState();
   }
@@ -108,11 +120,19 @@ class SearchNotifier extends Notifier<SearchState> {
 
     final generation = ++_generation;
     state = state.copyWith(loading: true, hasSearched: true);
-    final page = await ref.read(searchRepositoryProvider).search(query: query);
+    final collectionId = await _collectionId();
+    final page = await ref
+        .read(searchRepositoryProvider)
+        .search(query: query, collectionId: collectionId);
+    final cards = await withOwnedQuantities(
+      ref,
+      page.cards,
+      collectionId: collectionId,
+    );
     if (generation != _generation) return;
 
     state = state.copyWith(
-      results: page.cards,
+      results: cards,
       total: page.total,
       hasNext: page.hasNext,
       loading: false,
@@ -126,6 +146,7 @@ class SearchNotifier extends Notifier<SearchState> {
 
     final generation = _generation;
     state = state.copyWith(loadingMore: true);
+    final collectionId = await _collectionId();
     final page = await ref
         .read(searchRepositoryProvider)
         .search(
@@ -133,14 +154,40 @@ class SearchNotifier extends Notifier<SearchState> {
             language: ref.read(catalogLanguageProvider).raw,
           ),
           offset: state.results.length,
+          collectionId: collectionId,
         );
+    final more = await withOwnedQuantities(
+      ref,
+      page.cards,
+      collectionId: collectionId,
+    );
     if (generation != _generation) return;
 
     state = state.copyWith(
-      results: [...state.results, ...page.cards],
+      results: [...state.results, ...more],
       total: page.total,
       hasNext: page.hasNext,
       loadingMore: false,
+    );
+  }
+
+  /// The selected portfolio's collection id, or null — signed out, or not
+  /// resolvable — which the RPC reads as the main collection.
+  Future<String?> _collectionId() async {
+    try {
+      return await ref.read(selectedCollectionIdProvider.future);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Patches one result's owned count after its counter changed it.
+  void setOwned(int cardId, int owned) {
+    state = state.copyWith(
+      results: [
+        for (final card in state.results)
+          card.id == cardId ? card.copyWith(owned: owned) : card,
+      ],
     );
   }
 

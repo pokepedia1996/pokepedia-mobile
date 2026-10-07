@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,7 +13,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_condition.dart';
-import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../../shared/widgets/condition_grade_picker.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
@@ -60,6 +61,12 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
 
   _StoreTab _tab = _StoreTab.shop;
   String _query = '';
+
+  /// [_query] once typing has paused — what is actually sent. Each search is
+  /// a server round trip now, so it waits for the word rather than firing on
+  /// every letter of it.
+  String _search = '';
+  Timer? _searchDebounce;
   CardCondition? _condition;
   _StoreSort _sort = _StoreSort.newest;
   bool _following = false;
@@ -68,8 +75,41 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _query = value.trim());
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _search != _query) setState(() => _search = _query);
+    });
+  }
+
+  StoreFeedKey _feedKey(String sellerUserId) => (
+    sellerUserId: sellerUserId,
+    side: _tab == _StoreTab.buylist ? 'bid' : 'ask',
+    search: _search,
+    condition: _condition?.raw,
+    sort: switch (_sort) {
+      _StoreSort.newest => 'created_desc',
+      _StoreSort.priceAsc => 'price_asc',
+      _StoreSort.priceDesc => 'price_desc',
+    },
+  );
+
+  /// Asks for the next page while there is still a screenful to go, so the
+  /// grid keeps running rather than stopping to wait at its foot.
+  bool _onScroll(ScrollNotification notification, StoreFeedKey? key) {
+    if (key == null || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    if (notification.metrics.extentAfter < 600) {
+      ref.read(storeFeedProvider(key).notifier).loadMore();
+    }
+    return false;
   }
 
   /// Follows or unfollows, flipping the button first and putting it back if
@@ -137,27 +177,6 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
         extra: ChatTarget(otherUserId: sellerId, title: store.storeName),
       );
     }
-  }
-
-  List<ListingModel> _visible(List<ListingModel> listings) {
-    final side = _tab == _StoreTab.buylist ? ListingSide.bid : ListingSide.ask;
-    final needle = _query.toLowerCase();
-
-    final visible = listings.where((listing) {
-      if (listing.side != side) return false;
-      if (_condition != null && listing.condition != _condition) return false;
-      if (needle.isEmpty) return true;
-      return listing.card.name.toLowerCase().contains(needle) ||
-          listing.card.collectorNumber.toLowerCase().contains(needle) ||
-          listing.card.expansionCode.toLowerCase().contains(needle);
-    }).toList();
-
-    visible.sort(switch (_sort) {
-      _StoreSort.newest => (a, b) => b.createdAt.compareTo(a.createdAt),
-      _StoreSort.priceAsc => (a, b) => a.price.compareTo(b.price),
-      _StoreSort.priceDesc => (a, b) => b.price.compareTo(a.price),
-    });
-    return visible;
   }
 
   /// How many filters are on, for the badge on the toggle.
@@ -253,10 +272,80 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
     );
   }
 
+  List<Widget> _listingSlivers(StoreFeedKey? key) {
+    final empty = EmptyState(
+      icon: LucideIcons.store,
+      title: _search.isNotEmpty || _condition != null
+          ? 'Tidak ada kartu yang cocok'
+          : _tab == _StoreTab.buylist
+          ? 'Toko ini belum mencari kartu'
+          : 'Belum ada listing',
+    );
+    if (key == null) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(padding: const EdgeInsets.only(top: 32), child: empty),
+        ),
+      ];
+    }
+
+    final feed = ref.watch(storeFeedProvider(key));
+    if (feed.loading) {
+      return const [SliverToBoxAdapter(child: PikachuLoader())];
+    }
+    if (feed.failed) {
+      return [
+        SliverToBoxAdapter(
+          child: EmptyState(
+            icon: LucideIcons.circleAlert,
+            title: 'Gagal memuat listing',
+            action: OutlinedButton(
+              onPressed: () =>
+                  ref.read(storeFeedProvider(key).notifier).retry(),
+              child: const Text('Coba lagi'),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (feed.listings.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(padding: const EdgeInsets.only(top: 32), child: empty),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, feed.hasNext ? 8 : 24),
+        sliver: SliverGrid(
+          gridDelegate: listingGridDelegate(context, showSeller: false),
+          delegate: SliverChildBuilderDelegate(
+            (context, i) =>
+                ListingCard(listing: feed.listings[i], showSeller: false),
+            childCount: feed.listings.length,
+          ),
+        ),
+      ),
+      if (feed.hasNext)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: 24),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final storeAsync = ref.watch(storeDetailProvider(widget.handle));
-    final listingsAsync = ref.watch(storeListingsProvider(widget.handle));
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -267,7 +356,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
         title: _StoreSearchField(
           controller: _searchController,
           enabled: _tab.isListing,
-          onChanged: (value) => setState(() => _query = value.trim()),
+          onChanged: _onSearchChanged,
         ),
         actions: [
           _FilterToggle(
@@ -295,89 +384,47 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
             _followingInitialised = true;
           }
 
+          final sellerId = store.userId;
+          final feedKey = sellerId == null ? null : _feedKey(sellerId);
+
           return AppBarOverlayBody(
             reserveToolbar: false,
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(child: _Header(store: store)),
-                SliverToBoxAdapter(
-                  child: _Actions(
-                    // Following yourself is refused by `follow_shop`, and
-                    // `ensure_direct_room` has nobody to open a room with —
-                    // so on your own storefront neither button is offered.
-                    isOwnStore:
-                        store.userId != null &&
-                        store.userId == ref.watch(authProvider).valueOrNull?.id,
-                    following: _following,
-                    busy: _followBusy,
-                    onToggleFollow: () => _toggleFollow(store),
-                    onContact: () => _contact(store),
-                    onShare: () => showStoreShareSheet(context, store: store),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: _TabBar(
-                    active: _tab,
-                    onSelect: (tab) => setState(() => _tab = tab),
-                  ),
-                ),
-                if (_tab == _StoreTab.about)
-                  SliverToBoxAdapter(child: _About(store: store))
-                else if (_tab == _StoreTab.feedback)
-                  SliverToBoxAdapter(child: _Feedback(store: store))
-                else ...[
-                  listingsAsync.when(
-                    data: (listings) {
-                      final visible = _visible(listings);
-                      if (visible.isEmpty) {
-                        return SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 32),
-                            child: EmptyState(
-                              icon: LucideIcons.store,
-                              title: _query.isNotEmpty
-                                  ? 'Tidak ada kartu yang cocok'
-                                  : _tab == _StoreTab.buylist
-                                  ? 'Toko ini belum mencari kartu'
-                                  : 'Belum ada listing',
-                            ),
-                          ),
-                        );
-                      }
-                      return SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                        sliver: SliverGrid(
-                          gridDelegate: listingGridDelegate(
-                            context,
-                            showSeller: false,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, i) => ListingCard(
-                              listing: visible[i],
-                              showSeller: false,
-                            ),
-                            childCount: visible.length,
-                          ),
-                        ),
-                      );
-                    },
-                    loading: () =>
-                        const SliverToBoxAdapter(child: PikachuLoader()),
-                    error: (_, __) => SliverToBoxAdapter(
-                      child: EmptyState(
-                        icon: LucideIcons.circleAlert,
-                        title: 'Gagal memuat listing',
-                        action: OutlinedButton(
-                          onPressed: () => ref.invalidate(
-                            storeListingsProvider(widget.handle),
-                          ),
-                          child: const Text('Coba lagi'),
-                        ),
-                      ),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (n) => _onScroll(n, feedKey),
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _Header(store: store)),
+                  SliverToBoxAdapter(
+                    child: _Actions(
+                      // Following yourself is refused by `follow_shop`, and
+                      // `ensure_direct_room` has nobody to open a room with —
+                      // so on your own storefront neither button is offered.
+                      isOwnStore:
+                          store.userId != null &&
+                          store.userId ==
+                              ref.watch(authProvider).valueOrNull?.id,
+                      following: _following,
+                      busy: _followBusy,
+                      onToggleFollow: () => _toggleFollow(store),
+                      onContact: () => _contact(store),
+                      onShare: () => showStoreShareSheet(context, store: store),
                     ),
                   ),
+                  SliverToBoxAdapter(
+                    child: _TabBar(
+                      active: _tab,
+                      onSelect: (tab) => setState(() => _tab = tab),
+                    ),
+                  ),
+                  if (_tab == _StoreTab.about)
+                    SliverToBoxAdapter(child: _About(store: store))
+                  else if (_tab == _StoreTab.feedback)
+                    SliverToBoxAdapter(child: _Feedback(store: store))
+                  else ...[
+                    ..._listingSlivers(feedKey),
+                  ],
                 ],
-              ],
+              ),
             ),
           );
         },

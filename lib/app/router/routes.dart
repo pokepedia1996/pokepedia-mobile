@@ -77,6 +77,10 @@ class Routes {
   /// the seller's offers list and inside chat, neither of which the app has.
   static const offers = '/proposals/offers';
 
+  /// "Penawaranku" — every bid this user answered with "Penuhi Bid", across
+  /// all cards.
+  static const myProposals = '/proposals/mine';
+
   /// Everything happening on one card — web's `/proposals/card/[cardId]`.
   static String cardProposals(int cardId) => '/proposals/card/$cardId';
 

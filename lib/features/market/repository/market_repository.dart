@@ -258,6 +258,45 @@ class MarketRepository {
         .toList();
   }
 
+  /// One page of a storefront's listings, searched, filtered and sorted by
+  /// the server — web's storefront feed.
+  ///
+  /// [fetchStoreListingsByUserId] takes the 100 newest and leaves the rest to
+  /// the client, which was fine for browsing a small shop and wrong for
+  /// searching a big one: a store with 2,000 listings answered "spinarak"
+  /// from its latest hundred, and said it had none.
+  Future<List<ListingModel>> fetchStoreListingsPage({
+    required String sellerUserId,
+    required String side,
+    String? search,
+    String? condition,
+    String sort = 'created_desc',
+    int offset = 0,
+    int limit = storeListingsPageSize,
+  }) async {
+    final trimmed = search?.trim() ?? '';
+    final rows =
+        await _client.rpc(
+              'get_recent_marketplace_listings',
+              params: {
+                'p_seller_user_id': sellerUserId,
+                'p_side': side,
+                'p_search': trimmed.isEmpty ? null : trimmed,
+                'p_conditions': condition == null ? null : [condition],
+                'p_sort': sort,
+                'p_window_hours': 0,
+                'p_limit': limit,
+                'p_offset': offset,
+              },
+            )
+            as List;
+    return rows
+        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  static const storeListingsPageSize = 40;
+
   /// One seller's open asks (WTS) for a single card, plus how many *other*
   /// sellers also list it — mirrors `get_card_listings` as used by
   /// `app/market/[slug]/card/[cardId]/page.tsx` (`otherSellersCount` there).

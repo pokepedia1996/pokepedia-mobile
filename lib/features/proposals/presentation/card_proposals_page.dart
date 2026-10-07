@@ -9,11 +9,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
-import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
-import '../../../shared/widgets/photo_strip.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/presentation/checkout_page.dart';
@@ -25,6 +23,7 @@ import '../repository/models/my_bid.dart';
 import '../repository/models/sent_proposal.dart';
 import '../usecase/proposals_notifier.dart';
 import 'widgets/bid_edit_sheet.dart';
+import 'widgets/sent_proposal_card.dart';
 
 /// Ports `/proposals/card/[cardId]` — everything happening on one card:
 /// your bids for it, the proposals sellers made on those bids, and the
@@ -396,7 +395,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
           icon: LucideIcons.inbox,
         ),
       for (final proposal in visible) ...[
-        _SentRow(
+        SentProposalCard(
           proposal: proposal,
           busy: _busySlug == proposal.slug,
           onDismiss: () => _run(
@@ -674,238 +673,6 @@ class _ReceivedRow extends StatelessWidget {
                 ),
               ],
             ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SentRow extends StatelessWidget {
-  const _SentRow({
-    required this.proposal,
-    required this.busy,
-    required this.onDismiss,
-  });
-
-  final SentProposalModel proposal;
-  final bool busy;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      // What this row is: the offer *you* sent, and who to.
-                      // It used to lead with "Bid dari @x", which names the
-                      // bid being answered and reads as something received.
-                      'Proposal ke @${proposal.buyerUsername ?? "pembeli"}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmSemibold(colors.onSurface),
-                    ),
-                    // Web's row: the price asked, the bid it answers struck
-                    // through when they differ, then the grade and the rest.
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 5,
-                      runSpacing: 2,
-                      children: [
-                        if (proposal.effectivePrice case final price?)
-                          Text(
-                            formatRupiah(price),
-                            style: AppTypography.bodySmSemibold(
-                              colors.onSurface,
-                            ),
-                          ),
-                        if (proposal.bidPrice case final bidPrice?
-                            when bidPrice != proposal.effectivePrice)
-                          Text(
-                            formatRupiah(bidPrice),
-                            style: AppTypography.caption(
-                              context.mutedForeground,
-                            ).copyWith(decoration: TextDecoration.lineThrough),
-                          ),
-                        ConditionBadge(
-                          condition: proposal.condition,
-                          dense: true,
-                        ),
-                        Text(
-                          [
-                            '${proposal.proposedQuantity} pcs',
-                            // Said out loud: a bare "23 jam lalu" in a run
-                            // of dot-separated facts doesn't say which of
-                            // them it is timing.
-                            if (proposal.createdAt case final at?)
-                              'dikirim ${formatRelativeId(at).toLowerCase()}',
-                          ].join(' · '),
-                          style: AppTypography.caption(context.mutedForeground),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              StatusPill(
-                label: proposal.status.label,
-                color: switch (proposal.status) {
-                  BidProposalStatus.pending => context.appSemantic.condMp,
-                  BidProposalStatus.accepted => context.appSemantic.success,
-                  BidProposalStatus.rejected => colors.error,
-                  _ => context.mutedForeground,
-                },
-              ),
-              // `dismiss_bid_proposal` refuses a pending row, so the button
-              // only exists once the proposal has settled.
-              if (proposal.isDismissible)
-                IconButton(
-                  onPressed: busy ? null : onDismiss,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Hapus dari daftar',
-                  icon: busy
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          LucideIcons.trash2,
-                          size: 18,
-                          color: context.mutedForeground,
-                        ),
-                ),
-            ],
-          ),
-
-          // The clock, on a line of its own: it's the one fact here that
-          // changes by itself, and it was the easiest to miss at the end of
-          // a run of dot-separated ones. Only while the proposal can still
-          // be answered — a settled one's clock is history.
-          if (proposal.remaining case final left?) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(
-                  LucideIcons.clock,
-                  size: 13,
-                  color: context.mutedForeground,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    // "Waktu habis" once it has run out, as web's countdown
-                    // says — a clock that reads "Expired dalam kurang dari 1
-                    // menit" for a week is telling the wrong story.
-                    left == Duration.zero
-                        ? 'Waktu habis'
-                        : 'Expired dalam ${formatCountdownId(left)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(
-                      left == Duration.zero
-                          ? colors.error
-                          : context.mutedForeground,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-
-          // Whether the buyer has actually opened it. Web shows this only
-          // while pending: once answered, being seen is implied.
-          if (proposal.status == BidProposalStatus.pending) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(
-                  proposal.seenAt == null
-                      ? LucideIcons.eyeOff
-                      : LucideIcons.eye,
-                  size: 13,
-                  color: proposal.seenAt == null
-                      ? context.mutedForeground
-                      : context.appSemantic.success,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    proposal.seenAt == null
-                        ? 'Belum dilihat pembeli'
-                        : 'Dilihat pembeli · '
-                              '${formatRelativeId(proposal.seenAt!)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(
-                      proposal.seenAt == null
-                          ? context.mutedForeground
-                          : context.appSemantic.success,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-
-          // The note the seller sent with the offer — web's blockquote.
-          if (proposal.message?.trim().isNotEmpty ?? false) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: colors.secondary.withValues(alpha: 0.4),
-                border: Border(
-                  left: BorderSide(color: context.borderColor, width: 2),
-                ),
-              ),
-              child: Text(
-                proposal.message!.trim(),
-                style: AppTypography.bodySm(
-                  colors.onSurface,
-                ).copyWith(fontStyle: FontStyle.italic),
-              ),
-            ),
-          ],
-
-          // Graded proposals must carry photos, so these are the seller's evidence.
-          if (proposal.photos.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: colors.secondary,
-                  borderRadius: BorderRadius.circular(AppRadius.full),
-                ),
-                child: Text(
-                  // `isStockPhoto` — catalog art rather than the seller's own
-                  // copy, which a buyer should be able to tell apart.
-                  proposal.usesStockPhoto ? 'Foto Stok' : 'Foto Listing',
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            PhotoStrip(srcs: proposal.photos),
           ],
         ],
       ),
