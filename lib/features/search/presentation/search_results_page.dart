@@ -192,14 +192,11 @@ class SearchResultsPage extends ConsumerWidget {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   sliver: state.viewMode == CardViewMode.grid
-                      ? SliverGrid(
-                          gridDelegate: cardGridDelegate(
-                            context,
-                            extraChrome: signedIn
-                                ? cardGridItemFooterChrome
-                                : 0,
-                          ),
-                          delegate: SliverChildBuilderDelegate((context, i) {
+                      ? SliverCardGrid(
+                          extraChrome: signedIn ? cardGridItemFooterChrome : 0,
+                          hasVariant: (i) => visible[i].variantLabel != null,
+                          itemCount: visible.length,
+                          itemBuilder: (context, i) {
                             final card = visible[i];
                             return CardGridItem(
                               card: card,
@@ -226,7 +223,7 @@ class SearchResultsPage extends ConsumerWidget {
                                     )
                                   : null,
                             );
-                          }, childCount: visible.length),
+                          },
                         )
                       : SliverList(
                           delegate: SliverChildBuilderDelegate((context, i) {

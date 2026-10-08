@@ -35,6 +35,9 @@ const _card = CardModel(
   price7dAgo: 10000,
   priceSource: CardPriceSource.confirmed,
   owned: 3,
+  // A finish, so the italic variant line is drawn: the tallest a tile gets,
+  // which is the one the chrome has to cover.
+  variant: 'reverse',
 );
 
 Future<bool> _overflows(
@@ -43,6 +46,7 @@ Future<bool> _overflows(
   double height, {
   Widget? footer,
   bool? selected,
+  CardModel card = _card,
 }) async {
   // A blank frame first: pumping the identical tree twice repaints nothing,
   // so no fresh overflow error is reported and every size after the first
@@ -61,7 +65,7 @@ Future<bool> _overflows(
             width: width,
             height: height,
             child: CardGridItem(
-              card: _card,
+              card: card,
               onTap: () {},
               footer: footer,
               selected: selected,
@@ -75,9 +79,32 @@ Future<bool> _overflows(
   return tester.takeException() != null;
 }
 
-/// What `cardGridDelegate` would give a cell this wide.
-double _extentFor(double cellWidth, {double extraChrome = 0}) =>
-    (cellWidth - 20) * 342 / 245 + cardGridItemChrome + extraChrome;
+/// What a grid row gives a cell this wide.
+double _extentFor(
+  double cellWidth, {
+  double extraChrome = 0,
+  bool hasVariant = true,
+}) => cardGridRowExtent(
+  cellWidth,
+  hasVariant: hasVariant,
+  extraChrome: extraChrome,
+);
+
+/// The same card as a plain print: no variant line, and a row of these is
+/// given no room for one.
+final _plain = CardModel(
+  id: _card.id,
+  category: _card.category,
+  nameId: _card.nameId,
+  expansionCode: _card.expansionCode,
+  packSlug: _card.packSlug,
+  collectorNumber: _card.collectorNumber,
+  rarity: _card.rarity,
+  marketPrice: _card.marketPrice,
+  price7dAgo: _card.price7dAgo,
+  priceSource: _card.priceSource,
+  owned: _card.owned,
+);
 
 void main() {
   testWidgets('the harness can see an overflow at all', (tester) async {
@@ -103,6 +130,32 @@ void main() {
         reason: 'cell ${cell}x$extent overflows',
       );
     }
+  });
+
+  testWidgets('a row of plain prints fits without the variant line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1170, 3000);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    for (final cell in [260.0, 320.0]) {
+      final extent = _extentFor(cell, hasVariant: false);
+      expect(
+        await _overflows(tester, cell, extent, card: _plain),
+        isFalse,
+        reason: 'plain cell ${cell}x$extent overflows',
+      );
+    }
+  });
+
+  testWidgets('a row without variants is shorter by exactly that line', (
+    tester,
+  ) async {
+    expect(
+      _extentFor(260) - _extentFor(260, hasVariant: false),
+      cardGridVariantChrome,
+    );
   });
 
   testWidgets('an edit-mode tile fits its footer chrome', (tester) async {

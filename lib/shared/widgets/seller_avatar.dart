@@ -37,6 +37,11 @@ class SellerAvatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
+                // At the size it is drawn, not as uploaded: a logo straight
+                // off a camera, decoded whole for a 32pt circle, costs tens
+                // of megabytes — per row, in lists that show dozens.
+                cacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
                 errorBuilder: (context, error, stackTrace) =>
                     Text(initial, style: textStyle),
               ),

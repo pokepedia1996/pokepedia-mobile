@@ -237,12 +237,12 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
           16,
           AppBottomNav.reservedSpace(context) + 12,
         ),
-        sliver: SliverGrid(
-          gridDelegate: cardGridDelegate(
-            context,
-            extraChrome: signedIn ? cardGridItemFooterChrome : 0,
-          ),
-          delegate: SliverChildBuilderDelegate((context, i) {
+        sliver: SliverCardGrid(
+          extraChrome: signedIn ? cardGridItemFooterChrome : 0,
+          hasVariant: (i) =>
+              i < state.results.length && state.results[i].variantLabel != null,
+          itemCount: state.results.length + (state.hasNext ? 1 : 0),
+          itemBuilder: (context, i) {
             if (i >= state.results.length) {
               return LoadMoreTile(
                 loading: state.loadingMore,
@@ -268,7 +268,7 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
                     )
                   : null,
             );
-          }, childCount: state.results.length + (state.hasNext ? 1 : 0)),
+          },
         ),
       ),
     ];
@@ -371,7 +371,10 @@ class _FilterToggle extends StatelessWidget {
                   open ? LucideIcons.x : LucideIcons.slidersHorizontal,
                   key: ValueKey(open),
                   size: 20,
-                  color: Colors.white,
+                  // Paired with the fill rather than fixed white: open, the
+                  // circle is `onSurface`, which dark mode turns near-white,
+                  // and a white cross on it disappeared.
+                  color: open ? colors.surface : colors.onPrimary,
                 ),
               ),
             ),

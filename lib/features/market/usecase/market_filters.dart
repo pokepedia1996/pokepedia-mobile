@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show setEquals;
+
 import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 
@@ -161,4 +163,55 @@ class MarketFilters {
       maxPrice: maxPrice != null ? maxPrice() : this.maxPrice,
     );
   }
+
+  /// The `get_recent_marketplace_listings` arguments these filters set —
+  /// shared by the market feed and a storefront's, so the two can't drift.
+  Map<String, dynamic> get rpcParams => {
+    if (conditions.isNotEmpty)
+      'p_conditions': conditions.map((c) => c.raw).toList(),
+    if (rarities.isNotEmpty) 'p_rarities': rarities.toList(),
+    if (categories.isNotEmpty) 'p_categories': categories.toList(),
+    if (trainerSubtypes.isNotEmpty)
+      'p_trainer_subtypes': trainerSubtypes.toList(),
+    if (languages.isNotEmpty)
+      'p_card_languages': languages.map((l) => l.raw).toList(),
+    if (cities.isNotEmpty) 'p_cities': cities.toList(),
+    if (excludeRarities != null) 'p_exclude_rarities': excludeRarities,
+    if (verifiedOnly) 'p_verified_only': true,
+    if (wishlistOnly) 'p_wishlist_only': true,
+    if (minPrice != null) 'p_min_price': minPrice,
+    if (maxPrice != null) 'p_max_price': maxPrice,
+  };
+
+  /// Value equality, so filters can key a provider: two drafts with the same
+  /// choices are the same query, whichever sheet built them.
+  @override
+  bool operator ==(Object other) =>
+      other is MarketFilters &&
+      setEquals(other.conditions, conditions) &&
+      setEquals(other.rarities, rarities) &&
+      setEquals(other.categories, categories) &&
+      setEquals(other.trainerSubtypes, trainerSubtypes) &&
+      setEquals(other.languages, languages) &&
+      setEquals(other.cities, cities) &&
+      other.verifiedOnly == verifiedOnly &&
+      other.wishlistOnly == wishlistOnly &&
+      other.hideBulk == hideBulk &&
+      other.minPrice == minPrice &&
+      other.maxPrice == maxPrice;
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAllUnordered(conditions),
+    Object.hashAllUnordered(rarities),
+    Object.hashAllUnordered(categories),
+    Object.hashAllUnordered(trainerSubtypes),
+    Object.hashAllUnordered(languages),
+    Object.hashAllUnordered(cities),
+    verifiedOnly,
+    wishlistOnly,
+    hideBulk,
+    minPrice,
+    maxPrice,
+  );
 }

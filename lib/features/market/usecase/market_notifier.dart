@@ -300,7 +300,7 @@ typedef StoreFeedKey = ({
   String sellerUserId,
   String side,
   String search,
-  String? condition,
+  MarketFilters filters,
   String sort,
 });
 
@@ -392,7 +392,7 @@ class StoreFeedNotifier
         sellerUserId: arg.sellerUserId,
         side: arg.side,
         search: arg.search,
-        condition: arg.condition,
+        filters: arg.filters,
         sort: arg.sort,
         offset: offset,
       );
@@ -404,3 +404,15 @@ final storeFeedProvider =
       StoreFeedState,
       StoreFeedKey
     >(StoreFeedNotifier.new);
+
+/// What a storefront's listings on one side hold, for its filter sheet —
+/// the store's own counts, not the whole market's.
+final storeFacetsProvider = FutureProvider.autoDispose
+    .family<ListingFacets, ({String sellerUserId, String side})>((ref, key) {
+      return ref
+          .read(marketRepositoryProvider)
+          .fetchSellerListingFacets(
+            sellerUserId: key.sellerUserId,
+            side: key.side,
+          );
+    });

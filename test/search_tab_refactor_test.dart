@@ -102,7 +102,7 @@ PackModel _pack(int i) => PackModel(
   cardCount: 100,
 );
 
-Future<_FakeRepo> _pump(WidgetTester tester) async {
+Future<_FakeRepo> _pump(WidgetTester tester, {ThemeData? theme}) async {
   final repo = _FakeRepo();
   await tester.pumpWidget(
     ProviderScope(
@@ -116,7 +116,7 @@ Future<_FakeRepo> _pump(WidgetTester tester) async {
         ),
       ],
       child: MaterialApp(
-        theme: AppTheme.light,
+        theme: theme ?? AppTheme.light,
         home: const AdvancedSearchPage(),
       ),
     ),
@@ -223,5 +223,40 @@ void main() {
       expect(find.text('Filter Pencarian'), findsNothing);
       expect(find.byType(ExpansionsBrowser), findsOneWidget);
     });
+  });
+
+  group('the filter button', () {
+    // Built inside each test: the theme loads Google Fonts, which only works
+    // within a running test.
+    for (final dark in [false, true]) {
+      testWidgets('its close cross shows against its fill in '
+          '${dark ? 'dark' : 'light'} mode', (tester) async {
+        await _pump(tester, theme: dark ? AppTheme.dark : AppTheme.light);
+        await tester.tap(find.bySemanticsLabel('Buka filter pencarian'));
+        await tester.pumpAndSettle();
+
+        final button = find.bySemanticsLabel('Tutup filter pencarian');
+        final cross = tester.widget<Icon>(
+          find.descendant(of: button, matching: find.byType(Icon)),
+        );
+        final fill =
+            (tester
+                        .widget<AnimatedContainer>(
+                          find.descendant(
+                            of: button,
+                            matching: find.byType(AnimatedContainer),
+                          ),
+                        )
+                        .decoration!
+                    as BoxDecoration)
+                .color!;
+
+        // Dark mode turns the open fill near-white; a fixed white cross on
+        // it vanished. The two must stay well apart in brightness.
+        final gap = (cross.color!.computeLuminance() - fill.computeLuminance())
+            .abs();
+        expect(gap, greaterThan(0.4));
+      });
+    }
   });
 }

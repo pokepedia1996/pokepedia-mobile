@@ -56,6 +56,10 @@ class UserAvatar extends StatelessWidget {
               width: size,
               height: size,
               fit: BoxFit.cover,
+              // Decoded at the drawn size rather than as uploaded — see
+              // `SellerAvatar`.
+              cacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
               errorBuilder: (_, __, ___) => Text(
                 initials,
                 style: TextStyle(

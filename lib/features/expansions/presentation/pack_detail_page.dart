@@ -327,14 +327,11 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       // of the grid.
                       AppBottomNav.reservedSpace(context) + 12,
                     ),
-                    sliver: SliverGrid(
-                      gridDelegate: cardGridDelegate(
-                        context,
-                        extraChrome: user == null
-                            ? 0
-                            : cardGridItemFooterChrome,
-                      ),
-                      delegate: SliverChildBuilderDelegate((context, i) {
+                    sliver: SliverCardGrid(
+                      extraChrome: user == null ? 0 : cardGridItemFooterChrome,
+                      hasVariant: (i) => visible[i].variantLabel != null,
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) {
                         final card = visible[i];
                         return CardGridItem(
                           card: card,
@@ -356,7 +353,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                                   ),
                                 ),
                         );
-                      }, childCount: visible.length),
+                      },
                     ),
                   )
                 else

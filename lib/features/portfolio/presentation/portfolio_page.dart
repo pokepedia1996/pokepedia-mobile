@@ -343,19 +343,12 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       if (_viewMode == CardViewMode.grid)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          sliver: SliverGrid(
-            gridDelegate: cardGridDelegate(
-              context,
-              // The stepper row only exists while editing.
-              extraChrome: _editMode ? cardGridItemFooterChrome : 0,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => _collectionCard(cards[i]),
-              childCount: cards.length,
-              // A tile holds nothing worth keeping once it is off screen,
-              // and the keep-alive wrapper is per child.
-              addAutomaticKeepAlives: false,
-            ),
+          sliver: SliverCardGrid(
+            // The stepper row only exists while editing.
+            extraChrome: _editMode ? cardGridItemFooterChrome : 0,
+            hasVariant: (i) => cards[i].variantLabel != null,
+            itemCount: cards.length,
+            itemBuilder: (context, i) => _collectionCard(cards[i]),
           ),
         )
       else
@@ -793,7 +786,7 @@ class _TitleRow extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Portfolio', style: AppTypography.h2(colors.onSurface)),
+          Text('Portofolio', style: AppTypography.h2(colors.onSurface)),
           const SizedBox(width: 4),
           Flexible(
             child: InkWell(

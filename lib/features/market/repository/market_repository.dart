@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
@@ -82,26 +81,7 @@ class MarketRepository {
                   // is always sent alongside the other two.
                   'p_cursor_price': cursor.price,
                 },
-                if (filters.conditions.isNotEmpty)
-                  'p_conditions': filters.conditions.map((c) => c.raw).toList(),
-                if (filters.rarities.isNotEmpty)
-                  'p_rarities': filters.rarities.toList(),
-                if (filters.categories.isNotEmpty)
-                  'p_categories': filters.categories.toList(),
-                if (filters.trainerSubtypes.isNotEmpty)
-                  'p_trainer_subtypes': filters.trainerSubtypes.toList(),
-                if (filters.languages.isNotEmpty)
-                  'p_card_languages': filters.languages
-                      .map((l) => l.raw)
-                      .toList(),
-                if (filters.cities.isNotEmpty)
-                  'p_cities': filters.cities.toList(),
-                if (filters.excludeRarities != null)
-                  'p_exclude_rarities': filters.excludeRarities,
-                if (filters.verifiedOnly) 'p_verified_only': true,
-                if (filters.wishlistOnly) 'p_wishlist_only': true,
-                if (filters.minPrice != null) 'p_min_price': filters.minPrice,
-                if (filters.maxPrice != null) 'p_max_price': filters.maxPrice,
+                ...filters.rpcParams,
               },
             )
             as List;
@@ -269,7 +249,7 @@ class MarketRepository {
     required String sellerUserId,
     required String side,
     String? search,
-    String? condition,
+    MarketFilters filters = const MarketFilters(),
     String sort = 'created_desc',
     int offset = 0,
     int limit = storeListingsPageSize,
@@ -282,7 +262,7 @@ class MarketRepository {
                 'p_seller_user_id': sellerUserId,
                 'p_side': side,
                 'p_search': trimmed.isEmpty ? null : trimmed,
-                'p_conditions': condition == null ? null : [condition],
+                ...filters.rpcParams,
                 'p_sort': sort,
                 'p_window_hours': 0,
                 'p_limit': limit,
@@ -296,6 +276,21 @@ class MarketRepository {
   }
 
   static const storeListingsPageSize = 40;
+
+  /// What one seller's listings on one side hold — the counts and options
+  /// behind a storefront's filter sheet. `get_seller_listing_facets` is the
+  /// aggregate web's storefront reads, in the same shape as the market's.
+  Future<ListingFacets> fetchSellerListingFacets({
+    required String sellerUserId,
+    required String side,
+  }) async {
+    final json = await _client.rpc(
+      'get_seller_listing_facets',
+      params: {'p_seller_user_id': sellerUserId, 'p_side': side},
+    );
+    if (json is! Map) return ListingFacets.empty;
+    return ListingFacets.fromJson(json.cast<String, dynamic>());
+  }
 
   /// One seller's open asks (WTS) for a single card, plus how many *other*
   /// sellers also list it — mirrors `get_card_listings` as used by

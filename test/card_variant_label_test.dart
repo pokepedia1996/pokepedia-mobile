@@ -58,4 +58,24 @@ void main() {
     final label = tester.widget<Text>(find.text('Holo Reverse'));
     expect(label.style?.fontStyle, FontStyle.italic);
   });
+
+  testWidgets('a plain print leaves no blank line under its name', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: SizedBox(
+            width: 200,
+            height: 400,
+            child: CardGridItem(card: _card('normal'), onTap: () {}),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text(''), findsNothing);
+    expect(find.textContaining('Holo'), findsNothing);
+  });
 }

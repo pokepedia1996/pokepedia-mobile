@@ -12,9 +12,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/store_model.dart';
-import '../../../shared/widgets/condition_grade_picker.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
@@ -27,6 +25,7 @@ import '../../chat/usecase/chat_notifier.dart';
 import '../../user/usecase/user_notifier.dart';
 import '../repository/models/store_feedback.dart';
 import '../usecase/market_notifier.dart';
+import 'widgets/listing_filter_sheet.dart';
 import 'widgets/store_share_sheet.dart';
 
 /// Ports `features/market/store/components/storefront/storefront-view.tsx` —
@@ -67,8 +66,11 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
   /// every letter of it.
   String _search = '';
   Timer? _searchDebounce;
-  CardCondition? _condition;
-  _StoreSort _sort = _StoreSort.newest;
+
+  /// Everything web's storefront rail filters by — type, language, rarity,
+  /// condition, city and price — sent to the server with the search.
+  MarketFilters _filters = const MarketFilters();
+  MarketSort _sort = MarketSort.createdDesc;
   bool _following = false;
   bool _followingInitialised = false;
   bool _followBusy = false;
@@ -92,12 +94,8 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
     sellerUserId: sellerUserId,
     side: _tab == _StoreTab.buylist ? 'bid' : 'ask',
     search: _search,
-    condition: _condition?.raw,
-    sort: switch (_sort) {
-      _StoreSort.newest => 'created_desc',
-      _StoreSort.priceAsc => 'price_asc',
-      _StoreSort.priceDesc => 'price_desc',
-    },
+    filters: _filters,
+    sort: _sort.raw,
   );
 
   /// Asks for the next page while there is still a screenful to go, so the
@@ -181,93 +179,37 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
 
   /// How many filters are on, for the badge on the toggle.
   int get _activeFilters =>
-      (_condition == null ? 0 : 1) + (_sort == _StoreSort.newest ? 0 : 1);
+      _filters.activeCount + (_sort == MarketSort.createdDesc ? 0 : 1);
 
+  /// The sorts web offers on a storefront.
+  static const _storeSorts = [
+    MarketSort.createdDesc,
+    MarketSort.priceAsc,
+    MarketSort.priceDesc,
+  ];
+
+  /// The market's filter sheet, pointed at this store: its own counts for
+  /// the side on show, and only the sections web's storefront rail has —
+  /// no wishlist, bulk or verified switch, which narrow nothing within one
+  /// seller's shop. Sorting rides along, since this page has no sort button.
   Future<void> _openFilters() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      // A Consumer-free StatefulBuilder: the sheet edits this page's state
-      // directly, so both it and the grid behind it update as you tap.
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Filter',
-                        style: AppTypography.h3(context.appColors.onSurface),
-                      ),
-                    ),
-                    if (_activeFilters > 0)
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _condition = null;
-                            _sort = _StoreSort.newest;
-                          });
-                          setSheetState(() {});
-                        },
-                        child: const Text('Reset'),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Urutkan',
-                  style: AppTypography.captionSemibold(context.mutedForeground),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final sort in _StoreSort.values)
-                      ChoiceChip(
-                        label: Text(sort.label),
-                        selected: _sort == sort,
-                        onSelected: (_) {
-                          setState(() => _sort = sort);
-                          setSheetState(() {});
-                        },
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Kondisi',
-                  style: AppTypography.captionSemibold(context.mutedForeground),
-                ),
-                const SizedBox(height: 6),
-                ConditionGradePicker(
-                  value: _condition,
-                  onChanged: (value) {
-                    setState(() => _condition = value);
-                    setSheetState(() {});
-                  },
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(44),
-                  ),
-                  child: const Text('Terapkan'),
-                ),
-              ],
-            ),
-          ),
-        ),
+    final sellerId = ref
+        .read(storeDetailProvider(widget.handle))
+        .valueOrNull
+        ?.userId;
+    if (sellerId == null) return;
+    final side = _tab == _StoreTab.buylist ? 'bid' : 'ask';
+    await showListingSheet(
+      context,
+      ListingFilterSheet(
+        initial: _filters,
+        initialSort: _sort,
+        sortOptions: _storeSorts,
+        facets: storeFacetsProvider((sellerUserId: sellerId, side: side)),
+        onApply: (filters, sort) => setState(() {
+          _filters = filters;
+          _sort = sort;
+        }),
       ),
     );
   }
@@ -275,7 +217,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
   List<Widget> _listingSlivers(StoreFeedKey? key) {
     final empty = EmptyState(
       icon: LucideIcons.store,
-      title: _search.isNotEmpty || _condition != null
+      title: _search.isNotEmpty || _filters.activeCount > 0
           ? 'Tidak ada kartu yang cocok'
           : _tab == _StoreTab.buylist
           ? 'Toko ini belum mencari kartu'
@@ -463,6 +405,15 @@ class _Header extends StatelessWidget {
               : Image.network(
                   banner,
                   fit: BoxFit.cover,
+                  // Decoded at the width it is drawn at. Banners are uploaded
+                  // straight from phone cameras, and one decoded at full size
+                  // — a 4000px photo is ~48MB of bitmap, more for larger ones
+                  // — was enough to have the OS kill the app on opening that
+                  // store, while stores with small banners opened fine.
+                  cacheWidth:
+                      (MediaQuery.sizeOf(context).width *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .round(),
                   errorBuilder: (_, __, ___) =>
                       ColoredBox(color: colors.secondary),
                 ),
@@ -944,17 +895,6 @@ class _Stat extends StatelessWidget {
       ],
     );
   }
-}
-
-/// The orders web offers on a storefront's listings.
-enum _StoreSort { newest, priceAsc, priceDesc }
-
-extension _StoreSortX on _StoreSort {
-  String get label => switch (this) {
-    _StoreSort.newest => 'Terbaru',
-    _StoreSort.priceAsc => 'Termurah',
-    _StoreSort.priceDesc => 'Termahal',
-  };
 }
 
 /// The search field as it sits in the app bar: short, rounded, and on its

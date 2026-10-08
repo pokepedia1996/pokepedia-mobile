@@ -37,6 +37,7 @@ ListingModel _listing(int i, String name) => ListingModel(
 /// A 2,161-listing shop whose one Spinarak is the oldest of them.
 class _FakeMarket implements MarketRepository {
   final asked = <({String? search, String side, int offset})>[];
+  final askedFilters = <MarketFilters>[];
 
   late final shop = [
     for (var i = 0; i < 2160; i++) _listing(i, 'Kartu $i'),
@@ -48,12 +49,13 @@ class _FakeMarket implements MarketRepository {
     required String sellerUserId,
     required String side,
     String? search,
-    String? condition,
+    MarketFilters filters = const MarketFilters(),
     String sort = 'created_desc',
     int offset = 0,
     int limit = MarketRepository.storeListingsPageSize,
   }) async {
     asked.add((search: search, side: side, offset: offset));
+    askedFilters.add(filters);
     final needle = (search ?? '').toLowerCase();
     final matches = [
       for (final l in shop)
@@ -79,11 +81,14 @@ void main() {
     return c;
   }
 
-  StoreFeedKey key({String search = ''}) => (
+  StoreFeedKey key({
+    String search = '',
+    MarketFilters filters = const MarketFilters(),
+  }) => (
     sellerUserId: 'seller-1',
     side: 'ask',
     search: search,
-    condition: null,
+    filters: filters,
     sort: 'created_desc',
   );
 
@@ -136,5 +141,47 @@ void main() {
       c.read(storeFeedProvider(k)).listings,
       hasLength(MarketRepository.storeListingsPageSize),
     );
+  });
+
+  test('the store filters go to the server with the search', () async {
+    final c = container();
+    final filters = MarketFilters(
+      categories: {'Trainer'},
+      trainerSubtypes: {'Supporter'},
+      languages: {CardLanguage.en},
+      conditions: {CardCondition.nm},
+      minPrice: 1000,
+    );
+    await settle(c, key(filters: filters));
+    expect(market.askedFilters.single, filters);
+  });
+
+  test('equal filters are the same query, not a refetch', () {
+    // Filters key the feed, so a sheet that rebuilds an identical draft must
+    // land on the same provider rather than start a new one.
+    expect(
+      MarketFilters(languages: {CardLanguage.jp}, minPrice: 5),
+      MarketFilters(languages: {CardLanguage.jp}, minPrice: 5),
+    );
+    expect(
+      key(filters: MarketFilters(languages: {CardLanguage.jp})),
+      key(filters: MarketFilters(languages: {CardLanguage.jp})),
+    );
+  });
+
+  test('filters become the RPC\'s own arguments', () {
+    final params = MarketFilters(
+      categories: {'Trainer'},
+      trainerSubtypes: {'Pokémon Tool'},
+      languages: {CardLanguage.id},
+      cities: {'Kota Surabaya'},
+      maxPrice: 50000,
+    ).rpcParams;
+    expect(params['p_categories'], ['Trainer']);
+    expect(params['p_trainer_subtypes'], ['Pokémon Tool']);
+    expect(params['p_card_languages'], ['id']);
+    expect(params['p_cities'], ['Kota Surabaya']);
+    expect(params['p_max_price'], 50000);
+    expect(params.containsKey('p_min_price'), isFalse);
   });
 }
