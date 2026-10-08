@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/utils/postgrest_embed.dart';
 import 'models/dispute_model.dart';
+import 'models/open_dispute.dart';
 import 'models/order_model.dart';
 import 'models/order_rating.dart';
 import 'models/order_ref.dart';
@@ -37,7 +40,9 @@ class OrdersRepository {
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
       'status, created_at, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
-      'paid_at, payment_deadline, cancel_status, cancel_reason),'
+      'shipping_discount_idr, insurance_fee_idr,'
+      'paid_at, payment_deadline, cancel_status, cancel_reason,'
+      'carts(total_amount, gateway_fee, gateway_fee_charged)),'
       // Only an active dispute changes what the seller sees; the filter is
       // applied client-side because a settled one still has to be readable
       // from the order detail page.
@@ -45,7 +50,8 @@ class OrdersRepository {
       // Named FK, not a bare `shipments`: orders links to shipments twice
       // (`shipments.order_id` and `orders.shipment_id`), and PostgREST
       // refuses an ambiguous embed with PGRST201 rather than picking one.
-      'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
+      'shipments!shipments_order_id_fkey(tracking_number, courier,'
+      'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
       'biteship_book_error, origin_collection_method, status_history)';
 
@@ -58,13 +64,16 @@ class OrdersRepository {
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
       'status, created_at, cards($_cardColumns),'
-      'settlements(condition, escrow_amount, shipping_cost, status,'
+      'settlements(slug, condition, escrow_amount, shipping_cost, status,'
+      'shipping_discount_idr, insurance_fee_idr,'
       'paid_at, released_at, payment_deadline, cancel_status, cancel_reason,'
       // The invoice lives on the checkout, not the settlement, so an unpaid
       // order can only offer "Bayar Sekarang" by reaching through `cart_id`.
-      'carts(invoice_url)),'
-      'disputes(slug, current_status)),'
-      'shipments!shipments_order_id_fkey(tracking_number, courier, status,'
+      'carts(invoice_url, total_amount, gateway_fee, gateway_fee_charged)),'
+      'disputes(slug, current_status, reason_category)),'
+      // `slug` is what `/api/shipments/<slug>/report-lost` takes.
+      'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
+      'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
@@ -166,7 +175,8 @@ class OrdersRepository {
         await _client
                 .from('carts')
                 .select(
-                  'id, external_id, status, total_amount, expires_at,'
+                  'id, external_id, status, total_amount, invoice_amount,'
+                  'expires_at,'
                   'created_at, invoice_url, cart_snapshot',
                 )
                 .eq('user_id', me)
@@ -539,7 +549,8 @@ class OrdersRepository {
       'status, created_at, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'paid_at, payment_deadline, cancel_status, cancel_reason,'
-      'commission_amount, seller_net_amount, insurance_premium_idr,'
+      'commission_amount, seller_net_amount, shipping_discount_idr,'
+      'insurance_fee_idr,'
       // Which dispatch methods this order's courier supports, and who it is
       // — the shipment sheet offers pickup or a manual resi accordingly.
       // What the buyer picked and paid for — the seller's dispatch step has
@@ -548,7 +559,8 @@ class OrdersRepository {
       'courier_service_code, estimated_delivery_text,'
       'estimated_delivery_unit),'
       'disputes(slug, current_status)),'
-      'shipments!shipments_order_id_fkey(slug, tracking_number, courier, status,'
+      'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
+      'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
@@ -672,6 +684,92 @@ class OrdersRepository {
     if (row == null) return null;
 
     return DisputeModel.fromRow(row, orderSlug: orderSlug);
+  }
+
+  /// Ports `uploadEntryPhotos` — every photo of one entry goes under the
+  /// settlement's folder in `dispute-evidence`, the only shape the bucket's
+  /// insert policy and `_dispute_evidence_url_in_order` accept.
+  ///
+  /// Returns the public-form URLs the route's `TrustedEvidenceUrl` checks
+  /// for; the bucket is private, so they are identifiers rather than links.
+  Future<List<String>> uploadDisputeEvidence(
+    String settlementSlug,
+    List<DisputeEvidencePhoto> photos,
+  ) async {
+    final bucket = _client.storage.from('dispute-evidence');
+    final random = Random();
+    final urls = <String>[];
+    for (final photo in photos) {
+      final suffix = random.nextInt(1 << 30).toRadixString(36);
+      final path =
+          '$settlementSlug/photo-${DateTime.now().millisecondsSinceEpoch}'
+          '-$suffix.${photo.extension}';
+      await bucket.uploadBinary(
+        path,
+        photo.bytes,
+        fileOptions: FileOptions(
+          cacheControl: '3600',
+          upsert: false,
+          contentType: photo.contentType,
+        ),
+      );
+      urls.add(bucket.getPublicUrl(path));
+    }
+    return urls;
+  }
+
+  /// `POST /api/orders/[slug]/disputes`. [anchorItemSlug] is an
+  /// `order_items.slug` of this order: the route resolves the order from an
+  /// item, not from `orders.slug`. The batch is all-or-nothing.
+  Future<({String? error, int disputesOpened})> openDisputes(
+    String anchorItemSlug,
+    List<OpenDisputeEntry> entries,
+  ) async {
+    try {
+      final response = await _api.post('/api/orders/$anchorItemSlug/disputes', {
+        'entries': entries.map((entry) => entry.toJson()).toList(),
+      });
+      if (response['ok'] != true) {
+        return (
+          error: response['error'] as String? ?? 'Gagal mengirim komplain',
+          disputesOpened: 0,
+        );
+      }
+      return (
+        error: null,
+        disputesOpened: (response['disputesOpened'] as num?)?.toInt() ?? 0,
+      );
+    } on ApiException catch (e) {
+      return (error: userFacingError(e), disputesOpened: 0);
+    }
+  }
+
+  /// `POST /api/order-items/[slug]/release-siblings` — pays the seller out
+  /// for the lines the buyer chose not to complain about. Best-effort, as on
+  /// web: the disputes are already open by the time this runs.
+  Future<void> releaseNonDisputedSiblings(String itemSlug) async {
+    try {
+      await _api.post('/api/order-items/$itemSlug/release-siblings', const {});
+    } on ApiException {
+      // Web logs and moves on too; failing here can't un-open the disputes.
+    }
+  }
+
+  /// `POST /api/shipments/[shipmentSlug]/report-lost` — the not-received
+  /// complaint, which covers the whole shipment rather than chosen items.
+  ///
+  /// Returns null on success, or a message to show.
+  Future<String?> reportNotReceived(String shipmentSlug) async {
+    try {
+      final response = await _api.post(
+        '/api/shipments/$shipmentSlug/report-lost',
+        const {},
+      );
+      if (response['ok'] == true) return null;
+      return response['error'] as String? ?? 'Gagal mengajukan komplain';
+    } on ApiException catch (e) {
+      return userFacingError(e);
+    }
   }
 }
 

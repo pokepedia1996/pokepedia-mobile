@@ -62,7 +62,7 @@ class TradingRepository {
           (payload['existing_price'] as num?)?.toInt() ?? 0,
         );
       }
-      return PlaceOrderResult.failed(error);
+      return PlaceOrderResult.failed(error, side: side);
     } on PostgrestException {
       return const PlaceOrderResult.failed('unknown');
     }
@@ -70,7 +70,7 @@ class TradingRepository {
 
   /// Uploads a seller's own photos of the card to the `listing-photos`
   /// bucket and returns their public URLs, for `place_order`'s
-  /// `p_photo_urls` (required on asks of Rp100.000 and up).
+  /// `p_photo_urls` (required on asks of graded slabs).
   ///
   /// The web posts these through `/api/seller/listing-photos`, which stores
   /// them in R2; Storage's own policy already scopes writes to
@@ -231,8 +231,15 @@ class TradingRepository {
     'phone_not_verified' => 'Verifikasi nomor teleponmu dulu',
     'seller_not_active' => 'Aktifkan toko dulu untuk mengirim proposal',
     'no_bids' => 'Tidak ada bid di harga ini lagi',
-    'photos_required' || 'invalid_photos' => 'Unggah foto kartumu dulu',
+    'photos_required' => 'Unggah foto kartumu dulu',
+    'invalid_photos' =>
+      'Foto wajib untuk kartu graded (slab), maksimal 4 foto.',
     'rate_limited' => 'Terlalu banyak proposal. Coba lagi nanti.',
+    'no_open_bids' =>
+      'Tidak ada bid aktif di harga ini untuk dikirimi proposal.',
+    'already_proposed' =>
+      'Kamu sudah mengirim proposal ke semua pembeli di harga ini. '
+          'Cek di halaman Proposal.',
     // The rest only `submit_bid_proposal` answers with — proposing to one
     // named bid can fail in ways a broadcast to a price level cannot.
     'cannot_propose_on_own_bid' => 'Ini bid kamu sendiri',

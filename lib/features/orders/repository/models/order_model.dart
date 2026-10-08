@@ -1,6 +1,7 @@
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/utils/postgrest_embed.dart';
 import '../../../../shared/models/card_model.dart';
+import '../../utils/package_payment.dart';
 import 'seller_order.dart';
 import 'shipment_destination.dart';
 
@@ -139,6 +140,14 @@ class OrderItemModel {
           DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ??
           DateTime.now(),
       shippingCost: (settlement?['shipping_cost'] as num?)?.toInt() ?? 0,
+      shippingDiscount:
+          (settlement?['shipping_discount_idr'] as num?)?.toInt() ?? 0,
+      insuranceFee: (settlement?['insurance_fee_idr'] as num?)?.toInt() ?? 0,
+      escrowAmount: (settlement?['escrow_amount'] as num?)?.toInt(),
+      settlementSlug: settlement?['slug'] as String?,
+      checkoutFees: PackageCheckoutFees.fromRow(
+        embeddedRow(settlement?['carts']),
+      ),
       settlementStatus: settlement?['status'] as String?,
       paidAt: DateTime.tryParse(
         settlement?['paid_at'] as String? ?? '',
@@ -154,6 +163,7 @@ class OrderItemModel {
       invoiceUrl: embeddedRow(settlement?['carts'])?['invoice_url'] as String?,
       statusRaw: row['status'] as String?,
       dispute: _openDispute(row['disputes']),
+      openDisputeReason: _openDisputeReason(row['disputes']),
     );
   }
 
@@ -168,6 +178,11 @@ class OrderItemModel {
     required this.status,
     required this.createdAt,
     this.shippingCost = 0,
+    this.shippingDiscount = 0,
+    this.insuranceFee = 0,
+    this.escrowAmount,
+    this.settlementSlug,
+    this.checkoutFees,
     this.settlementStatus,
     this.paidAt,
     this.releasedAt,
@@ -177,6 +192,7 @@ class OrderItemModel {
     this.invoiceUrl,
     this.statusRaw,
     this.dispute,
+    this.openDisputeReason,
   });
 
   /// `order_items.id` — what `confirm_receipt` takes, unlike everything
@@ -194,6 +210,24 @@ class OrderItemModel {
 
   /// `settlements.shipping_cost` — what the buyer paid to have it sent.
   final int shippingCost;
+
+  /// `settlements.shipping_discount_idr` — the ongkir coupon's share of this
+  /// line, netted off [shippingCost] in what the buyer paid.
+  final int shippingDiscount;
+
+  /// `settlements.insurance_fee_idr` — the shipping insurance the buyer paid.
+  final int insuranceFee;
+
+  /// `settlements.escrow_amount`, which web's list total prefers over
+  /// `match_price × quantity` when the settlement is readable.
+  final int? escrowAmount;
+
+  /// `settlements.slug` — the folder dispute evidence is uploaded under.
+  final String? settlementSlug;
+
+  /// `carts(total_amount, gateway_fee, gateway_fee_charged)` behind this
+  /// line's checkout; null when the cart isn't selected or readable.
+  final PackageCheckoutFees? checkoutFees;
 
   /// `settlements.status` and `paid_at`. Payment is recorded by the
   /// timestamp rather than the status, which tracks the escrow's lifecycle.
@@ -223,7 +257,12 @@ class OrderItemModel {
   /// The open dispute on this item, if there is one.
   final ({String? slug, String? status})? dispute;
 
+  /// `disputes.reason_category` of [dispute], when the query selected it.
+  final String? openDisputeReason;
+
   int get subtotal => matchPrice * matchedQuantity;
+
+  bool get isCancelled => statusRaw == 'cancelled';
 }
 
 /// The first dispute that still needs somebody to act. A settled one is
@@ -233,6 +272,16 @@ class OrderItemModel {
     final status = row['current_status'] as String?;
     if (status != null && activeDisputeStatuses.contains(status)) {
       return (slug: row['slug'] as String?, status: status);
+    }
+  }
+  return null;
+}
+
+String? _openDisputeReason(Object? raw) {
+  for (final row in embeddedRows(raw)) {
+    final status = row['current_status'] as String?;
+    if (status != null && activeDisputeStatuses.contains(status)) {
+      return row['reason_category'] as String?;
     }
   }
   return null;
@@ -305,6 +354,7 @@ class OrderModel {
       shipmentSlug: shipment?['slug'] as String?,
       trackingNumber: shipment?['tracking_number'] as String?,
       courier: shipment?['courier'] as String?,
+      courierCode: shipment?['courier_code'] as String?,
       shipmentStatus: shipment?['status'] as String?,
       shipmentDeadline: DateTime.tryParse(
         shipment?['shipment_deadline'] as String? ?? '',
@@ -340,6 +390,7 @@ class OrderModel {
     required this.items,
     this.trackingNumber,
     this.courier,
+    this.courierCode,
     this.destination,
     this.shipmentSlug,
     this.shipmentStatus,
@@ -368,6 +419,10 @@ class OrderModel {
   final List<OrderItemModel> items;
   final String? trackingNumber;
   final String? courier;
+
+  /// `shipments.courier_code`, the lowercase Biteship code the untrackable
+  /// set and the SQL twins key on. [courier] can hold a display name.
+  final String? courierCode;
 
   /// Where the parcel is going. Null on a list row, which doesn't fetch it,
   /// and before a shipment exists at all.
@@ -406,12 +461,26 @@ class OrderModel {
 
   DateTime? get releasedAt => items.isEmpty ? null : items.first.releasedAt;
 
-  /// What the buyer paid for the cards alone.
-  int get itemsSubtotal => items.fold(0, (sum, item) => sum + item.subtotal);
+  /// The checkout fees behind this package, from whichever line carries them.
+  PackageCheckoutFees? get _checkoutFees {
+    for (final item in items) {
+      if (item.checkoutFees != null) return item.checkoutFees;
+    }
+    return null;
+  }
 
-  /// What they paid to have it sent.
-  int get shippingTotal =>
-      items.fold(0, (sum, item) => sum + item.shippingCost);
+  /// What the buyer paid for this package, line by line — the breakdown
+  /// web's `getOrderDetail` builds for the detail page's "Total dibayar".
+  PackagePaymentBreakdown get payment => computePackagePayment([
+    for (final item in items)
+      PackagePaymentLine(
+        subtotal: item.subtotal,
+        shippingCost: item.shippingCost,
+        shippingDiscount: item.shippingDiscount,
+        insurance: item.insuranceFee,
+        cancelled: item.isCancelled,
+      ),
+  ], _checkoutFees);
 
   /// The counterparty's identity, resolved separately: `seller_profiles` is
   /// self-select-only, so a store name and logo come from
@@ -482,7 +551,7 @@ class OrderModel {
   /// tracking the platform can't read, so no status will ever arrive.
   bool get isUntrackableManual =>
       originCollectionMethod == 'manual' &&
-      untrackableCourierCodes.contains(courier?.trim().toLowerCase());
+      isUntrackableCourier(courierCode ?? courier);
 
   /// `order_items.id` of the first line — what `confirm_receipt` takes.
   int? get firstItemId => items.isEmpty ? null : items.first.id;
@@ -580,8 +649,23 @@ class OrderModel {
     };
   }
 
-  int get total =>
-      items.fold(0, (sum, item) => sum + item.subtotal + item.shippingCost);
+  /// Ports `computeBuyerGroupTotal` — the list card's "Total Pesanan". A
+  /// fully cancelled package shows what was originally paid, not zero.
+  int get total {
+    final payment = computePackagePayment([
+      for (final item in items)
+        PackagePaymentLine(
+          subtotal: item.escrowAmount ?? item.subtotal,
+          shippingCost: item.shippingCost,
+          shippingDiscount: item.shippingDiscount,
+          insurance: item.insuranceFee,
+          cancelled: item.isCancelled,
+        ),
+    ], _checkoutFees);
+    return payment.cancelledCount == items.length
+        ? payment.originalPaidTotal
+        : payment.paidTotal;
+  }
 
   int get totalQuantity =>
       items.fold(0, (sum, item) => sum + item.matchedQuantity);
@@ -602,6 +686,8 @@ class OrderModel {
       items: items,
       trackingNumber: trackingNumber,
       courier: courier,
+      courierCode: courierCode,
+      shipmentSlug: shipmentSlug,
       shipmentStatus: shipmentStatus,
       shipmentDeadline: shipmentDeadline,
       biteshipOrderId: biteshipOrderId,

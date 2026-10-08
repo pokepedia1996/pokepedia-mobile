@@ -19,6 +19,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/models/card_condition.dart';
+import '../network/pokepedia_api.dart';
+
 /// What the reader sees when nothing more specific is known.
 const _generic = 'Terjadi kesalahan. Coba lagi ya.';
 
@@ -41,7 +44,7 @@ const _tokens = <String, String>{
   'order_not_found': 'Pesanan ini tidak ditemukan.',
   'shipment_not_found': 'Pengiriman ini tidak ditemukan.',
   'deal_unavailable': 'Penawaran ini sudah tidak tersedia.',
-  'photo_required': 'Listing ini butuh minimal satu foto.',
+  'photo_required': gradedPhotoRequiredMessage,
   'insufficient_stock': 'Stok tidak mencukupi.',
   'insufficient_balance': 'Saldo kamu tidak mencukupi.',
   'coupon_not_found': 'Kode kupon tidak ditemukan.',
@@ -57,6 +60,13 @@ const _tokens = <String, String>{
   'invalid_status': 'Status ini tidak bisa diubah dari sini.',
   'destination_limit_exceeded': 'Jumlah rekening tersimpan sudah maksimal.',
   'delta_out_of_range': 'Jumlahnya di luar batas yang diizinkan.',
+  'listing_reserved_by_deal':
+      'Listing ini sedang dipakai di checkout pembeli. Tunggu sampai '
+      'pembayarannya selesai.',
+  'already_proposed':
+      'Kamu sudah mengirim proposal ke semua pembeli di harga ini. Cek di '
+      'halaman Proposal.',
+  'no_open_bids': 'Tidak ada bid aktif di harga ini untuk dikirimi proposal.',
 };
 
 /// SQLSTATEs worth a sentence of their own. Everything else is [_generic].
@@ -92,6 +102,9 @@ String userFacingError(Object? error, {String? fallback}) {
   if (error is PostgrestException) {
     return _postgrestMessage(error) ?? generic;
   }
+  if (error is ApiException) {
+    return _apiMessage(error) ?? generic;
+  }
   if (error is String) {
     return _tokens[error] ?? generic;
   }
@@ -106,6 +119,17 @@ String? _postgrestMessage(PostgrestException error) {
   // detail appended by `%` formatting — match the leading word.
   final token = error.message.trim().split(RegExp(r'[\s:,]')).first;
   return _tokens[token];
+}
+
+/// pokepedia.id routes already answer in Indonesian — the wallet withdraw,
+/// dispatch, cancel and OTP routes all put the sentence in the body — so
+/// that sentence is shown as is. Only a bare code is looked up instead.
+String? _apiMessage(ApiException error) {
+  final message = error.message;
+  if (message != ApiException.genericMessage && !isErrorCode(message)) {
+    return message;
+  }
+  return _tokens[error.code] ?? _tokens[message];
 }
 
 String? _authMessage(AuthException error) {

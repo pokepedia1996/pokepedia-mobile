@@ -79,7 +79,7 @@ class SentProposalModel {
   final DateTime? seenAt;
 
   /// `bid_proposals.photos` — what the seller attached to prove the card
-  /// they're offering. Required above Rp100.000, so most rows have them.
+  /// they're offering. Required for graded conditions.
   final List<String> photos;
 
   /// Ports `isStockPhoto`: the first photo being the catalog art means

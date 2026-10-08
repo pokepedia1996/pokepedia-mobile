@@ -14,7 +14,7 @@ import '../../repository/seller_listings_repository.dart';
 
 /// Photos of the actual copy, behind the camera badge on a draft card.
 ///
-/// A listing of Rp100.000 or more is refused without one, so this is not a
+/// A graded listing is refused without one, so this is not a
 /// flourish — it is the other half of what stops a draft being postable, and
 /// the badge on the thumbnail is the only place it could belong.
 ///
@@ -135,8 +135,8 @@ class _DraftPhotoSheetState extends ConsumerState<_DraftPhotoSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Foto kondisi asli kartumu. Listing Rp100.000 ke atas wajib '
-              'punya minimal satu foto.',
+              'Foto kondisi asli kartumu. Kartu graded wajib punya minimal '
+              '1 foto.',
               style: AppTypography.caption(context.mutedForeground),
             ),
             const SizedBox(height: 14),

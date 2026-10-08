@@ -31,8 +31,8 @@ class CheckoutStatusPage extends ConsumerStatefulWidget {
 
   final String externalId;
 
-  /// Lines the server refused at lock time, surfaced here because this is
-  /// the first screen after the order was placed.
+  /// Lines the server refused at lock time, one reason each, surfaced here
+  /// because this is the first screen after the order was placed.
   final List<String> droppedItems;
 
   @override
@@ -136,7 +136,7 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Kartu di keranjang sudah dilepas kembali.',
+                    _cancelledDetail(_progress!.raw),
                     textAlign: TextAlign.center,
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
@@ -221,8 +221,28 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
     'expired' => 'Waktu pembayaran habis',
     'refunded' => 'Pembayaran dikembalikan',
     'refund_required' => 'Menunggu pengembalian dana',
+    'refund_failed' => 'Pengembalian dana tertunda',
     'failed' => 'Pembayaran gagal',
+    'failed_unavailable' ||
+    'failed_buyer_ineligible' => 'Pembayaran diterima, refund manual',
     _ => 'Pesanan dibatalkan',
+  };
+
+  /// The paid-but-unfulfillable states take web's copy from
+  /// `checkout-success-client.tsx`: the money arrived, so "the cards were
+  /// released" alone would read as though nothing was charged.
+  static String _cancelledDetail(String raw) => switch (raw) {
+    'failed_unavailable' =>
+      'Salah satu kartu di keranjang sudah tidak tersedia saat pembayaran '
+          'dikonfirmasi. Refund akan diproses manual dalam 1-2 hari kerja.',
+    'failed_buyer_ineligible' =>
+      'Akun kamu tidak memenuhi syarat untuk transaksi saat pembayaran '
+          'dikonfirmasi. Refund akan diproses manual dalam 1-2 hari kerja.',
+    'refund_required' => 'Dana kamu akan dikembalikan.',
+    'refund_failed' =>
+      'Pengembalian dana belum berhasil dan sedang dicoba ulang.',
+    'refunded' => 'Dana kamu sudah dikembalikan.',
+    _ => 'Kartu di keranjang sudah dilepas kembali.',
   };
 }
 
@@ -254,10 +274,18 @@ class _DroppedItemsNotice extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'Stok habis atau harga berubah sebelum pembayaran selesai. '
             'Kartu ini tidak ditagihkan.',
             style: AppTypography.caption(context.mutedForeground),
           ),
+          const SizedBox(height: 6),
+          for (final reason in items)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $reason',
+                style: AppTypography.caption(colors.onSurface),
+              ),
+            ),
         ],
       ),
     );

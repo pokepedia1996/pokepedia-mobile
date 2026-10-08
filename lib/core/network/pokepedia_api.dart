@@ -399,12 +399,12 @@ class PokepediaApi {
         // (an unverified phone, say), not the session failing — retrying it
         // with a fresh token would only fail the same way, and the caller
         // needs the server's sentence, not "sesi berakhir".
-        final stated = decoded['error'] as String?;
-        if (response.statusCode == 403 && stated != null) {
+        if (response.statusCode == 403 && decoded['error'] is String) {
           throw ApiException(
-            stated,
+            _statedMessage(decoded) ?? ApiException.genericMessage,
             statusCode: response.statusCode,
             payload: decoded,
+            code: _statedCode(decoded),
           );
         }
         // The server's own message is usually the bare word "Unauthorized",
@@ -418,18 +418,17 @@ class PokepediaApi {
         // answers with only a `Retry-After` header and no such field. Reading
         // both means one wait value regardless of which produced it.
         throw ApiRateLimitedException(
-          decoded['error'] as String? ?? 'Terlalu banyak permintaan.',
+          _statedMessage(decoded) ?? 'Terlalu banyak permintaan.',
           retryAfter: _retryAfter(response, decoded),
           payload: decoded,
         );
       }
       if (response.statusCode >= 400) {
         throw ApiException(
-          decoded['error'] as String? ??
-              decoded['message'] as String? ??
-              'Gagal menghubungi server.',
+          _statedMessage(decoded) ?? ApiException.genericMessage,
           statusCode: response.statusCode,
           payload: decoded,
+          code: _statedCode(decoded),
         );
       }
       return decoded;
@@ -611,12 +610,48 @@ Duration? _retryAfter(HttpClientResponse response, Map<String, dynamic> body) {
   return Duration(seconds: seconds);
 }
 
+/// Whether [text] is a machine token (`coupon_invalid`, `pending_invoice`)
+/// rather than a sentence meant for a person.
+bool isErrorCode(String text) => RegExp(r'^[a-z0-9_]+$').hasMatch(text);
+
+/// The sentence a failed route meant the user to read.
+///
+/// Web routes answer in two shapes: `{error: "<code>", message: "<kalimat>"}`
+/// (checkout, wallet, dispatch) and `{error: "<kalimat>", code: "<code>"}`
+/// (listings, bid proposals). Reading `error` first showed the buyer the raw
+/// code in the first shape, so `message` wins and a code-shaped `error` is
+/// never treated as text.
+String? _statedMessage(Map<String, dynamic> body) {
+  final message = body['message'];
+  if (message is String && message.trim().isNotEmpty) return message;
+  final error = body['error'];
+  if (error is String && error.trim().isNotEmpty && !isErrorCode(error)) {
+    return error;
+  }
+  return null;
+}
+
+/// The machine code of a failed route, from whichever field carries it.
+String? _statedCode(Map<String, dynamic> body) {
+  final error = body['error'];
+  if (error is String && isErrorCode(error)) return error;
+  final code = body['code'];
+  return code is String && code.isNotEmpty ? code : null;
+}
+
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode, this.payload});
+  const ApiException(this.message, {this.statusCode, this.payload, this.code});
+
+  /// What [message] falls back to when the server named only a code.
+  static const genericMessage = 'Gagal menghubungi server.';
 
   final String message;
   final int? statusCode;
   final Map<String, dynamic>? payload;
+
+  /// The route's English error code (`coupon_invalid`, `phone_not_verified`),
+  /// for callers that branch on the failure rather than display it.
+  final String? code;
 
   @override
   String toString() => message;

@@ -111,7 +111,7 @@ class SearchResultsPage extends ConsumerWidget {
                         style: AppTypography.h2(colors.onSurface),
                       ),
                       const SizedBox(height: 2),
-                      _Subtitle(state: state, query: trimmed),
+                      _Subtitle(state: state),
                     ],
                   ),
                 ),
@@ -236,13 +236,11 @@ class SearchResultsPage extends ConsumerWidget {
   }
 }
 
-/// The count, or the line explaining that these results are for a different
-/// spelling than the one typed.
+/// The match count, or a loading line while the first page is in flight.
 class _Subtitle extends StatelessWidget {
-  const _Subtitle({required this.state, required this.query});
+  const _Subtitle({required this.state});
 
   final FullSearchState state;
-  final String query;
 
   @override
   Widget build(BuildContext context) {
@@ -250,23 +248,6 @@ class _Subtitle extends StatelessWidget {
       return Text(
         'Mencari...',
         style: AppTypography.caption(context.mutedForeground),
-      );
-    }
-
-    final corrected = state.correctedQuery;
-    if (corrected != null) {
-      return Text.rich(
-        TextSpan(
-          text: "Tidak ada hasil untuk '$query', menampilkan hasil untuk ",
-          style: AppTypography.caption(context.mutedForeground),
-          children: [
-            TextSpan(
-              text: corrected,
-              style: AppTypography.captionSemibold(context.appColors.onSurface),
-            ),
-            if (state.total > 0) TextSpan(text: ' · ${state.total} kartu'),
-          ],
-        ),
       );
     }
 

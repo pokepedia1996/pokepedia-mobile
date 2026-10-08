@@ -40,6 +40,9 @@ const rawConditions = [
 /// web's pill order within a group.
 const conditionCompanies = ['Raw', 'PSA', 'BGS', 'CGC', 'EGS'];
 
+/// `GRADED_PHOTO_REQUIRED_MESSAGE` in `lib/seller/listing-drafts.ts`.
+const gradedPhotoRequiredMessage = 'Foto wajib untuk kartu graded (slab).';
+
 extension CardConditionX on CardCondition {
   /// The exact value stored in `listings.condition` / `price_history.condition`.
   String get raw {
@@ -90,7 +93,14 @@ extension CardConditionX on CardCondition {
   }
 
   bool get isRaw => rawConditions.contains(this);
+
+  /// Mirrors `isGradedCondition` in `lib/orders/conditions.ts` (SQL twin
+  /// `is_graded_condition`): anything outside NM/LP/MP/HP is a slab.
   bool get isGraded => !isRaw;
+
+  /// Mirrors `listingRequiresPhoto` in `lib/seller/listing-drafts.ts` — only
+  /// graded slabs need a photo, whatever the price.
+  bool get requiresListingPhoto => isGraded;
 
   /// Short badge text, mirrors `conditionShort()` in `lib/orders.ts`.
   String get short {

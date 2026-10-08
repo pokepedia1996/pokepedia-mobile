@@ -50,9 +50,20 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   /// loading it would bounce to /login and look like a failed payment.
   static const _successPath = '/cart/checkout/success';
 
+  static bool _isTrustedInvoice(Uri? uri) =>
+      uri != null && uri.scheme == 'https' && _allowedHosts.contains(uri.host);
+
   @override
   void initState() {
     super.initState();
+    final invoiceUri = Uri.tryParse(widget.invoiceUrl);
+    if (!_isTrustedInvoice(invoiceUri)) {
+      _controller = WebViewController();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop(PaymentOutcome.dismissed);
+      });
+      return;
+    }
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -61,7 +72,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
           onNavigationRequest: _handleNavigation,
         ),
       )
-      ..loadRequest(Uri.parse(widget.invoiceUrl));
+      ..loadRequest(invoiceUri!);
   }
 
   Future<NavigationDecision> _handleNavigation(

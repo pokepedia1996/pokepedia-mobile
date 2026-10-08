@@ -646,7 +646,7 @@ class _UnpaidCard extends StatelessWidget {
               ),
             ),
             Text(
-              formatRupiah(order.total),
+              formatRupiah(order.payment.paidTotal),
               style: AppTypography.bodySemibold(context.appColors.onSurface),
             ),
           ],
@@ -956,6 +956,8 @@ class _ItemsSectionState extends State<_ItemsSection> {
     final colors = context.appColors;
     final order = widget.order;
     final count = order.items.length;
+    final payment = order.payment;
+    final hasCancelledItems = payment.cancelledCount > 0;
 
     return _Section(
       title: 'Item dipesan',
@@ -981,12 +983,21 @@ class _ItemsSectionState extends State<_ItemsSection> {
               children: [
                 Expanded(
                   child: Text(
-                    'Total dibayar',
+                    hasCancelledItems ? 'Total pesanan' : 'Total dibayar',
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
                 ),
+                if (hasCancelledItems) ...[
+                  Text(
+                    formatRupiah(payment.originalPaidTotal),
+                    style: AppTypography.caption(
+                      context.mutedForeground,
+                    ).copyWith(decoration: TextDecoration.lineThrough),
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 Text(
-                  formatRupiah(order.total),
+                  formatRupiah(payment.paidTotal),
                   style: AppTypography.bodySemibold(colors.onSurface),
                 ),
                 const SizedBox(width: 4),
@@ -1009,10 +1020,36 @@ class _ItemsSectionState extends State<_ItemsSection> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _MoneyRow(
-                  label: 'Subtotal ($count item)',
-                  amount: order.itemsSubtotal,
+                  label: 'Subtotal (${count - payment.cancelledCount} item)',
+                  amount: payment.subtotal,
                 ),
-                _MoneyRow(label: 'Ongkir', amount: order.shippingTotal),
+                _MoneyRow(label: 'Ongkos kirim', amount: payment.shippingGross),
+                if (payment.shippingDiscount > 0)
+                  _MoneyRow(
+                    label: 'Diskon ongkir',
+                    amount: payment.shippingDiscount,
+                    prefix: '− ',
+                    color: context.appSemantic.success,
+                  ),
+                if (payment.insurance > 0)
+                  _MoneyRow(
+                    label: 'Asuransi pengiriman',
+                    amount: payment.insurance,
+                  ),
+                if (payment.showCheckoutFee && payment.platformFee > 0)
+                  _MoneyRow(
+                    label: 'Biaya Platform',
+                    amount: payment.platformFee,
+                    struck: payment.isPlatformFeeWaived,
+                  ),
+                if (hasCancelledItems)
+                  _MoneyRow(
+                    label:
+                        'Item dibatalkan (${payment.cancelledCount}) · '
+                        'dikembalikan ke saldo',
+                    amount: payment.cancelledAmount,
+                    struck: true,
+                  ),
               ],
             ),
           ),
@@ -1023,13 +1060,29 @@ class _ItemsSectionState extends State<_ItemsSection> {
 }
 
 class _MoneyRow extends StatelessWidget {
-  const _MoneyRow({required this.label, required this.amount});
+  const _MoneyRow({
+    required this.label,
+    required this.amount,
+    this.prefix = '',
+    this.color,
+    this.struck = false,
+  });
 
   final String label;
   final int amount;
+  final String prefix;
+  final Color? color;
+
+  /// Web's `line-through` on muted text — a waived fee or a refunded line.
+  final bool struck;
 
   @override
   Widget build(BuildContext context) {
+    final valueStyle = struck
+        ? AppTypography.bodySm(
+            context.mutedForeground.withValues(alpha: 0.6),
+          ).copyWith(decoration: TextDecoration.lineThrough)
+        : AppTypography.bodySm(color ?? context.appColors.onSurface);
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -1040,10 +1093,7 @@ class _MoneyRow extends StatelessWidget {
               style: AppTypography.bodySm(context.mutedForeground),
             ),
           ),
-          Text(
-            formatRupiah(amount),
-            style: AppTypography.bodySm(context.appColors.onSurface),
-          ),
+          Text('$prefix${formatRupiah(amount)}', style: valueStyle),
         ],
       ),
     );

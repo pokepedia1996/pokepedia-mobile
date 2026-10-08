@@ -8,9 +8,9 @@ import '../../orders/usecase/orders_notifier.dart';
 import '../../wallet/usecase/wallet_notifier.dart';
 import '../repository/checkout_gateway.dart';
 import '../repository/checkout_pricing.dart';
+import '../repository/coupon_rules.dart';
 import '../repository/models/cart_item.dart';
 import '../repository/models/checkout_models.dart';
-import 'cart_notifier.dart';
 import 'cart_selection.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -51,9 +51,11 @@ class CheckoutState {
     this.address,
     this.shippingBySeller = const {},
     this.insuranceBySeller = const {},
-    this.coupon,
-    this.couponError,
-    this.couponLoading = false,
+    this.couponCatalog = const [],
+    this.couponOverrides = const CouponOverrides(subtotal: 0),
+    this.couponsLoading = false,
+    this.couponsError = false,
+    this.couponNotice,
     this.buyerNote = '',
     this.paymentMethod = PaymentMethod.xendit,
     this.paymentChannel,
@@ -70,9 +72,18 @@ class CheckoutState {
   final AddressModel? address;
   final Map<String, SellerShipping> shippingBySeller;
   final Map<String, bool> insuranceBySeller;
-  final AppliedCoupon? coupon;
-  final String? couponError;
-  final bool couponLoading;
+
+  /// Every coupon `/api/coupons/available` listed for this checkout,
+  /// eligible or not. What is *applied* is derived from this and
+  /// [couponOverrides] by [CheckoutNotifier.coupons].
+  final List<AvailableCoupon> couponCatalog;
+  final CouponOverrides couponOverrides;
+  final bool couponsLoading;
+  final bool couponsError;
+
+  /// Why the server just refused a coupon at submit, shown by the picker
+  /// until the buyer changes their selection.
+  final String? couponNotice;
   final String buyerNote;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
@@ -112,9 +123,11 @@ class CheckoutState {
     AddressModel? address,
     Map<String, SellerShipping>? shippingBySeller,
     Map<String, bool>? insuranceBySeller,
-    AppliedCoupon? coupon,
-    String? couponError,
-    bool? couponLoading,
+    List<AvailableCoupon>? couponCatalog,
+    CouponOverrides? couponOverrides,
+    bool? couponsLoading,
+    bool? couponsError,
+    String? couponNotice,
     String? buyerNote,
     PaymentMethod? paymentMethod,
     PaymentChannel? paymentChannel,
@@ -126,8 +139,7 @@ class CheckoutState {
     bool? contextLoading,
     String? contextError,
     bool? submitting,
-    bool clearCoupon = false,
-    bool clearCouponError = false,
+    bool clearCouponNotice = false,
     bool clearChannel = false,
     bool clearContextError = false,
   }) {
@@ -135,9 +147,13 @@ class CheckoutState {
       address: address ?? this.address,
       shippingBySeller: shippingBySeller ?? this.shippingBySeller,
       insuranceBySeller: insuranceBySeller ?? this.insuranceBySeller,
-      coupon: clearCoupon ? null : (coupon ?? this.coupon),
-      couponError: clearCouponError ? null : (couponError ?? this.couponError),
-      couponLoading: couponLoading ?? this.couponLoading,
+      couponCatalog: couponCatalog ?? this.couponCatalog,
+      couponOverrides: couponOverrides ?? this.couponOverrides,
+      couponsLoading: couponsLoading ?? this.couponsLoading,
+      couponsError: couponsError ?? this.couponsError,
+      couponNotice: clearCouponNotice
+          ? null
+          : (couponNotice ?? this.couponNotice),
       buyerNote: buyerNote ?? this.buyerNote,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentChannel: clearChannel
@@ -158,9 +174,10 @@ class CheckoutState {
 }
 
 /// Drives the native WTS checkout: address, per-seller courier and
-/// insurance, coupon, note, payment choice, and the totals that follow from
+/// insurance, coupons, note, payment choice, and the totals that follow from
 /// them. Ports `checkout-client.tsx` together with the `useShippingRates`,
-/// `useInsurance`, `usePayment` and `useCoupon` hooks it composes.
+/// `useInsurance`, `usePayment`, `useCouponCatalog` and `useCoupon` hooks it
+/// composes.
 class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   @override
   CheckoutState build() {
@@ -191,6 +208,8 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       _disposed = true;
       _rateDebounce?.cancel();
       _rateDebounce = null;
+      _couponDebounce?.cancel();
+      _couponDebounce = null;
     });
     return CheckoutState(
       walletBalance: ref.read(walletBalanceProvider).valueOrNull,
@@ -341,6 +360,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         SellerShipping(options: options, selected: preselected),
       );
       _syncMandatoryInsurance(sellerId);
+      _scheduleCouponCatalog();
     } on ApiException catch (e) {
       _setShipping(sellerId, SellerShipping(error: userFacingError(e)));
     }
@@ -379,7 +399,15 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   /// Until the buyer picks for themselves, this also *chooses* for them —
   /// see [_autoSelectPayment]. After they pick, it only ever repairs a
   /// channel the total has invalidated, and a buyer on Saldo stays there.
+  ///
+  /// The coupon catalog is priced against the channel, so a channel this
+  /// settles on is also what the next catalog fetch is asked about.
   void _syncChannel() {
+    _repairChannel();
+    _scheduleCouponCatalog();
+  }
+
+  void _repairChannel() {
     final total = totals.grandTotalBeforeFee;
     if (total <= 0) return;
 
@@ -403,14 +431,22 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   }
 
   /// Applies [autoSelectPayment], which is where the rule itself lives.
+  ///
+  /// Only a fee waiver the buyer picked holds them on the gateway. One the
+  /// catalog applied by default is worth exactly what saldo already saves,
+  /// so it is no reason to keep them off saldo.
   void _autoSelectPayment(int total) {
     final pick = autoSelectPayment(
       grandTotalIdr: total,
       // Unknown reads as nothing to spend, so auto-select never lands on
       // saldo before the balance is in.
       walletBalance: state.walletBalance ?? 0,
+      walletAmountDue: totals.walletAmountDue,
       lastPaidChannel: state.lastPaidChannel,
-      holdsFeeWaiver: state.coupon?.waivesGatewayFee ?? false,
+      holdsFeeWaiver: state.couponOverrides.chose(
+        CouponSlot.fee,
+        itemsSubtotal,
+      ),
     );
 
     if (state.paymentMethod == pick.method &&
@@ -455,15 +491,16 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     _syncChannel();
   }
 
+  /// A fee waiver needs no clearing here: [coupons] drops it for as long as
+  /// saldo is the method, and brings it back if the buyer returns to a
+  /// gateway channel — the same derivation `useCoupon` does.
   void selectWallet() {
     state = state.copyWith(
       paymentMethod: PaymentMethod.wallet,
       clearChannel: true,
       paymentTouched: true,
-      // A wallet payment charges no gateway fee, so a fee-waiver coupon has
-      // nothing left to waive.
-      clearCoupon: state.coupon?.waivesGatewayFee ?? false,
     );
+    _scheduleCouponCatalog();
   }
 
   void setWalletBalance(int balance) {
@@ -474,30 +511,126 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     _syncChannel();
   }
 
-  Future<void> applyCoupon(String code) async {
-    final trimmed = code.trim();
-    if (trimmed.isEmpty) return;
-    state = state.copyWith(couponLoading: true, clearCouponError: true);
-    final result = await ref
-        .read(cartRepositoryProvider)
-        .applyCoupon(
-          code: trimmed,
-          itemsSubtotal: itemsSubtotal,
-          paymentChannel: state.paymentChannel?.code,
-        );
+  /// Coalesces the courier, channel and insurance changes that each move
+  /// the catalog's inputs — `CATALOG_DEBOUNCE_MS` in `useCouponCatalog.ts`.
+  Timer? _couponDebounce;
+  static const _couponDebounceDelay = Duration(milliseconds: 400);
+
+  /// How long a catalog fetched for the same inputs is reused —
+  /// `CATALOG_TTL_MS`.
+  static const _couponCatalogTtl = Duration(seconds: 60);
+
+  String? _couponSignature;
+  String? _couponRequestedSignature;
+  DateTime? _couponFetchedAt;
+  int _couponGeneration = 0;
+
+  String get _currentCouponSignature =>
+      '$itemsSubtotal|$shippingTotal|${state.paymentChannel?.code ?? '-'}|'
+      '${[for (final item in _items) item.cartItemId].join(',')}';
+
+  /// Auto-apply needs the catalog before the picker is ever opened, so it
+  /// is fetched as soon as the cart and a courier are both settled.
+  ///
+  /// Inputs already asked about are not asked again — a failed fetch waits
+  /// for the buyer to open the picker or retry instead of looping.
+  void _scheduleCouponCatalog() {
     if (_disposed) return;
+    if (itemsSubtotal <= 0 || shippingTotal <= 0) return;
+    if (_currentCouponSignature == _couponRequestedSignature) return;
+    _couponDebounce?.cancel();
+    _couponDebounce = Timer(_couponDebounceDelay, loadCouponCatalog);
+  }
+
+  /// Ports `useCouponCatalog`'s `load`. [force] skips the freshness check,
+  /// for a retry or a coupon the server just refused.
+  Future<void> loadCouponCatalog({bool force = false}) async {
+    if (_disposed) return;
+    final signature = _currentCouponSignature;
+    final fetchedAt = _couponFetchedAt;
+    if (!force &&
+        signature == _couponSignature &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < _couponCatalogTtl) {
+      return;
+    }
+
+    _couponRequestedSignature = signature;
+    final generation = ++_couponGeneration;
+    state = state.copyWith(couponsLoading: true, couponsError: false);
+    try {
+      final coupons = await ref
+          .read(checkoutGatewayProvider)
+          .fetchAvailableCoupons(
+            shippingTotal: shippingTotal,
+            paymentChannel: state.paymentChannel,
+            selectedCartItemIds: [for (final item in _items) item.cartItemId],
+          );
+      if (_disposed || generation != _couponGeneration) return;
+      _couponSignature = signature;
+      _couponFetchedAt = DateTime.now();
+      state = state.copyWith(couponCatalog: coupons, couponsLoading: false);
+    } catch (e) {
+      if (_disposed || generation != _couponGeneration) return;
+      // A missing promo list costs the discount, not the checkout.
+      state = state.copyWith(couponsLoading: false, couponsError: true);
+    }
+    _syncChannel();
+  }
+
+  /// What each coupon slot holds right now — see [resolveCouponSelection].
+  CouponSelection get coupons => resolveCouponSelection(
+    catalog: state.couponCatalog,
+    overrides: state.couponOverrides,
+    itemsSubtotal: itemsSubtotal,
+    paymentMethod: state.paymentMethod,
+    paymentChannel: state.paymentChannel,
+    shippingTotal: shippingTotal,
+  );
+
+  /// Ports `useCoupon`'s `selectCoupon`.
+  void selectCoupon(AvailableCoupon coupon) =>
+      _setCouponSlot(coupon.slot, coupon.toApplied());
+
+  /// Ports `clearSlot`: the slot stays empty until the cart changes, rather
+  /// than snapping back to the default the buyer just declined.
+  void clearCouponSlot(CouponSlot slot) => _setCouponSlot(slot, null);
+
+  /// Ports `invalidateCoupon`: clears the coupon the server named, or every
+  /// slot when it named none.
+  void invalidateCoupon(int? couponId) {
+    final current = coupons;
+    final slot = couponId == null
+        ? null
+        : CouponSlot.values
+              .where((s) => current[s]?.couponId == couponId)
+              .firstOrNull;
+    if (slot != null) {
+      _setCouponSlot(slot, null, keepNotice: true);
+      return;
+    }
     state = state.copyWith(
-      couponLoading: false,
-      coupon: result.coupon,
-      couponError: result.error,
-      clearCoupon: result.coupon == null,
-      clearCouponError: result.error == null,
+      couponOverrides: CouponOverrides(
+        subtotal: itemsSubtotal,
+        slots: const {CouponSlot.shipping: null, CouponSlot.fee: null},
+      ),
     );
     _syncChannel();
   }
 
-  void removeCoupon() {
-    state = state.copyWith(clearCoupon: true, clearCouponError: true);
+  void _setCouponSlot(
+    CouponSlot slot,
+    AppliedCoupon? coupon, {
+    bool keepNotice = false,
+  }) {
+    state = state.copyWith(
+      couponOverrides: state.couponOverrides.withSlot(
+        slot,
+        coupon,
+        itemsSubtotal: itemsSubtotal,
+      ),
+      clearCouponNotice: !keepNotice,
+    );
     _syncChannel();
   }
 
@@ -528,7 +661,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     insuranceTotal: insuranceTotal,
     paymentMethod: state.paymentMethod,
     paymentChannel: state.paymentChannel,
-    appliedCoupon: state.coupon,
+    coupons: coupons,
   );
 
   /// Every reason the pay button stays disabled, in the same order the web
@@ -547,7 +680,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final balance = state.walletBalance;
       // Blocked either way, but only one of these is the buyer's problem.
       if (balance == null) return 'Memuat saldo...';
-      if (balance < totals.grandTotalBeforeFee) {
+      if (balance < totals.walletAmountDue) {
         return 'Saldo dompet tidak cukup.';
       }
     }
@@ -561,7 +694,9 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 
   /// Submits and returns where to go next: Xendit's hosted invoice for a
   /// card payment, or null when the wallet settled it outright. Throws
-  /// [ApiException] so the page can show the server's own message.
+  /// [ApiException] so the page can show the server's own message; a
+  /// [CouponInvalidException] also clears the refused coupon first, as
+  /// `useCheckoutSubmit` does.
   Future<CheckoutResult> submit() async {
     state = state.copyWith(submitting: true);
     try {
@@ -589,7 +724,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
             paymentMethod: state.paymentMethod,
             paymentChannel: state.paymentChannel,
             buyerNote: state.buyerNote,
-            couponCode: state.coupon?.code,
+            couponIds: coupons.ids,
             selectedCartItemIds: [for (final item in _items) item.cartItemId],
           );
 
@@ -608,8 +743,15 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         ref.invalidate(ordersProvider);
       }
       return result;
+    } on CouponInvalidException catch (e) {
+      if (!_disposed) {
+        state = state.copyWith(couponNotice: e.message);
+        invalidateCoupon(e.couponId);
+        unawaited(loadCouponCatalog(force: true));
+      }
+      rethrow;
     } finally {
-      state = state.copyWith(submitting: false);
+      if (!_disposed) state = state.copyWith(submitting: false);
     }
   }
 

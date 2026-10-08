@@ -833,9 +833,7 @@ class _SentRow extends StatelessWidget {
             ),
           ],
 
-          // The photos that went with the proposal. Sending these is what
-          // makes an offer above Rp100.000 valid, so a row without them was
-          // hiding the seller's actual evidence.
+          // Graded proposals must carry photos, so these are the seller's evidence.
           if (proposal.photos.isNotEmpty) ...[
             const SizedBox(height: 8),
             Align(

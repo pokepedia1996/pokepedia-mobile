@@ -174,6 +174,11 @@ class _Body extends StatelessWidget {
             children: [
               _MoneyRow(label: 'Subtotal', amount: detail.subtotal),
               _MoneyRow(label: 'Ongkir', amount: detail.shippingCost),
+              if (detail.shippingDiscount > 0)
+                _MoneyRow(
+                  label: 'Diskon ongkir',
+                  amount: -detail.shippingDiscount,
+                ),
               if (detail.insuranceFee > 0)
                 _MoneyRow(label: 'Asuransi', amount: detail.insuranceFee),
               Divider(color: context.borderColor, height: 20),

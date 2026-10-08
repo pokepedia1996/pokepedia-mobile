@@ -49,7 +49,7 @@ Map<String, dynamic> _item({
     'cancel_reason': null,
     'commission_amount': commission,
     'seller_net_amount': net,
-    'insurance_premium_idr': insurance,
+    'insurance_fee_idr': insurance,
   },
   'disputes': disputes,
 };

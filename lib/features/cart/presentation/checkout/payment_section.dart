@@ -11,6 +11,7 @@ class PaymentSection extends StatelessWidget {
   const PaymentSection({
     super.key,
     required this.grandTotalBeforeFee,
+    required this.walletAmountDue,
     required this.paymentMethod,
     required this.paymentChannel,
     required this.walletBalance,
@@ -18,6 +19,7 @@ class PaymentSection extends StatelessWidget {
   });
 
   final int grandTotalBeforeFee;
+  final int walletAmountDue;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
   final int? walletBalance;
@@ -43,6 +45,7 @@ class PaymentSection extends StatelessWidget {
           const SizedBox(height: 10),
           PaymentMethodPicker(
             grandTotal: grandTotalBeforeFee,
+            walletAmountDue: walletAmountDue,
             paymentMethod: paymentMethod,
             selectedChannel: paymentChannel,
             walletBalance: walletBalance,

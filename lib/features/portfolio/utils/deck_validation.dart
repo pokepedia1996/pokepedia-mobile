@@ -125,5 +125,8 @@ String translateDeckCardError(String raw) {
   if (raw.contains('Only 1 ACE card allowed')) {
     return 'Hanya boleh 1 kartu ACE per dek';
   }
+  if (raw.contains('sealed_not_allowed_in_deck')) {
+    return 'Produk sealed tidak bisa ditambahkan ke deck';
+  }
   return 'Gagal memperbarui kartu di deck';
 }

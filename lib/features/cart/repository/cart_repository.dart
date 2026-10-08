@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import 'models/cart_item.dart';
-import 'models/checkout_session_models.dart';
 
 /// A business-rule rejection from `add_to_cart`/`remove_from_cart`, mirroring
 /// the RPC error codes documented in `pokepedia-web/docs/reference/api/cart.md`
@@ -208,50 +207,6 @@ class CartRepository {
     if (error != null) throw CartException(error);
   }
 
-  /// Quotes a promo code against the cart subtotal through the same
-  /// `apply_coupon` RPC the web's `/api/coupons/apply` wraps. This only
-  /// validates and prices the discount — the coupon is actually redeemed
-  /// server-side when the invoice is created.
-  /// [paymentChannel] is the Xendit channel code the buyer has picked. It is
-  /// required rather than optional, and not because the discount needs it:
-  /// `apply_coupon` is overloaded, and the 4-argument form differs from the
-  /// 5-argument one only by this parameter. Sending `p_gateway_fee` without
-  /// it matched both, and PostgREST refuses an ambiguous call —
-  /// "Could not choose the best candidate function between: ...". Naming the
-  /// channel picks the 5-argument overload outright, which is the same one
-  /// web's `/api/coupons/apply` reaches.
-  ///
-  /// The coupon button is gated on a channel being chosen, so there is always
-  /// one to send by the time this runs.
-  Future<CouponResult> applyCoupon({
-    required String code,
-    required int itemsSubtotal,
-    required String? paymentChannel,
-  }) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) {
-      return const CouponResult(error: 'Masuk dulu untuk pakai promo.');
-    }
-    try {
-      final result = await _client.rpc(
-        'apply_coupon',
-        params: {
-          'p_code': code.trim().toUpperCase(),
-          'p_user_id': userId,
-          'p_items_subtotal': itemsSubtotal,
-          // `p_gateway_fee` is deliberately not sent: the 5-argument overload
-          // defaults it, and the server derives the fee from the channel
-          // rather than trusting a number the client made up. Web omits it
-          // for the same reason.
-          'p_payment_channel': paymentChannel,
-        },
-      );
-      return CouponResult.fromRpc(result as Map<String, dynamic>?);
-    } on PostgrestException {
-      return const CouponResult(error: 'Gagal memeriksa kode promo.');
-    }
-  }
-
   /// Runs the same `validate_cart` RPC the web checkout route calls first,
   /// so a listing that sold out or was cancelled is caught in the app
   /// instead of failing inside the payment WebView. Returns one message per
@@ -273,26 +228,35 @@ class CartRepository {
           final id = (item['cart_item_id'] as num?)?.toInt();
           return id != null && only.contains(id);
         })
-        .map((item) {
-          switch (item['reason'] as String?) {
-            case 'order_not_found':
-            case 'listing_cancelled':
-              return 'Satu listing sudah dibatalkan penjual.';
-            case 'listing_expired':
-              return 'Satu listing sudah kedaluwarsa.';
-            case 'listing_matched':
-              return 'Satu listing sudah terjual.';
-            case 'not_an_ask_order':
-              return 'Satu item bukan listing yang bisa dibeli.';
-            case 'seller_on_vacation':
-              return 'Penjual sedang libur, satu item tidak bisa diproses.';
-            case 'insufficient_quantity':
-              final available = (item['available'] as num?)?.toInt() ?? 0;
-              return 'Stok satu listing tinggal $available.';
-            default:
-              return 'Satu item di keranjang tidak bisa diproses.';
-          }
-        })
+        .map(
+          (item) => cartLineProblemMessage(
+            item['reason'] as String?,
+            available: (item['available'] as num?)?.toInt(),
+          ),
+        )
         .toList();
+  }
+}
+
+/// One sentence for a cart line `validate_cart` refused, keyed by its
+/// `reason`. Shared by the pre-submit check and the `droppedItems` that
+/// `/api/cart/checkout` reports, which carry the same reasons.
+String cartLineProblemMessage(String? reason, {int? available}) {
+  switch (reason) {
+    case 'order_not_found':
+    case 'listing_cancelled':
+      return 'Satu listing sudah dibatalkan penjual.';
+    case 'listing_expired':
+      return 'Satu listing sudah kedaluwarsa.';
+    case 'listing_matched':
+      return 'Satu listing sudah terjual.';
+    case 'not_an_ask_order':
+      return 'Satu item bukan listing yang bisa dibeli.';
+    case 'seller_on_vacation':
+      return 'Penjual sedang libur, satu item tidak bisa diproses.';
+    case 'insufficient_quantity':
+      return 'Stok satu listing tinggal ${available ?? 0}.';
+    default:
+      return 'Satu item di keranjang tidak bisa diproses.';
   }
 }
