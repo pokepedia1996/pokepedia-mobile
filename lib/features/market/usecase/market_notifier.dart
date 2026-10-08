@@ -195,7 +195,7 @@ final storeListingsProvider = FutureProvider.family<List<ListingModel>, String>(
 );
 
 /// A seller's feedback summary and their reviews. Keyed by the seller's
-/// `user_id`, which is what `trade_ratings` and the counts RPC take.
+/// `user_id`, which is what both feedback RPCs take.
 final storeFeedbackSummaryProvider =
     FutureProvider.family<StoreFeedbackSummary, String>((ref, userId) {
       return ref.read(marketRepositoryProvider).fetchFeedbackSummary(userId);

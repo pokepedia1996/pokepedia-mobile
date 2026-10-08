@@ -106,6 +106,11 @@ final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((
 /// language to stay inside.
 typedef CardPickerQuery = ({String query, CardLanguage? language});
 
+/// The deck builder's card search — sealed products left out, prices on.
+final deckCardSearchProvider = FutureProvider.family<List<CardModel>, String>(
+  (ref, query) => ref.read(portfolioRepositoryProvider).searchDeckCards(query),
+);
+
 /// Catalog search for the "Tambahkan" tab's card picker.
 final cardSearchPickerProvider =
     FutureProvider.family<List<CardModel>, CardPickerQuery>((ref, key) {

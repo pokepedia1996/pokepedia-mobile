@@ -44,20 +44,19 @@ const marketFacetPreviewCount = 5;
 
 /// The card types the market filters by, in web's `CARD_TYPE_ORDER`.
 ///
-/// Raw catalog values rather than [CardCategory], because the enum has no
-/// `sealed` member — 'Sealed' falls through `CardCategoryX.fromRaw` and
-/// arrives as `pokemon`. Filtering by it is what the enum cannot express, so
-/// the facet and the filter both speak the column's own language, exactly as
-/// `p_categories` does.
-const marketCardTypes = ['Pokemon', 'Trainer', 'Energy', 'Sealed'];
+/// Kept as the raw catalog values of [CardCategory] because that is what the
+/// facet counts are keyed by and what `p_categories` takes.
+final marketCardTypes = [
+  for (final category in CardCategory.values) category.raw,
+];
 
 /// What each of [marketCardTypes] is called on screen — `CATEGORY_LABELS` in
 /// `lib/cards/category.ts`.
-const marketCardTypeLabels = {
-  'Pokemon': 'Pokémon',
-  'Trainer': 'Trainer',
-  'Energy': 'Energy',
-  'Sealed': 'Produk Segel',
+final marketCardTypeLabels = {
+  CardCategory.pokemon.raw: 'Pokémon',
+  CardCategory.trainer.raw: 'Trainer',
+  CardCategory.energy.raw: 'Energy',
+  CardCategory.sealed.raw: 'Produk Segel',
 };
 
 /// `BULK_RARITIES` in `listing-filters.ts` — the commons "exclude bulk"
@@ -86,8 +85,7 @@ class MarketFilters {
   final Set<CardCondition> conditions;
   final Set<String> rarities;
 
-  /// Card types as the catalog spells them, so 'Sealed' can be one of them.
-  /// See [marketCardTypes].
+  /// Card types as the catalog spells them. See [marketCardTypes].
   final Set<String> categories;
 
   /// Trainer subtypes as the catalog spells them ("Pokémon Tool", accent and

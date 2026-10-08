@@ -170,7 +170,7 @@ void main() {
   group('CollectionFacets.toFilterOptions', () {
     test('drops values the chips cannot name', () {
       const facets = CollectionFacets(
-        categories: ['Energy', 'Pokemon', 'Sealed', 'Trainer'],
+        categories: ['Energy', 'Pokemon', 'Sealed', 'Trainer', 'Unknown'],
         types: ['Fire', 'Water', 'Unknown'],
         evolutionStages: ['Basic', 'VMAX'],
         rarities: ['C', 'U', 'SAR'],
@@ -180,6 +180,7 @@ void main() {
       expect(options.categories, [
         CardCategory.energy,
         CardCategory.pokemon,
+        CardCategory.sealed,
         CardCategory.trainer,
       ]);
       expect(options.types, [PokemonType.fire, PokemonType.water]);

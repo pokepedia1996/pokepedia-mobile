@@ -403,7 +403,9 @@ List<Widget> _listingCells(
       overflow: TextOverflow.ellipsis,
       style: AppTypography.caption(context.mutedForeground),
     ),
-    ConditionBadge(condition: listing.condition, dense: true),
+    listing.card.isSealed
+        ? Text('-', style: AppTypography.caption(context.mutedForeground))
+        : ConditionBadge(condition: listing.condition, dense: true),
     Text(
       formatRupiah(listing.price),
       maxLines: 1,
@@ -770,7 +772,9 @@ List<Widget> _draftCells(
       overflow: TextOverflow.ellipsis,
       style: AppTypography.caption(context.mutedForeground),
     ),
-    ConditionBadge(condition: draft.condition, dense: true),
+    draft.card.isSealed
+        ? Text('-', style: AppTypography.caption(context.mutedForeground))
+        : ConditionBadge(condition: draft.condition, dense: true),
     Text('×${draft.quantity}', style: AppTypography.caption(colors.onSurface)),
     Text(
       // The gap a draft exists to hold: no price yet means it can't be

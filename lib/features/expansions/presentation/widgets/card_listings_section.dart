@@ -10,6 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/models/card_model.dart';
 import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/condition_grade_picker.dart';
@@ -112,14 +113,16 @@ class _CardListingsSectionState extends ConsumerState<CardListingsSection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ConditionGradePicker(
-                      value: _condition,
-                      onChanged: (value) => setState(() {
-                        _condition = value;
-                        _visible = _pageSize;
-                      }),
-                    ),
-                    const SizedBox(height: 10),
+                    if (!isSealedCardId(widget.cardId)) ...[
+                      ConditionGradePicker(
+                        value: _condition,
+                        onChanged: (value) => setState(() {
+                          _condition = value;
+                          _visible = _pageSize;
+                        }),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Row(
                       children: [
                         Expanded(
@@ -375,8 +378,10 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                             color: colors.primary,
                           ),
                         ],
-                        const SizedBox(width: 6),
-                        ConditionBadge(condition: listing.condition),
+                        if (!listing.card.isSealed) ...[
+                          const SizedBox(width: 6),
+                          ConditionBadge(condition: listing.condition),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 2),

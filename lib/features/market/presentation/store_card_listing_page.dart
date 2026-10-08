@@ -810,6 +810,8 @@ class _PurchasePanelState extends State<_PurchasePanel> {
     final store = widget.store;
     final colors = context.appColors;
     final vacationHard = store.vacationMode == 'hard';
+    // `hideCondition` on web: a sealed product is sold as-is, ungraded.
+    final hideCondition = active.card.isSealed;
 
     // Grades grouped by company, in `CONDITION_COMPANIES` order.
     final byCompany = <String, List<CardCondition>>{};
@@ -834,7 +836,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.cheapestByCondition.length > 1)
+          if (!hideCondition && widget.cheapestByCondition.length > 1)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Wrap(
@@ -890,12 +892,14 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                           Row(
                             children: [
                               // Spelled out here, as web does in this panel.
-                              ConditionBadge(
-                                condition: active.condition,
-                                full: true,
-                                colored: true,
-                              ),
-                              const SizedBox(width: 8),
+                              if (!hideCondition) ...[
+                                ConditionBadge(
+                                  condition: active.condition,
+                                  full: true,
+                                  colored: true,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
                               Text(
                                 '${active.available} tersedia',
                                 style: AppTypography.caption(

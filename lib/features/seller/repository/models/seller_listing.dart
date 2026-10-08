@@ -33,6 +33,17 @@ enum SellerListingBucket {
 
   bool get isArchived => this == SellerListingBucket.archived;
 
+  /// The `p_bucket` value `get_seller_listings_page` takes, and the key
+  /// `get_seller_listing_tab_counts` answers under. Null for the two tabs
+  /// that don't read `listings`.
+  String? get rpcValue => switch (this) {
+    SellerListingBucket.active => 'active',
+    SellerListingBucket.inactive => 'inactive',
+    SellerListingBucket.archived => 'archive',
+    SellerListingBucket.draft => 'draft',
+    SellerListingBucket.preferences => null,
+  };
+
   /// The three that read `listings`. Draft reads `listing_drafts` and
   /// Preferensi reads no list at all.
   bool get isListingBucket =>
@@ -47,7 +58,7 @@ enum SellerListingBucket {
 /// toggles a buyer never gets.
 class SellerListing {
   const SellerListing({
-    required this.id,
+    this.id,
     required this.slug,
     required this.card,
     required this.price,
@@ -64,7 +75,8 @@ class SellerListing {
     this.photoUrls = const [],
   });
 
-  final int id;
+  /// Absent from `get_seller_listings_page` rows, which key on [slug].
+  final int? id;
 
   /// `listings.slug` is a uuid, and it's what every seller RPC takes.
   final String slug;
@@ -102,18 +114,24 @@ class SellerListing {
   bool get isExpired =>
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
 
-  /// The bucket this row belongs to, by the same predicates the server uses.
+  /// The bucket this row belongs to, by the same predicates the server uses
+  /// (`listing-buckets.ts` / `get_seller_listings_page`).
   SellerListingBucket get bucket {
     if (isArchived) return SellerListingBucket.archived;
     if (status == 'open' && !isExpired) return SellerListingBucket.active;
     return SellerListingBucket.inactive;
   }
 
+  /// Reads a `get_seller_listings_page` row, whose card fields sit flat
+  /// beside the listing's (`card_id`, `card_name`, ...), or a `listings` row
+  /// with its card embedded under `cards`.
   factory SellerListing.fromRow(Map<String, dynamic> row) {
     return SellerListing(
-      id: row['id'] as int,
+      id: (row['id'] as num?)?.toInt(),
       slug: row['slug'] as String? ?? '',
-      card: CardModel.fromRow(row['cards'] as Map<String, dynamic>),
+      card: CardModel.fromRow(
+        row['cards'] as Map<String, dynamic>? ?? _flatCard(row),
+      ),
       price: (row['price'] as num?)?.toInt() ?? 0,
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: (row['quantity'] as num?)?.toInt() ?? 0,
@@ -131,6 +149,76 @@ class SellerListing {
           .toList(),
     );
   }
+
+  /// The card columns of a page row, renamed to the catalog's own so
+  /// [CardModel.fromRow] reads them. Web falls back to `Kartu #<id>` for a
+  /// missing name the same way (`toSellerListing`).
+  static Map<String, dynamic> _flatCard(Map<String, dynamic> row) {
+    final cardId = (row['card_id'] as num?)?.toInt() ?? 0;
+    return {
+      'id': cardId,
+      'name_id': row['card_name'] as String? ?? 'Kartu #$cardId',
+      'expansion_code': row['expansion_code'],
+      'collector_number': row['collector_number'],
+      'rarity': row['rarity'],
+      'image_url': row['image_url'],
+      'language': row['language'],
+      'variant': row['variant'],
+    };
+  }
+}
+
+/// One page of `get_seller_listings_page`: the rows on it, and the totals
+/// across the whole filtered bucket that web prints above its table.
+class SellerListingsPage {
+  const SellerListingsPage({
+    this.rows = const [],
+    this.totalCount = 0,
+    this.totalValue = 0,
+    this.totalQty = 0,
+    this.offersCount = 0,
+  });
+
+  /// Mirrors web's `fetchSellerListingsPage`: a row that won't parse is
+  /// dropped rather than failing the page around it.
+  factory SellerListingsPage.fromJson(Map<String, dynamic> json) {
+    int count(String key) => (json[key] as num?)?.toInt() ?? 0;
+    final rows = <SellerListing>[];
+    for (final raw in (json['rows'] as List?) ?? const []) {
+      if (raw is! Map<String, dynamic>) continue;
+      try {
+        rows.add(SellerListing.fromRow(raw));
+      } on Object {
+        continue;
+      }
+    }
+    return SellerListingsPage(
+      rows: rows,
+      totalCount: count('total_count'),
+      totalValue: count('total_value'),
+      totalQty: count('total_qty'),
+      offersCount: count('offers_count'),
+    );
+  }
+
+  final List<SellerListing> rows;
+  final int totalCount;
+  final int totalValue;
+  final int totalQty;
+
+  /// How many listings in the bucket hold a live offer.
+  final int offersCount;
+}
+
+/// Reads `get_seller_listing_tab_counts`, keyed by tab. A missing or
+/// non-numeric key counts as zero, as web's `fetchSellerListingTabCounts`.
+Map<SellerListingBucket, int> parseSellerTabCounts(Object? json) {
+  final raw = json is Map ? json : const {};
+  return {
+    for (final bucket in SellerListingBucket.values)
+      if (bucket.rpcValue case final key?)
+        bucket: raw[key] is num ? (raw[key] as num).toInt() : 0,
+  };
 }
 
 /// A listing the seller started but hasn't posted — `listing_drafts`, which
@@ -247,13 +335,18 @@ class ListingDefaults {
 
 /// The columns web's product tables order by (`SellerListingSortCol`).
 enum ListingSortCol {
-  name,
-  expansion,
-  number,
-  condition,
-  price,
-  quantity,
-  views,
+  name('cardName'),
+  expansion('expansionCode'),
+  number('collectorNumber'),
+  condition('condition'),
+  price('price'),
+  quantity('quantity'),
+  views('viewCount');
+
+  const ListingSortCol(this.rpcValue);
+
+  /// The `p_sort_col` whitelist entry in `get_seller_listings_page`.
+  final String rpcValue;
 }
 
 /// Which column the table is ordered by, and which way.
@@ -268,8 +361,11 @@ class ListingSort {
   ListingSort toggled(ListingSortCol next) =>
       col == next ? ListingSort(col, ascending: !ascending) : ListingSort(next);
 
-  /// Applied client-side: the app already holds the seller's whole page of
-  /// listings, and the RPC that sorts server-side isn't deployed.
+  /// `p_sort_dir` for `get_seller_listings_page`.
+  String get rpcDirection => ascending ? 'asc' : 'desc';
+
+  /// The same order applied to rows already in hand, for `ListingTable`.
+  /// The product list itself is ordered server-side.
   List<SellerListing> apply(List<SellerListing> listings) {
     int compare(SellerListing a, SellerListing b) => switch (col) {
       ListingSortCol.name => a.card.name.toLowerCase().compareTo(

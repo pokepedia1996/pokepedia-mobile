@@ -106,6 +106,51 @@ class CourierOption {
   String get optionKey => '$courier-$service';
 }
 
+/// Why `/api/shipping/rates` offered fewer couriers than exist on the route.
+/// Ports `RatesReason` and `resolveRatesReason` from `features/checkout`.
+enum RatesReason {
+  /// Biteship quoted nothing at all for this origin and destination.
+  noCoverage,
+
+  /// Biteship quoted the route, but none of it is a courier the seller accepts.
+  sellerRestricted,
+
+  /// Some quotes survived the seller's courier whitelist, but not all.
+  sellerRestrictedPartial;
+
+  /// Unknown or absent values read as null, as `RATES_REASONS.find` does.
+  static RatesReason? fromWire(Object? raw) => switch (raw) {
+    'no_coverage' => RatesReason.noCoverage,
+    'seller_restricted' => RatesReason.sellerRestricted,
+    'seller_restricted_partial' => RatesReason.sellerRestrictedPartial,
+    _ => null,
+  };
+}
+
+/// What the courier section says when a quote came back empty —
+/// `EMPTY_COURIER_MESSAGES` in `seller-group-card.tsx`, where a missing
+/// reason is its `unavailable` entry.
+String emptyCourierMessage(RatesReason? reason) => switch (reason) {
+  RatesReason.noCoverage => 'Penjual ini tidak melayani pengiriman ke alamatmu',
+  RatesReason.sellerRestricted || RatesReason.sellerRestrictedPartial =>
+    'Penjual ini tidak menerima kurir yang melayani rute ke alamatmu',
+  null => 'Layanan kurir sedang gangguan',
+};
+
+/// The hint web shows above a courier list the seller's whitelist trimmed.
+const partialCourierListHint =
+    'Penjual ini hanya menerima sebagian kurir, jadi pilihannya lebih '
+    'sedikit dari biasanya.';
+
+/// One `POST /api/shipping/rates` answer: the quotes plus, when the list is
+/// short or empty, the reason it is.
+class RateQuote {
+  const RateQuote({this.services = const [], this.reason});
+
+  final List<CourierOption> services;
+  final RatesReason? reason;
+}
+
 /// Where a seller's parcels leave from, and which couriers they accept —
 /// one entry of `GET /api/cart`'s `sellerOrigins`.
 ///

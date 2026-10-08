@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_radius.dart';
+import '../utils/sealed_image.dart';
 import 'shimmer_box.dart';
 
 /// Pokemon-card artwork (245:342 aspect ratio).
@@ -11,6 +12,9 @@ import 'shimmer_box.dart';
 /// back used to stand in for all three, which read as "this card has no art"
 /// while it was simply loading — and paid for a decode of the bundled asset
 /// on every tile in a grid to say so.
+///
+/// Sealed-product photos are contained rather than cropped, and drawn from
+/// their thumbnail unless [thumbnail] is off — web's `cardTileImage`.
 class CardArt extends StatelessWidget {
   const CardArt({
     super.key,
@@ -18,6 +22,7 @@ class CardArt extends StatelessWidget {
     this.borderRadius = AppRadius.md,
     this.aspectRatio = 245 / 342,
     this.alignment = Alignment.center,
+    this.thumbnail = true,
   });
 
   final String? imageUrl;
@@ -33,9 +38,14 @@ class CardArt extends StatelessWidget {
   /// text.
   final Alignment alignment;
 
+  /// Whether a sealed product loads its thumbnail. Off for a hero drawn
+  /// wider than the thumbnail, which web loads at full size too.
+  final bool thumbnail;
+
   @override
   Widget build(BuildContext context) {
-    final url = imageUrl;
+    final tile = cardTileImage(imageUrl);
+    final url = thumbnail || !tile.contain ? tile.url : imageUrl;
 
     return AspectRatio(
       aspectRatio: aspectRatio,
@@ -48,7 +58,7 @@ class CardArt extends StatelessWidget {
               : LayoutBuilder(
                   builder: (context, constraints) => Image.network(
                     url,
-                    fit: BoxFit.cover,
+                    fit: tile.contain ? BoxFit.contain : BoxFit.cover,
                     alignment: alignment,
                     // Decoded at the size it is drawn at. A catalog scan is
                     // ~750px wide and a grid tile is ~180: without this each

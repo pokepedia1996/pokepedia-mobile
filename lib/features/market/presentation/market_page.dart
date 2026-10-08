@@ -785,9 +785,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
             children: [
               // Only the types the feed actually holds, in web's order —
               // `sortedCategoryFacets`. Listing a type with nothing behind it
-              // offers a filter that can only empty the grid, and reading the
-              // facets rather than an enum is also what lets 'Produk Segel'
-              // appear here at all: `CardCategory` has no member for it.
+              // offers a filter that can only empty the grid.
               for (final category in _cardTypeOptions(facets)) ...[
                 if (category == _trainerType)
                   _FilterCheckRow(

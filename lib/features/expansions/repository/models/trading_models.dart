@@ -1,4 +1,6 @@
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/utils/seller_identity.dart';
+import 'store_identity.dart';
 
 /// What the `place_order` RPC answered. Every failure comes back as a
 /// machine-readable `error` string in the jsonb payload rather than a
@@ -110,6 +112,33 @@ class MatchingAsk {
     required this.storeName,
   });
 
+  /// A `listings` row from the matching-asks query, named through the
+  /// seller's [store] (from `get_store_identities`) or else their
+  /// [username].
+  factory MatchingAsk.fromRow(
+    Map<String, dynamic> row, {
+    StoreIdentity? store,
+    String? username,
+  }) {
+    return MatchingAsk(
+      slug: row['slug'] as String? ?? '',
+      cardId: (row['card_id'] as num).toInt(),
+      price: (row['price'] as num?)?.toInt() ?? 0,
+      condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
+      available:
+          ((row['quantity'] as num?)?.toInt() ?? 0) -
+          ((row['qty_locked'] as num?)?.toInt() ?? 0),
+      storeSlug: resolveSellerHandle(
+        storeSlug: store?.storeSlug,
+        username: username,
+      ),
+      storeName: resolveSellerName(
+        storeName: store?.storeName,
+        username: username,
+      ),
+    );
+  }
+
   final String slug;
   final int cardId;
   final int price;
@@ -117,4 +146,44 @@ class MatchingAsk {
   final int available;
   final String storeSlug;
   final String storeName;
+}
+
+/// What one bid price level holds for the caller, from
+/// `get_bid_proposal_level` — mirrors `BidProposalLevelSchema` in web's
+/// `features/proposals/schemas/bid-proposal.ts`.
+///
+/// The `eligible_*` pair leaves out bids the caller already has a pending
+/// proposal on, which the broadcast skips; the plain pair is the whole level.
+class BidProposalLevel {
+  const BidProposalLevel({
+    this.buyerCount = 0,
+    this.availableQty = 0,
+    this.eligibleCount = 0,
+    this.eligibleQty = 0,
+    this.alreadyProposedCount = 0,
+  });
+
+  factory BidProposalLevel.fromRow(Object? row) {
+    if (row is! Map) return const BidProposalLevel();
+    int read(String key) => (row[key] as num?)?.toInt() ?? 0;
+    return BidProposalLevel(
+      buyerCount: read('buyer_count'),
+      availableQty: read('available_qty'),
+      eligibleCount: read('eligible_count'),
+      eligibleQty: read('eligible_qty'),
+      alreadyProposedCount: read('already_proposed_count'),
+    );
+  }
+
+  final int buyerCount;
+  final int availableQty;
+  final int eligibleCount;
+  final int eligibleQty;
+  final int alreadyProposedCount;
+
+  bool get isEmpty => buyerCount == 0;
+
+  /// Every buyer at the level already has a pending proposal from the
+  /// caller, so a broadcast would reach nobody.
+  bool get allProposed => buyerCount > 0 && eligibleCount == 0;
 }

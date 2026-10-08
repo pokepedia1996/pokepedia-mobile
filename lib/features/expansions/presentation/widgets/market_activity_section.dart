@@ -9,6 +9,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/condition_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/image_lightbox.dart';
 import '../../repository/models/market_models.dart';
 import '../../usecase/expansions_notifier.dart';
@@ -143,7 +144,7 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
                       child: Text(
                         headline == null
                             ? 'Belum ada harga'
-                            : 'Harga ${headline.condition.short} terkini · '
+                            : 'Harga ${_conditionPrefix(headline.condition)}terkini · '
                                   '${_rangeDays == null ? '1 tahun' : '$_rangeDays hari'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -184,7 +185,7 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
                 ? const SizedBox(height: 180)
                 : MarketPriceChart(points: points, visibleConditions: visible),
           ),
-          if (points.isNotEmpty)
+          if (points.isNotEmpty && !isSealedCardId(widget.cardId))
             _ConditionLegend(
               conditions: _conditionsWithData(points),
               visible: visible,
@@ -198,6 +199,11 @@ class _MarketActivitySectionState extends ConsumerState<MarketActivitySection> {
       ),
     );
   }
+
+  /// "NM " before "terkini" — empty for a sealed product, which has no
+  /// condition to name.
+  String _conditionPrefix(CardCondition condition) =>
+      isSealedCardId(widget.cardId) ? '' : '${condition.short} ';
 
   /// The visible condition with data, preferring NM — web's `headline` memo.
   MarketHeadline? _headlineFor(

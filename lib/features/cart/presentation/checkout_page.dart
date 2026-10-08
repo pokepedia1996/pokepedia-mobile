@@ -20,7 +20,9 @@ import '../../account/repository/models/address_model.dart';
 import '../../account/usecase/address_notifier.dart';
 import '../repository/checkout_gateway.dart';
 import '../repository/models/cart_item.dart';
+import '../repository/models/checkout_deal.dart';
 import '../repository/models/checkout_models.dart';
+import '../usecase/cart_deals.dart';
 import '../usecase/cart_notifier.dart';
 import '../usecase/cart_selection.dart';
 import '../../orders/usecase/orders_notifier.dart';
@@ -57,6 +59,24 @@ class CheckoutPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<CheckoutPage> createState() => _CheckoutPageState();
 }
+
+/// Checkout for accepted bid proposals — web's `/cart/checkout?s=&d=`.
+///
+/// The deal ids are scoped onto this one page, so the checkout behind it is
+/// its own. Alone, the cart's selection never leaks into what gets invoiced;
+/// with [withCartSelection] the cart page's ticked lines are paid alongside.
+Route<void> dealCheckoutRoute(
+  List<String> dealExternalIds, {
+  bool withCartSelection = false,
+}) => MaterialPageRoute<void>(
+  builder: (_) => ProviderScope(
+    overrides: [
+      checkoutDealIdsProvider.overrideWithValue(dealExternalIds),
+      checkoutWithCartSelectionProvider.overrideWithValue(withCartSelection),
+    ],
+    child: const CheckoutPage(),
+  ),
+);
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Falls back to the primary address until the buyer picks another, then
@@ -148,16 +168,21 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   Future<void> _pay() async {
     final notifier = ref.read(checkoutProvider.notifier);
+    final isDealCheckout = notifier.isDealCheckout;
 
-    final problems = await ref
-        .read(cartRepositoryProvider)
-        .validate(only: ref.read(cartSelectionProvider));
-    if (!mounted) return;
-    if (problems.isNotEmpty) {
-      await ref.read(cartProvider.notifier).refresh();
+    // A deal's lines are not cart rows, so `validate_cart` has nothing to say
+    // about them; the route re-checks the deal itself before locking.
+    if (!isDealCheckout) {
+      final problems = await ref
+          .read(cartRepositoryProvider)
+          .validate(only: ref.read(cartSelectionProvider));
       if (!mounted) return;
-      _toast(problems.first);
-      return;
+      if (problems.isNotEmpty) {
+        await ref.read(cartProvider.notifier).refresh();
+        if (!mounted) return;
+        _toast(problems.first);
+        return;
+      }
     }
 
     try {
@@ -168,17 +193,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final externalId = result.externalId;
       // Read before anything mutates the cart: `selectedCartItemsProvider`
       // is derived from it, so it empties the moment the lines are removed.
-      final selected = ref.read(selectedCartItemsProvider);
+      final selected = isDealCheckout
+          ? const <CartItem>[]
+          : ref.read(selectedCartItemsProvider);
       final checkedOutItemIds = [for (final item in selected) item.cartItemId];
       // Copies, not cart lines: one line at quantity three is three cards.
-      final checkedOutCardCount = selected.fold<int>(
-        0,
-        (sum, item) => sum + item.quantity,
-      );
+      final checkedOutCardCount =
+          selected.fold<int>(0, (sum, item) => sum + item.quantity) +
+          ref
+              .read(checkoutProvider)
+              .deals
+              .fold<int>(0, (sum, deal) => sum + deal.quantity);
       // Totals derive from the same selection, so this has to be read here
       // too — after the refresh below it prices an empty cart.
       final paidFromSaldo = notifier.totals.walletAmountDue;
       final method = ref.read(checkoutProvider).paymentMethod;
+      final paidDeals = ref.read(checkoutProvider).deals.isNotEmpty;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
       // Paying from the wallet is settled by the time `submit` returns, so
@@ -187,6 +217,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // confirmation that anything happened. `submit` has already revalidated
       // the wallet and the order list; the saldo is spent.
       if (method == PaymentMethod.wallet) {
+        if (paidDeals) {
+          ref.invalidate(myPendingCheckoutsProvider);
+          ref.invalidate(cartDealsProvider);
+        }
         await ref.read(cartProvider.notifier).refresh();
         if (mounted) {
           context.goHomeThen(
@@ -224,6 +258,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // The checkout now exists as an unpaid cart, which is what Pesanan
         // shows under Belum Bayar.
         ref.invalidate(myPendingCheckoutsProvider);
+        if (paidDeals) ref.invalidate(cartDealsProvider);
 
         await closed;
         if (mounted) setState(() => _paying = false);
@@ -377,10 +412,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // Only what was ticked in the cart. `CheckoutNotifier` already prices
     // and submits the selection, so reading the whole cart here showed a
     // buyer two lines while charging them for one.
-    final items = ref.watch(selectedCartItemsProvider);
-    final cartIsEmpty = ref.watch(cartProvider).isEmpty;
     final state = ref.watch(checkoutProvider);
     final notifier = ref.watch(checkoutProvider.notifier);
+    final isDealCheckout = notifier.isDealCheckout;
+    final items = isDealCheckout
+        ? const <CartItem>[]
+        : ref.watch(selectedCartItemsProvider);
+    final cartIsEmpty = !isDealCheckout && ref.watch(cartProvider).isEmpty;
     final addresses = ref.watch(addressesProvider).valueOrNull ?? const [];
     final address = _syncAddress(addresses);
 
@@ -389,6 +427,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // whether saldo can cover the total.
 
     final groups = _groupBySeller(items);
+    final dealsBySeller = <String, List<CheckoutDeal>>{};
+    for (final deal in state.deals) {
+      (dealsBySeller[deal.sellerId] ??= []).add(deal);
+      groups.putIfAbsent(deal.sellerId, () => []);
+    }
     final totals = notifier.totals;
     final blockedReason = notifier.blockedReason;
 
@@ -409,9 +452,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             // Cart empty is checked first: with nothing in the cart there is
             // nothing to go back and select, so "Kembali ke Keranjang" would
             // be a dead end.
+            : isDealCheckout && state.deals.isEmpty
+            ? _DealCheckoutUnavailable(
+                loading: state.contextLoading,
+                error: state.contextError,
+                onRetry: notifier.loadContext,
+              )
             : cartIsEmpty
             ? const EmptyCartCard()
-            : items.isEmpty
+            : !isDealCheckout && items.isEmpty
             ? EmptyState(
                 icon: LucideIcons.square,
                 title: 'Belum ada kartu yang dipilih',
@@ -449,6 +498,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   for (final entry in groups.entries) ...[
                     SellerGroupCard(
                       items: entry.value,
+                      deals: dealsBySeller[entry.key] ?? const [],
                       courierOptions:
                           state.shippingBySeller[entry.key]?.options ??
                           const [],
@@ -465,6 +515,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                           state.contextLoading ||
                           (state.shippingBySeller[entry.key]?.loading ?? false),
                       ratesError: state.shippingBySeller[entry.key]?.error,
+                      ratesReason: state.shippingBySeller[entry.key]?.reason,
                       onRetryRates: () =>
                           notifier.fetchRatesForSeller(entry.key),
                     ),
@@ -528,6 +579,48 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       (map[item.listing.sellerId] ??= []).add(item);
     }
     return map;
+  }
+}
+
+/// A deal checkout with nothing to pay: still loading, the read failed, or
+/// the deal lapsed or was paid elsewhere since the buyer tapped it.
+class _DealCheckoutUnavailable extends StatelessWidget {
+  const _DealCheckoutUnavailable({
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const PikachuLoader();
+    final error = this.error;
+    if (error != null) {
+      return EmptyState(
+        icon: LucideIcons.circleAlert,
+        title: 'Gagal memuat penawaran',
+        description: error,
+        action: OutlinedButton(
+          onPressed: onRetry,
+          child: const Text('Coba lagi'),
+        ),
+      );
+    }
+    return EmptyState(
+      icon: LucideIcons.handshake,
+      title: 'Penawaran tidak tersedia',
+      description:
+          'Proposal ini sudah dibayar, dibatalkan, atau melewati batas '
+          'waktu pembayaran.',
+      action: ElevatedButton(
+        onPressed: () => Navigator.of(context).maybePop(),
+        child: const Text('Kembali'),
+      ),
+    );
   }
 }
 

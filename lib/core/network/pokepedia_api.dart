@@ -89,6 +89,45 @@ class PokepediaApi {
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
       _retrying(() => _send('POST', path, body));
 
+  /// JSON POST with no session attached — no bearer, no cookie — for the
+  /// few routes that take anonymous callers on purpose. Today only
+  /// `/api/promos/events`, which records signed-out events with a null
+  /// `user_id` and rate-limits per IP.
+  ///
+  /// Still carries the firewall header and still gets the challenge retry:
+  /// the edge rule is about this being the app, not about who is signed in.
+  /// There is no 401 recovery, because there is no session to refresh.
+  Future<Map<String, dynamic>> postAnonymous(
+    String path,
+    Map<String, dynamic> body,
+  ) => _retryingChallenge(() => _send('POST', path, body, anonymous: true));
+
+  /// The headers every request carries, apart from the body's content type.
+  ///
+  /// [bearer] and [cookie] are null on an anonymous request, and then neither
+  /// header is set at all — an empty `Authorization` would still be read by
+  /// `getRequestAuth` as an attempt to authenticate.
+  @visibleForTesting
+  static Map<String, String> requestHeaders({
+    String? bearer,
+    String? cookie,
+    String? bypass,
+  }) => {
+    HttpHeaders.acceptHeader: 'application/json',
+    // The documented transport for native clients: `getRequestAuth` reads
+    // this header first and hands the token straight to PostgREST, so RLS
+    // and `auth.uid()` resolve. The handoff is explicit that the app must not
+    // forge the `@supabase/ssr` cookie.
+    if (bearer != null) HttpHeaders.authorizationHeader: 'Bearer $bearer',
+    // Satisfies the Vercel firewall rule.
+    if (bypass != null) bypassHeader: bypass,
+    // Some routes authenticate from the browser's `@supabase/ssr` cookie
+    // rather than through `getRequestAuth`, and ignore the bearer entirely —
+    // `/api/scan` is one. Presenting the session in that shape as well is the
+    // only way a native client can satisfy them without a server change.
+    if (cookie != null) HttpHeaders.cookieHeader: cookie,
+  };
+
   /// `multipart/form-data` POST, for the routes that take a file rather than
   /// JSON — today only `/api/scan`, which reads its image out of a `FormData`.
   ///
@@ -190,18 +229,35 @@ class PokepediaApi {
         throw const ApiAuthRefusedException();
       }
     } on ApiChallengedException {
-      // The edge turned us away. Either we had no key yet or it was
-      // rotated; fetch it fresh and give the request one more go before
-      // telling the caller the site is unreachable.
-      _bypassKey = null;
-      if (await _fetchBypassKey() == null) throw _edgeUnreachable;
-      try {
-        return await send();
-      } on ApiChallengedException {
-        // Still challenged with a fresh key: the rule isn't matching, and
-        // callers only know how to handle "unreachable".
-        throw _edgeUnreachable;
-      }
+      return _afterChallenge(send);
+    }
+  }
+
+  /// The challenge half of [_retrying] alone, for [postAnonymous].
+  Future<Map<String, dynamic>> _retryingChallenge(
+    Future<Map<String, dynamic>> Function() send,
+  ) async {
+    try {
+      return await send();
+    } on ApiChallengedException {
+      return _afterChallenge(send);
+    }
+  }
+
+  /// The edge turned us away. Either we had no key yet or it was rotated;
+  /// fetch it fresh and give the request one more go before telling the
+  /// caller the site is unreachable.
+  Future<Map<String, dynamic>> _afterChallenge(
+    Future<Map<String, dynamic>> Function() send,
+  ) async {
+    _bypassKey = null;
+    if (await _fetchBypassKey() == null) throw _edgeUnreachable;
+    try {
+      return await send();
+    } on ApiChallengedException {
+      // Still challenged with a fresh key: the rule isn't matching, and
+      // callers only know how to handle "unreachable".
+      throw _edgeUnreachable;
     }
   }
 
@@ -279,12 +335,13 @@ class PokepediaApi {
     Map<String, dynamic>? body, {
     _MultipartBody? multipart,
     Duration? timeout,
+    bool anonymous = false,
   }) async {
     final deadline = timeout ?? _timeout;
     // Awaited here so the very first request already carries the header.
     await _ensureBypassKey();
-    final token = await _accessToken();
-    if (token == null) {
+    final token = anonymous ? null : await _accessToken();
+    if (!anonymous && token == null) {
       throw const ApiAuthException('Sesi kamu berakhir. Masuk lagi ya.');
     }
 
@@ -303,24 +360,11 @@ class PokepediaApi {
       for (var hop = 0; ; hop++) {
         final request = await client.openUrl(method, uri).timeout(deadline);
         request.followRedirects = false;
-        request.headers
-          ..set(HttpHeaders.acceptHeader, 'application/json')
-          // The documented transport for native clients: `getRequestAuth`
-          // reads this header first and hands the token straight to
-          // PostgREST, so RLS and `auth.uid()` resolve. The handoff is
-          // explicit that the app must not forge the `@supabase/ssr` cookie.
-          ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
-        // Satisfies the Vercel firewall rule.
-        if (bypass != null) request.headers.set(_bypassHeader, bypass);
-        // Some routes authenticate from the browser's `@supabase/ssr` cookie
-        // rather than through `getRequestAuth`, and ignore the header above
-        // entirely — `/api/scan` is one. Presenting the session in that
-        // shape as well is the only way a native client can satisfy them
-        // without a change on the server.
-        final cookie = _sessionCookie(token);
-        if (cookie != null) {
-          request.headers.set(HttpHeaders.cookieHeader, cookie);
-        }
+        requestHeaders(
+          bearer: token,
+          cookie: token == null ? null : _sessionCookie(token),
+          bypass: bypass,
+        ).forEach(request.headers.set);
         if (multipart != null) {
           // The boundary has to travel on the header, not just between the
           // parts — without it the server sees an unparseable body and
@@ -363,7 +407,9 @@ class PokepediaApi {
           '${bypass == null ? " (no bypass header)" : ""}'
           '${response.headers.value("x-vercel-mitigated") == null ? "" : " MITIGATED"}',
         );
-        debugPrint('[api] token: ${_describeToken(token)}');
+        debugPrint(
+          '[api] token: ${token == null ? "none (anonymous)" : _describeToken(token)}',
+        );
         if (body != null) debugPrint('[api] request: ${jsonEncode(body)}');
         // Never the body itself — it's a JPEG, and dumping it would bury the
         // rest of the log for the exact requests most in need of reading.
@@ -398,8 +444,10 @@ class PokepediaApi {
         // A 403 that names its own reason is the route refusing this action
         // (an unverified phone, say), not the session failing — retrying it
         // with a fresh token would only fail the same way, and the caller
-        // needs the server's sentence, not "sesi berakhir".
-        if (response.statusCode == 403 && decoded['error'] is String) {
+        // needs the server's sentence, not "sesi berakhir". With no session
+        // sent at all, there is nothing to refresh either way.
+        if (token == null ||
+            (response.statusCode == 403 && decoded['error'] is String)) {
           throw ApiException(
             _statedMessage(decoded) ?? ApiException.genericMessage,
             statusCode: response.statusCode,
@@ -589,7 +637,8 @@ class _MultipartBody {
 }
 
 /// The header the firewall rule matches on.
-const _bypassHeader = 'x-pokepedia-client';
+@visibleForTesting
+const bypassHeader = 'x-pokepedia-client';
 
 const _edgeUnreachable = ApiUnreachableException(
   'Layanan sedang tidak bisa dijangkau nih. Coba beberapa saat lagi ya..',

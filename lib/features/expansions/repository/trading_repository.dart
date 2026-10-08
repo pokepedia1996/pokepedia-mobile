@@ -3,25 +3,32 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/network/pokepedia_api.dart';
+import '../../../core/providers/device_fingerprint.dart';
 import '../../../shared/models/card_condition.dart';
-import '../../../shared/utils/seller_identity.dart';
+import 'models/store_identity.dart';
 import 'models/trading_models.dart';
 import '../../../core/errors/user_message.dart';
 
-/// Writes to the order book. Ports `POST /api/listings` — which is itself a
-/// thin wrapper over the `place_order` RPC — straight onto Supabase, since
-/// that RPC is `SECURITY DEFINER` and granted to `authenticated`, so every
-/// gate (phone verification, seller profile, self-trade, duplicates) is
-/// enforced server-side exactly as it is for the web.
+/// Writes to the order book.
 ///
-/// The web route additionally records a device fingerprint for its
-/// linked-account self-trade heuristic; the app has no fingerprint source,
-/// and `place_order`'s own `device_users` join still covers accounts linked
-/// by any previously recorded device.
+/// Placing an order goes through `POST /api/listings` rather than straight
+/// to `place_order`: the route drops photo URLs outside the caller's own
+/// `listing-photos/{uid}/` prefix (`isOwnedPhotoUrl`), records the device
+/// fingerprint the same-device guard joins on, and runs
+/// `auto_propose_to_matching_bids` for a new ask — none of which the RPC
+/// does on its own. The proposal RPCs below are still called directly.
 class TradingRepository {
-  TradingRepository(this._client);
+  TradingRepository(
+    this._client, {
+    PokepediaApi? api,
+    DeviceFingerprint? fingerprint,
+  }) : _api = api ?? PokepediaApi(_client),
+       _fingerprint = fingerprint ?? DeviceFingerprint();
 
   final SupabaseClient _client;
+  final PokepediaApi _api;
+  final DeviceFingerprint _fingerprint;
 
   /// Places a bid (WTB) or ask (WTS). [replace] expires the user's existing
   /// open order on this side first — the "duplicate" recovery path.
@@ -34,39 +41,100 @@ class TradingRepository {
     String? variantKey,
     bool replace = false,
     bool autoRelist = false,
+    bool acceptsOffers = false,
     List<String> photoUrls = const [],
   }) async {
+    String? deviceFingerprint;
     try {
-      final result = await _client.rpc(
-        'place_order',
-        params: {
-          'p_card_id': cardId,
-          'p_variant_key': variantKey,
-          'p_side': side,
-          'p_price': price,
-          'p_condition': condition.raw,
-          'p_quantity': quantity,
-          'p_replace': replace,
-          'p_auto_relist': autoRelist,
-          'p_photo_urls': side == 'ask' ? photoUrls : null,
-        },
+      deviceFingerprint = await _fingerprint.value();
+    } catch (_) {
+      // Best effort: a missing fraud signal must never block the listing.
+    }
+
+    try {
+      final json = await _api.post(
+        '/api/listings',
+        placeOrderBody(
+          cardId: cardId,
+          side: side,
+          price: price,
+          condition: condition,
+          quantity: quantity,
+          variantKey: variantKey,
+          replace: replace,
+          autoRelist: autoRelist,
+          acceptsOffers: acceptsOffers,
+          photoUrls: photoUrls,
+          deviceFingerprint: deviceFingerprint,
+        ),
       );
-
-      final payload = result as Map<String, dynamic>?;
-      if (payload == null) return const PlaceOrderResult.failed('unknown');
-      if (payload['ok'] == true) return const PlaceOrderResult.ok();
-
-      final error = payload['error'] as String? ?? 'unknown';
-      if (error == 'duplicate') {
-        return PlaceOrderResult.duplicate(
-          (payload['existing_price'] as num?)?.toInt() ?? 0,
-        );
-      }
-      return PlaceOrderResult.failed(error, side: side);
-    } on PostgrestException {
-      return const PlaceOrderResult.failed('unknown');
+      return json['ok'] == true
+          ? const PlaceOrderResult.ok()
+          : const PlaceOrderResult.failed('unknown');
+    } on ApiException catch (e) {
+      return placeOrderResultFromApi(e, side: side);
     }
   }
+
+  /// The `PlaceOrderBodySchema` body.
+  static Map<String, dynamic> placeOrderBody({
+    required int cardId,
+    required String side,
+    required int price,
+    required CardCondition condition,
+    required int quantity,
+    String? variantKey,
+    bool replace = false,
+    bool autoRelist = false,
+    bool acceptsOffers = false,
+    List<String> photoUrls = const [],
+    String? deviceFingerprint,
+  }) => {
+    'cardId': cardId,
+    'variantKey': variantKey,
+    'side': side,
+    'price': price,
+    'condition': condition.raw,
+    'quantity': quantity,
+    'replaceExisting': replace,
+    'autoRelist': autoRelist,
+    'acceptsOffers': acceptsOffers,
+    'photoUrls': side == 'ask' ? photoUrls : const <String>[],
+    if (deviceFingerprint != null) 'deviceFingerprint': deviceFingerprint,
+  };
+
+  /// Maps a `POST /api/listings` refusal back onto `place_order`'s codes, so
+  /// [PlaceOrderResult.messageId] keeps doing the wording per side.
+  ///
+  /// Most refusals name their code; three answer with only a sentence — the
+  /// route's own phone gate (403), `Jumlah tidak valid` and the graded-photo
+  /// rule (both 400) — and are recognised by it.
+  static PlaceOrderResult placeOrderResultFromApi(
+    ApiException e, {
+    required String side,
+  }) {
+    if (e is ApiAuthException) {
+      return PlaceOrderResult.failed('unauthorized', side: side);
+    }
+    if (e.code == 'duplicate') {
+      return PlaceOrderResult.duplicate(
+        (e.payload?['existingPrice'] as num?)?.toInt() ?? 0,
+      );
+    }
+    final code =
+        e.code ??
+        switch (e.message) {
+          _gradedPhotoRequired => 'photo_required',
+          _invalidQuantity => 'invalid_quantity',
+          _ when e.statusCode == 403 => 'phone_not_verified',
+          _ => 'unknown',
+        };
+    return PlaceOrderResult.failed(code, side: side);
+  }
+
+  /// `GRADED_PHOTO_REQUIRED_MESSAGE` in `lib/seller/listing-drafts.ts`.
+  static const _gradedPhotoRequired = 'Foto wajib untuk kartu graded (slab).';
+  static const _invalidQuantity = 'Jumlah tidak valid';
 
   /// Uploads a seller's own photos of the card to the `listing-photos`
   /// bucket and returns their public URLs, for `place_order`'s
@@ -99,43 +167,32 @@ class TradingRepository {
   /// How much a bid price level can still absorb, and how many buyers are
   /// behind it — what the proposal sheet caps its quantity to.
   ///
-  /// Ports `fetchLevel` in `bid-proposal-modal.tsx`. The caller's own bids
-  /// are excluded: you can't propose to yourself, and counting them would
-  /// promise quantity the broadcast will never reach.
-  Future<({int buyerCount, int availableQty})> fetchBidLevel({
+  /// Ports `fetchLevel` in `bid-proposal-modal.tsx`. The RPC applies the
+  /// same live-bid predicate `submit_bid_proposal_broadcast` does (not
+  /// expired, archived or deleted; not the caller's own) and splits out the
+  /// bids the caller already proposed to. Signed out or on error, the level
+  /// reads as empty.
+  Future<BidProposalLevel> fetchBidLevel({
     required int cardId,
     required CardCondition condition,
     required int price,
     String? variantKey,
   }) async {
-    final me = _client.auth.currentUser?.id;
-    if (me == null) return (buyerCount: 0, availableQty: 0);
-
-    var query = _client
-        .from('listings')
-        .select('quantity, qty_locked, user_id')
-        .eq('side', 'bid')
-        .eq('status', 'open')
-        .eq('card_id', cardId)
-        .eq('condition', condition.raw)
-        .eq('price', price)
-        .neq('user_id', me);
-    query = variantKey == null
-        ? query.isFilter('variant_key', null)
-        : query.eq('variant_key', variantKey);
-
-    final rows = await query as List;
-    var available = 0;
-    var buyers = 0;
-    for (final row in rows.cast<Map<String, dynamic>>()) {
-      final remaining =
-          ((row['quantity'] as num?)?.toInt() ?? 0) -
-          ((row['qty_locked'] as num?)?.toInt() ?? 0);
-      if (remaining <= 0) continue;
-      available += remaining;
-      buyers++;
+    if (_client.auth.currentUser == null) return const BidProposalLevel();
+    try {
+      final result = await _client.rpc(
+        'get_bid_proposal_level',
+        params: {
+          'p_card_id': cardId,
+          'p_variant_key': variantKey,
+          'p_condition': condition.raw,
+          'p_price': price,
+        },
+      );
+      return BidProposalLevel.fromRow(result);
+    } on PostgrestException {
+      return const BidProposalLevel();
     }
-    return (buyerCount: buyers, availableQty: available);
   }
 
   /// Offers the caller's card to every buyer bidding at one price level.
@@ -308,10 +365,13 @@ class TradingRepository {
     }
   }
 
-  /// Ports `GET /api/listings/matching-asks` — open asks of the same card
-  /// and condition at or below the bid price, cheapest first, so the buyer
-  /// is offered "buy now" before their bid goes on the book. Own listings
-  /// are excluded (the RPC would reject a self-trade anyway).
+  /// Ports `GET /api/listings/matching-asks` — open asks of the same card,
+  /// variant and condition at or below the bid price, cheapest first, so the
+  /// buyer is offered "buy now" before their bid goes on the book.
+  ///
+  /// Same filters as the route: live rows only (not archived, deleted or
+  /// expired), own listings excluded, and fully reserved rows dropped after
+  /// the limit. Signed out, nothing matches — the route answers 401.
   Future<List<MatchingAsk>> fetchMatchingAsks({
     required int cardId,
     required int price,
@@ -320,42 +380,35 @@ class TradingRepository {
     int limit = 5,
   }) async {
     final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const [];
 
     var query = _client
         .from('listings')
         .select(
-          'slug, card_id, price, condition, quantity, qty_locked, user_id, variant_key',
+          'slug, card_id, price, condition, quantity, qty_locked, user_id',
         )
-        .eq('card_id', cardId)
         .eq('side', 'ask')
         .eq('status', 'open')
+        .eq('card_id', cardId)
         .eq('condition', condition.raw)
         .lte('price', price)
-        .isFilter('archived_at', null);
-    if (userId != null) query = query.neq('user_id', userId);
+        .neq('user_id', userId)
+        .isFilter('archived_at', null)
+        .isFilter('deleted_at', null)
+        .or(
+          'expires_at.is.null,'
+          'expires_at.gt.${DateTime.now().toUtc().toIso8601String()}',
+        );
+    query = variantKey == null
+        ? query.isFilter('variant_key', null)
+        : query.eq('variant_key', variantKey);
 
     final rows = await query.order('price', ascending: true).limit(limit);
-
-    final matches = rows.where((row) {
-      final available =
-          (row['quantity'] as int? ?? 0) - (row['qty_locked'] as int? ?? 0);
-      final rowVariant = row['variant_key'] as String?;
-      return available > 0 && (rowVariant ?? '') == (variantKey ?? '');
-    }).toList();
+    final matches = rows.where((row) => _availableOf(row) > 0).toList();
     if (matches.isEmpty) return const [];
 
-    // Store names come from a separate table (`listings.user_id` and
-    // `seller_profiles.user_id` both point at `auth.users`, so PostgREST
-    // can't embed them), same two-step the listings query uses.
-    final sellerIds = matches
-        .map((r) => r['user_id'] as String)
-        .toSet()
-        .toList();
-    final stores = await _client
-        .from('seller_profiles')
-        .select('user_id, store_slug, store_name')
-        .inFilter('user_id', sellerIds);
-    final storeByUser = {for (final s in stores) s['user_id'] as String: s};
+    final sellerIds = matches.map((r) => r['user_id'] as String).toSet();
+    final storesFuture = fetchStoreIdentities(_client, sellerIds);
 
     // Sellers without a storefront are named and linked by their username.
     var usernameByUser = <String, String?>{};
@@ -363,34 +416,26 @@ class TradingRepository {
       final profiles = await _client
           .from('profiles')
           .select('id, username')
-          .inFilter('id', sellerIds);
+          .inFilter('id', sellerIds.toList());
       usernameByUser = {
         for (final p in profiles) p['id'] as String: p['username'] as String?,
       };
     } catch (_) {
       // Best effort — falls back to the storefront fields alone.
     }
+    final storeByUser = await storesFuture;
 
-    return matches.map((row) {
-      final sellerId = row['user_id'] as String;
-      final store = storeByUser[sellerId];
-      final username = usernameByUser[sellerId];
-      return MatchingAsk(
-        slug: row['slug'] as String? ?? '',
-        cardId: (row['card_id'] as num).toInt(),
-        price: (row['price'] as num?)?.toInt() ?? 0,
-        condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
-        available:
-            (row['quantity'] as int? ?? 0) - (row['qty_locked'] as int? ?? 0),
-        storeSlug: resolveSellerHandle(
-          storeSlug: store?['store_slug'] as String?,
-          username: username,
+    return [
+      for (final row in matches)
+        MatchingAsk.fromRow(
+          row,
+          store: storeByUser[row['user_id']],
+          username: usernameByUser[row['user_id']],
         ),
-        storeName: resolveSellerName(
-          storeName: store?['store_name'] as String?,
-          username: username,
-        ),
-      );
-    }).toList();
+    ];
   }
+
+  static int _availableOf(Map<String, dynamic> row) =>
+      ((row['quantity'] as num?)?.toInt() ?? 0) -
+      ((row['qty_locked'] as num?)?.toInt() ?? 0);
 }
