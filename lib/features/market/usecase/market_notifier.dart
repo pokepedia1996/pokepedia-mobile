@@ -293,3 +293,136 @@ final storeCardListingsProvider =
         feedbackScore: reputation.feedbackScore,
       );
     });
+<<<<<<< Updated upstream
+=======
+
+/// What a storefront's listing grid is showing: whose, which side, and how
+/// it is narrowed and ordered. Every field goes to the server.
+typedef StoreFeedKey = ({
+  String sellerUserId,
+  String side,
+  String search,
+  MarketFilters filters,
+  String sort,
+});
+
+class StoreFeedState {
+  const StoreFeedState({
+    this.listings = const [],
+    this.hasNext = false,
+    this.loading = true,
+    this.loadingMore = false,
+    this.failed = false,
+  });
+
+  final List<ListingModel> listings;
+  final bool hasNext;
+  final bool loading;
+  final bool loadingMore;
+  final bool failed;
+}
+
+/// A storefront's listings, paged from the server as the grid scrolls.
+///
+/// Search, condition and sort all re-query rather than narrowing a fetched
+/// page: a shop's catalogue runs to thousands, and matching only what had
+/// been loaded is how a card the shop plainly stocks came back "Tidak ada
+/// kartu yang cocok".
+class StoreFeedNotifier
+    extends AutoDisposeFamilyNotifier<StoreFeedState, StoreFeedKey> {
+  /// A page that answers after its key has been replaced is dropped.
+  int _generation = 0;
+
+  @override
+  StoreFeedState build(StoreFeedKey key) {
+    Future.microtask(_loadFirst);
+    return const StoreFeedState();
+  }
+
+  Future<void> _loadFirst() async {
+    final generation = ++_generation;
+    try {
+      final page = await _fetch(offset: 0);
+      if (generation != _generation) return;
+      state = StoreFeedState(
+        listings: page,
+        hasNext: page.length >= MarketRepository.storeListingsPageSize,
+        loading: false,
+      );
+    } catch (_) {
+      if (generation != _generation) return;
+      state = const StoreFeedState(loading: false, failed: true);
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (state.loading || state.loadingMore || !state.hasNext) return;
+    final generation = _generation;
+    state = StoreFeedState(
+      listings: state.listings,
+      hasNext: true,
+      loading: false,
+      loadingMore: true,
+    );
+    try {
+      final page = await _fetch(offset: state.listings.length);
+      if (generation != _generation) return;
+      state = StoreFeedState(
+        listings: [...state.listings, ...page],
+        hasNext: page.length >= MarketRepository.storeListingsPageSize,
+        loading: false,
+      );
+    } catch (_) {
+      if (generation != _generation) return;
+      // Keeps what is on screen; the next scroll to the end tries again.
+      state = StoreFeedState(
+        listings: state.listings,
+        hasNext: true,
+        loading: false,
+      );
+    }
+  }
+
+  Future<void> retry() async {
+    state = const StoreFeedState();
+    await _loadFirst();
+  }
+
+  Future<List<ListingModel>> _fetch({required int offset}) => ref
+      .read(marketRepositoryProvider)
+      .fetchStoreListingsPage(
+        sellerUserId: arg.sellerUserId,
+        side: arg.side,
+        search: arg.search,
+        filters: arg.filters,
+        sort: arg.sort,
+        offset: offset,
+      );
+}
+
+final storeFeedProvider =
+    AutoDisposeNotifierProviderFamily<
+      StoreFeedNotifier,
+      StoreFeedState,
+      StoreFeedKey
+    >(StoreFeedNotifier.new);
+
+/// What a storefront's listings on one side hold, for its filter sheet —
+/// the store's own counts, not the whole market's.
+final storeFacetsProvider = FutureProvider.autoDispose
+    .family<ListingFacets, ({String sellerUserId, String side})>((ref, key) {
+      return ref
+          .read(marketRepositoryProvider)
+          .fetchSellerListingFacets(
+            sellerUserId: key.sellerUserId,
+            side: key.side,
+          );
+    });
+
+/// A storefront's "N listing", fetched beside its first page rather than
+/// before it — see [MarketRepository.fetchStoreListingCount].
+final storeListingCountProvider = FutureProvider.family<int, String>(
+  (ref, sellerUserId) =>
+      ref.read(marketRepositoryProvider).fetchStoreListingCount(sellerUserId),
+);
+>>>>>>> Stashed changes

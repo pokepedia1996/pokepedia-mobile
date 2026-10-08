@@ -185,52 +185,52 @@ class MarketRepository {
   /// `get_seller_storefront_by_username`. The app has one route reached from
   /// both kinds of link (the market list and a listing card carry slugs; the
   /// account page, a user profile and the seller dashboard carry usernames),
-  /// so it tries the slug and falls back to the username — the same thing
-  /// web's `market/[slug]/card/[cardId]` page does.
+  /// so it asks both and prefers the slug — the same order web's
+  /// `market/[slug]/card/[cardId]` page resolves them in.
+  ///
+  /// Both at once rather than one after the other. Asked in turn, every
+  /// store opened by username — from Akun, a user profile or the seller
+  /// dashboard — first waited on a slug lookup that was certain to miss, so
+  /// it took a whole extra round trip longer to open than the same store
+  /// reached from the market.
   Future<StoreModel?> fetchStore(String handle) async {
-    var rows =
-        await _client.rpc(
-              'get_seller_storefront_by_slug',
-              params: {'p_slug': handle},
-            )
-            as List;
-    if (rows.isEmpty) {
-      rows =
-          await _client.rpc(
-                'get_seller_storefront_by_username',
-                params: {'p_username': handle},
-              )
-              as List;
-    }
+    final lookups = await Future.wait([
+      _client.rpc('get_seller_storefront_by_slug', params: {'p_slug': handle}),
+      _client.rpc(
+        'get_seller_storefront_by_username',
+        params: {'p_username': handle},
+      ),
+    ]);
+    final bySlug = lookups[0] as List;
+    final rows = bySlug.isNotEmpty ? bySlug : lookups[1] as List;
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
-    final sellerId = row['user_id'] as String?;
-    // `get_seller_storefront_by_slug` doesn't return a listing count; reuse
-    // the listings RPC's own `total_count` instead of a separate query.
-    var activeListingCount = 0;
-    if (sellerId != null) {
-      final listingRows =
-          await _client.rpc(
-                'get_recent_marketplace_listings',
-                params: {
-                  'p_seller_user_id': sellerId,
-                  'p_window_hours': 0,
-                  'p_limit': 1,
-                  'p_offset': 0,
-                },
-              )
-              as List;
-      if (listingRows.isNotEmpty) {
-        activeListingCount =
-            ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
-                ?.toInt() ??
-            0;
-      }
-    }
-    return StoreModel.fromDetailRow(
-      row,
-      activeListingCount: activeListingCount,
-    );
+    // No listing count here. The storefront row carries none, and the only
+    // source — the listings RPC's `total_count` — has the server walk every
+    // listing the seller has. Awaiting it held the whole page on "Memuat"
+    // before a single listing was even asked for; it loads beside the first
+    // page instead, through [fetchStoreListingCount].
+    return StoreModel.fromDetailRow(row, activeListingCount: 0);
+  }
+
+  /// How many open listings a seller has, both sides — the header's "N
+  /// listing". Asked for on its own so the page never waits on it.
+  Future<int> fetchStoreListingCount(String sellerUserId) async {
+    final rows =
+        await _client.rpc(
+              'get_recent_marketplace_listings',
+              params: {
+                'p_seller_user_id': sellerUserId,
+                'p_window_hours': 0,
+                'p_limit': 1,
+                'p_offset': 0,
+              },
+            )
+            as List;
+    if (rows.isEmpty) return 0;
+    return ((rows.first as Map<String, dynamic>)['total_count'] as num?)
+            ?.toInt() ??
+        0;
   }
 
   Future<List<ListingModel>> fetchStoreListings(String handle) async {

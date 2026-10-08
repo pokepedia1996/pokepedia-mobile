@@ -525,13 +525,14 @@ class _VacationPill extends StatelessWidget {
 }
 
 /// Ports `storefront-stats-strip.tsx`.
-class _Stats extends StatelessWidget {
+class _Stats extends ConsumerWidget {
   const _Stats({required this.store});
 
   final StoreModel store;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userId = store.userId;
     // Two deliberate lines instead of one Wrap of six icon-and-label chips.
     // That wrapped wherever it happened to run out — the city stranded at
     // the end of one line, "Bergabung" alone on the next — and the icons on
@@ -545,7 +546,11 @@ class _Stats extends StatelessWidget {
           runSpacing: 2,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _Count(value: store.activeListingCount, label: 'listing'),
+            // Arrives a moment after the rest; the line doesn't wait for it.
+            if (userId != null)
+              if (ref.watch(storeListingCountProvider(userId)).valueOrNull
+                  case final count?)
+                _Count(value: count, label: 'listing'),
             const _Dot(),
             _Count(value: store.itemsSoldCount, label: 'terjual'),
             const _Dot(),

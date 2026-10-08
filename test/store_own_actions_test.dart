@@ -68,6 +68,8 @@ Future<void> _pump(WidgetTester tester, AppUser? viewer) async {
         storeListingsProvider('toko-ash').overrideWith((ref) async => []),
         wishlistedIdsProvider.overrideWith((ref) async => <int>{}),
         cartRepositoryProvider.overrideWithValue(_EmptyCart()),
+        // The header's "N listing" loads on its own, beside the first page.
+        storeListingCountProvider('seller').overrideWith((ref) async => 1696),
       ],
       child: MaterialApp(
         theme: AppTheme.light,
