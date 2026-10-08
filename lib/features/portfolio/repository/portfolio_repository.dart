@@ -311,23 +311,40 @@ class PortfolioRepository {
     }
   }
 
+  /// The deck's cards, each priced through `get_card_prices_by_ids` — the
+  /// per-row price and "Total harga" `deck-panel.tsx` draws from
+  /// `useCardPricesByIds`.
   Future<List<DeckCardEntry>> fetchDeckCards(String deckId) async {
     final rows = await _client
         .from('deck_cards')
         .select('quantity, cards!inner($_cardColumns)')
         .eq('deck_id', deckId);
-    return rows.map((r) {
-      final card = CardModel.fromRow(r['cards'] as Map<String, dynamic>);
-      return DeckCardEntry(
-        card: card,
-        quantity: r['quantity'] as int,
-        category: _toDeckCategory(card.category),
-      );
-    }).toList();
+    final cards = await priceCards(_client, [
+      for (final r in rows)
+        CardModel.fromRow(r['cards'] as Map<String, dynamic>),
+    ]);
+    return [
+      for (var i = 0; i < rows.length; i++)
+        DeckCardEntry(
+          card: cards[i],
+          quantity: rows[i]['quantity'] as int,
+          category: _toDeckCategory(cards[i].category),
+        ),
+    ];
   }
 
+  /// The deck builder's "Cari Kartu" results: the picker search without
+  /// sealed products, which `upsert_deck_card` refuses, priced like the deck
+  /// rows. Web filters the same page after `searchCardsPicker` returns.
+  Future<List<CardModel>> searchDeckCards(String query) async {
+    final results = await searchCardsPicker(query);
+    return priceCards(_client, excludeSealed(results));
+  }
+
+  /// `upsert_deck_card` refuses sealed products, so one only lands here from
+  /// a deck saved before that check; it sits with the Pokemon as it did.
   DeckCategory _toDeckCategory(CardCategory category) => switch (category) {
-    CardCategory.pokemon => DeckCategory.pokemon,
+    CardCategory.pokemon || CardCategory.sealed => DeckCategory.pokemon,
     CardCategory.trainer => DeckCategory.trainer,
     CardCategory.energy => DeckCategory.energy,
   };

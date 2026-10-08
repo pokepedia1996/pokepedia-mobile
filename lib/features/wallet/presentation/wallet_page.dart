@@ -622,7 +622,7 @@ class _ActivityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final notes = activity.notes;
+    final (:title, :detail) = activity.description;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -640,12 +640,14 @@ class _ActivityRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    activity.title,
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
-                  if (notes != null && notes.isNotEmpty)
+                  if (detail != null && detail.isNotEmpty)
                     Text(
-                      notes,
+                      detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption(context.mutedForeground),

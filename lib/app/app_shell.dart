@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'router/routes.dart';
+import '../features/account/usecase/account_nav_indicator.dart';
 import '../shared/widgets/app_bottom_nav.dart';
 import 'tab_reselect.dart';
 import '../shared/widgets/app_top_bar.dart';
@@ -25,6 +27,8 @@ class AppShell extends ConsumerStatefulWidget {
   /// The nav's own list, so the paths the pill navigates to and the ones the
   /// shell treats as tab roots can't drift apart.
   static final _tabRootPaths = AppBottomNav.tabPaths.toSet();
+
+  static final _accountTabIndex = AppBottomNav.tabPaths.indexOf(Routes.account);
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -72,6 +76,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final isTabRoot = AppShell._tabRootPaths.contains(widget.state.uri.path);
     final navigationShell = widget.navigationShell;
+    final accountDot = ref.watch(accountNavIndicatorProvider);
 
     return Scaffold(
       body: NotificationListener<ScrollNotification>(
@@ -83,6 +88,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           ? AppBottomNav(
               currentIndex: navigationShell.currentIndex,
               hidden: _navHidden,
+              dotted: accountDot ? {AppShell._accountTabIndex} : const {},
               onTap: (index) {
                 // The incoming tab starts at its own scroll offset, so bring
                 // the pill and the logo row back.

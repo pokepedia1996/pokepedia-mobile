@@ -16,12 +16,14 @@ import '../../../shared/widgets/user_avatar.dart';
 import '../../chat/usecase/chat_notifier.dart';
 import '../../notifications/usecase/notifications_notifier.dart';
 import '../../wallet/usecase/wallet_notifier.dart';
+import '../usecase/buyer_action_notifier.dart';
 
 /// Ports `app/account/account-list.tsx` — the Akun tab: the identity header
 /// over grouped link rows (Portofolio, Aktivitas, Informasi, Pengaturan).
 ///
 /// Notifikasi and Pesan carry the same unread badges the web shows, counted
-/// from the notification list and the chat room summaries.
+/// from the notification list and the chat room summaries; Pesanan and
+/// Proposal WTB carry web's buyer to-do counts from `get_buyer_action_counts`.
 class AccountPage extends ConsumerWidget {
   const AccountPage({super.key});
 
@@ -30,6 +32,7 @@ class AccountPage extends ConsumerWidget {
     final authAsync = ref.watch(authProvider);
     final user = authAsync.valueOrNull;
     final isGuest = user == null;
+    final buyerActions = ref.watch(buyerActionCountsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Akun')),
@@ -81,11 +84,13 @@ class AccountPage extends ConsumerWidget {
                           _Row(
                             icon: LucideIcons.package,
                             label: 'Pesanan',
+                            badge: buyerActions.orders,
                             onTap: () => context.push(Routes.orders),
                           ),
                           _Row(
                             icon: LucideIcons.listChecks,
                             label: 'Proposal WTB',
+                            badge: buyerActions.proposals,
                             onTap: () => context.push(Routes.proposals),
                           ),
                           _Row(
@@ -196,10 +201,10 @@ class AccountPage extends ConsumerWidget {
   }
 
   /// Refetches what this page actually reads from the network — the saldo
-  /// figure and the two unread counts. Everything else here is a static
-  /// link, and the session itself is left alone: invalidating [authProvider]
-  /// would take every provider watching it down with it and swap this page
-  /// for its skeleton mid-gesture.
+  /// figure, the two unread counts and the buyer to-do counts. Everything
+  /// else here is a static link, and the session itself is left alone:
+  /// invalidating [authProvider] would take every provider watching it down
+  /// with it and swap this page for its skeleton mid-gesture.
   Future<void> _refresh(WidgetRef ref) async {
     ref.invalidate(walletBalanceProvider);
     ref.invalidate(chatThreadsProvider);
@@ -210,6 +215,7 @@ class AccountPage extends ConsumerWidget {
         ref.read(walletBalanceProvider.future),
         ref.read(chatThreadsProvider.future),
         ref.read(notificationsProvider.notifier).refresh(),
+        ref.read(buyerActionNotifierProvider.notifier).refresh(),
       ]);
     } catch (_) {
       // A failed refetch leaves the previous figures in place — better than

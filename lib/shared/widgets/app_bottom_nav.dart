@@ -29,6 +29,7 @@ class AppBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.hidden = false,
+    this.dotted = const {},
   });
 
   /// How long the pill takes to leave or come back.
@@ -104,6 +105,12 @@ class AppBottomNav extends StatelessWidget {
   /// back the moment the thumb goes the other way.
   final bool hidden;
 
+  /// Indices of [items] that carry the unread dot — web's `ActionDot` on
+  /// the Akun tab. A set rather than a flag on [BottomNavItem] because
+  /// [items] is a constant and what lights the dot is live state the host
+  /// owns.
+  final Set<int> dotted;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -161,9 +168,20 @@ class AppBottomNav extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        item.usePokeball
-                            ? PokeballIcon(size: 20, color: fg)
-                            : Icon(item.icon, size: 20, color: fg),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            item.usePokeball
+                                ? PokeballIcon(size: 20, color: fg)
+                                : Icon(item.icon, size: 20, color: fg),
+                            if (dotted.contains(i))
+                              const Positioned(
+                                top: -4 - _NavDot.ring,
+                                right: -6 - _NavDot.ring,
+                                child: _NavDot(),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           item.label,
@@ -178,6 +196,32 @@ class AppBottomNav extends StatelessWidget {
               );
             }),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Web's `ActionDot` with `ring-2 ring-background`: an 8px primary dot whose
+/// ring in the page colour separates it from the icon it overlaps.
+class _NavDot extends StatelessWidget {
+  const _NavDot();
+
+  static const ring = 2.0;
+  static const _size = 8.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('bottom-nav-dot'),
+      width: _size + ring * 2,
+      height: _size + ring * 2,
+      decoration: BoxDecoration(
+        color: context.appColors.primary,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          width: ring,
         ),
       ),
     );

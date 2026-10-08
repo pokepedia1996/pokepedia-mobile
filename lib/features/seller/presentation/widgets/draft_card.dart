@@ -193,14 +193,16 @@ class _DraftCardState extends ConsumerState<DraftCard> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          _ConditionPicker(
-                            condition: _condition,
-                            onChanged: (c) {
-                              setState(() => _condition = c);
-                              _write(condition: c);
-                            },
-                          ),
+                          if (!draft.card.isSealed) ...[
+                            const SizedBox(width: 6),
+                            _ConditionPicker(
+                              condition: _condition,
+                              onChanged: (c) {
+                                setState(() => _condition = c);
+                                _write(condition: c);
+                              },
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),

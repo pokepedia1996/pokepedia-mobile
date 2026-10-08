@@ -186,8 +186,8 @@ class CollectionFacets {
     (subtype) => subtype.labelId,
   );
 
-  /// Unlike [CardCategoryX.fromRaw], which reads anything unknown (Sealed)
-  /// as a Pokemon card — fine for a row, wrong for a chip.
+  /// Unlike [CardCategoryX.fromRaw], which reads anything unknown as a
+  /// Pokemon card — fine for a row, wrong for a chip.
   static CardCategory? _categoryFromRaw(String raw) {
     for (final category in CardCategory.values) {
       if (category.raw == raw) return category;

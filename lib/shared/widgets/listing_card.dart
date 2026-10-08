@@ -196,15 +196,16 @@ class _ListingCardState extends ConsumerState<ListingCard> {
               child: Stack(
                 children: [
                   CardArt(imageUrl: listing.tileImageUrl),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    // The grade alone. A count chip used to sit beside it,
-                    // but the row under the price already says how many are
-                    // available — in words, and in the place a buyer looks
-                    // for stock.
-                    child: ConditionBadge(condition: listing.condition),
-                  ),
+                  if (!listing.card.isSealed)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      // The grade alone. A count chip used to sit beside it,
+                      // but the row under the price already says how many are
+                      // available — in words, and in the place a buyer looks
+                      // for stock.
+                      child: ConditionBadge(condition: listing.condition),
+                    ),
                   if (listing.isFeatured)
                     Positioned(
                       left: 0,

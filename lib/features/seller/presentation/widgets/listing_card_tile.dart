@@ -107,8 +107,10 @@ class _ListingCardTileState extends State<ListingCardTile> {
                             style: AppTypography.bodySemibold(colors.onSurface),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        _ConditionPill(label: listing.condition.short),
+                        if (!listing.card.isSealed) ...[
+                          const SizedBox(width: 6),
+                          _ConditionPill(label: listing.condition.short),
+                        ],
                         const SizedBox(width: 4),
                         _MenuButton(
                           pending: widget.offerCount,

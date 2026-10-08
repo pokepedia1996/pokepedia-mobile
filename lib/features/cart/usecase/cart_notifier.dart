@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/device_fingerprint.dart';
 import '../../../core/providers/supabase_provider.dart';
@@ -9,7 +8,11 @@ import '../repository/cart_repository.dart';
 import '../repository/models/cart_item.dart';
 
 final cartRepositoryProvider = Provider(
-  (ref) => CartRepository(ref.read(supabaseClientProvider)),
+  (ref) => CartRepository(
+    ref.read(supabaseClientProvider),
+    ref.read(pokepediaApiProvider),
+    ref.read(deviceFingerprintProvider),
+  ),
 );
 
 /// Rough estimate shown before checkout — real shipping is priced per
@@ -70,22 +73,10 @@ class CartNotifier extends Notifier<List<CartItem>> {
   /// phone-verify, ban, etc — see `CartException.message`).
   Future<void> add(int listingId, int quantity) async {
     if (ref.read(authProvider).valueOrNull == null) {
-      throw const CartException('Masuk dulu untuk menambah ke keranjang.');
-    }
-    // `POST /api/cart` records this alongside the add; the app writes to
-    // `cart_items` through the RPC instead, so it has to record the pairing
-    // itself or the same-device self-trade guard has nothing to join on.
-    // Deliberately not awaited: a fraud signal must not delay the add.
-    //
-    // Resolving the provider is guarded too, not just the call it makes:
-    // `record()` swallows its own Postgrest failures, but building the
-    // fingerprint throws if the Supabase client isn't up, and that would
-    // abort the add before the optimistic badge ever moves — exactly what a
-    // best-effort fraud signal must never do.
-    try {
-      unawaited(ref.read(deviceFingerprintProvider).record());
-    } catch (_) {
-      // Best effort, as above.
+      throw const CartException(
+        'unauthorized',
+        serverMessage: 'Masuk dulu untuk menambah ke keranjang.',
+      );
     }
 
     // `add_to_cart` upserts the quantity rather than accumulating, so adding

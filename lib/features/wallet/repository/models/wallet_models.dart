@@ -1,66 +1,5 @@
 import '../../../../core/utils/formatters.dart';
-
-/// `wallet_ledger.reason` check constraint in
-/// `supabase/migrations/00000000000000_baseline.sql`.
-enum WalletReason {
-  escrowRelease,
-  disputeRefundBuyer,
-  disputeReleaseSeller,
-  disputePartialRefund,
-  disputePartialRelease,
-  buyerCancelRefund,
-  courierCancelRefund,
-  withdrawalDebit,
-  withdrawalReverse,
-  checkoutPayment,
-  sellerPartialRefund,
-}
-
-extension WalletReasonX on WalletReason {
-  /// The row's title in the feed — web's `REASON_LABEL` in
-  /// `features/wallet/components/activity-feed.tsx`.
-  String get label {
-    switch (this) {
-      case WalletReason.escrowRelease:
-        return 'Pencairan saldo pesanan';
-      case WalletReason.disputeReleaseSeller:
-        return 'Dana dirilis dari laporan';
-      case WalletReason.disputePartialRelease:
-        return 'Dana parsial dari laporan';
-      case WalletReason.buyerCancelRefund:
-        return 'Refund pembatalan pesanan';
-      case WalletReason.courierCancelRefund:
-        return 'Refund kurir membatalkan pengiriman';
-      case WalletReason.disputeRefundBuyer:
-        return 'Refund hasil laporan';
-      case WalletReason.disputePartialRefund:
-        return 'Refund parsial hasil laporan';
-      case WalletReason.withdrawalDebit:
-        return 'Penarikan ke rekening';
-      case WalletReason.withdrawalReverse:
-        return 'Penarikan dibatalkan';
-      // Not in web's map, which would print the raw reason for these two.
-      case WalletReason.checkoutPayment:
-        return 'Pembayaran checkout';
-      case WalletReason.sellerPartialRefund:
-        return 'Refund sebagian ke pembeli';
-    }
-  }
-
-  static WalletReason fromRaw(String? raw) => switch (raw) {
-    'escrow_release' => WalletReason.escrowRelease,
-    'dispute_refund_buyer' => WalletReason.disputeRefundBuyer,
-    'dispute_release_seller' => WalletReason.disputeReleaseSeller,
-    'dispute_partial_refund' => WalletReason.disputePartialRefund,
-    'dispute_partial_release' => WalletReason.disputePartialRelease,
-    'buyer_cancel_refund' => WalletReason.buyerCancelRefund,
-    'courier_cancel_refund' => WalletReason.courierCancelRefund,
-    'withdrawal_debit' => WalletReason.withdrawalDebit,
-    'withdrawal_reverse' => WalletReason.withdrawalReverse,
-    'seller_partial_refund' => WalletReason.sellerPartialRefund,
-    _ => WalletReason.checkoutPayment,
-  };
-}
+import '../../utils/activity_label.dart';
 
 /// The activity feed's tabs, and `get_wallet_activity`'s `p_bucket` — the
 /// RPC does the bucketing, so both clients agree on which rows are earnings,
@@ -92,24 +31,41 @@ class WalletActivity {
     required this.balanceAfter,
     required this.notes,
     required this.createdAt,
+    this.counterpartyUsername,
+    this.counterpartyCount,
+    this.itemNames,
+    this.itemCount,
   });
 
   /// One row of `get_wallet_activity`.
   factory WalletActivity.fromRow(Map<String, dynamic> row) {
+    final rawItems = row['item_names'];
     return WalletActivity(
       id: (row['id'] as num).toInt(),
-      reason: WalletReasonX.fromRaw(row['reason'] as String?),
+      reason: row['reason'] as String? ?? '',
       amount: (row['amount'] as num?)?.toInt() ?? 0,
       balanceAfter: (row['balance_after'] as num?)?.toInt() ?? 0,
       notes: row['notes'] as String?,
       createdAt: DateTime.tryParse(
         row['created_at'] as String? ?? '',
       )?.toLocal(),
+      counterpartyUsername: row['counterparty_username'] as String?,
+      counterpartyCount: (row['counterparty_count'] as num?)?.toInt(),
+      itemNames: rawItems is List
+          ? [
+              for (final name in rawItems)
+                if (name is String) name,
+            ]
+          : null,
+      itemCount: (row['item_count'] as num?)?.toInt(),
     );
   }
 
   final int id;
-  final WalletReason reason;
+
+  /// `wallet_ledger.reason`, raw: a reason added server-side after this
+  /// build still renders, as web's "Transaksi saldo".
+  final String reason;
 
   /// Signed, as the ledger stores it: the sign is what makes a row money in
   /// or money out, not the reason it carries.
@@ -118,13 +74,31 @@ class WalletActivity {
   /// `wallet_ledger.balance_after`.
   final int balanceAfter;
 
-  /// The ledger's own note, shown under the reason when there is one.
+  /// The ledger's own note; only shown for rows with no counterparty story.
   final String? notes;
   final DateTime? createdAt;
 
+  /// The other side of the money — the seller paid, the seller refunding,
+  /// or the buyer whose order released.
+  final String? counterpartyUsername;
+
+  /// Sellers in a multi-seller checkout, the named one included.
+  final int? counterpartyCount;
+
+  /// The first few card names; [itemCount] is the full count.
+  final List<String>? itemNames;
+  final int? itemCount;
+
   bool get isCredit => amount > 0;
 
-  String get title => reason.label;
+  ActivityDescription get description => describeActivity((
+    reason: reason,
+    notes: notes,
+    counterpartyUsername: counterpartyUsername,
+    counterpartyCount: counterpartyCount,
+    itemNames: itemNames,
+    itemCount: itemCount,
+  ));
 
   /// "5 Agu 2026, 14:32" — web prints `formatDate`, the same stamp down to
   /// the seconds it adds and a phone has no room for.

@@ -2,8 +2,6 @@ import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'supabase_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A stable per-install identifier, used for the same-device self-trade
 /// guard.
@@ -11,17 +9,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// `device_users` joins (device, user) pairs so the server can tell that two
 /// accounts are the same person on one device — the `same_device_self_trade`
 /// rule that stops someone buying their own listing from a second account.
-/// Every browser client is subject to it. A native client that records
-/// nothing is simply exempt, which is a hole rather than a feature, so the
-/// app registers itself the same way.
+/// The app sends this value as `deviceFingerprint` on `/api/cart` and
+/// `/api/listings`, and those routes record the pairing server-side, the way
+/// `recordDeviceUser` does for the browser.
 ///
 /// Generated once and kept in local storage: not a hardware id, nothing
 /// about the device, and it resets on reinstall. That's the same guarantee
 /// the web's cookie-scoped fingerprint gives.
 class DeviceFingerprint {
-  DeviceFingerprint(this._client);
-
-  final SupabaseClient _client;
+  DeviceFingerprint();
 
   static const _key = 'device_fingerprint';
 
@@ -51,30 +47,6 @@ class DeviceFingerprint {
     _cached = value;
     return value;
   }
-
-  /// Ports `recordDeviceUser`. Writes straight to `device_users`, whose
-  /// policies are `auth.uid() = user_id` for select/insert/update — so this
-  /// needs no server route, and can't touch anyone else's pairing.
-  ///
-  /// `ip_address` is left null on purpose: the app can't see its own public
-  /// IP, and inventing one would be worse than the column being empty. The
-  /// device/user join is what the guard actually keys on.
-  Future<void> record() async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return;
-    try {
-      await _client.from('device_users').upsert({
-        'device_fingerprint': await value(),
-        'user_id': userId,
-        'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'device_fingerprint,user_id');
-    } on PostgrestException {
-      // Best effort. A missed pairing weakens a fraud signal; it must never
-      // be the reason someone can't add to their cart.
-    }
-  }
 }
 
-final deviceFingerprintProvider = Provider(
-  (ref) => DeviceFingerprint(ref.watch(supabaseClientProvider)),
-);
+final deviceFingerprintProvider = Provider((ref) => DeviceFingerprint());

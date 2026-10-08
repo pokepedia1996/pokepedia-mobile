@@ -1,12 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/device_fingerprint.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../repository/models/trading_models.dart';
 import '../repository/trading_repository.dart';
 
 final tradingRepositoryProvider = Provider((ref) {
-  return TradingRepository(ref.read(supabaseClientProvider));
+  return TradingRepository(
+    ref.read(supabaseClientProvider),
+    api: ref.read(pokepediaApiProvider),
+    fingerprint: ref.read(deviceFingerprintProvider),
+  );
 });
 
 /// Whether the signed-in user may bid/ask at all. Re-read on auth change so

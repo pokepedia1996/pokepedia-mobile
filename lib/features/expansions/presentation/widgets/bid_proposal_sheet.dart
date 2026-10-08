@@ -137,7 +137,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
         .read(tradingRepositoryProvider)
         .fetchBidLevel(
           cardId: widget.card.id,
-          condition: widget.condition,
+          condition: _condition,
           price: widget.price,
           variantKey: widget.variantKey,
         );
@@ -157,7 +157,11 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
   int get _askValue =>
       int.tryParse(_askPrice.text.replaceAll(RegExp(r'\D'), '')) ??
       widget.price;
-  bool get _photosRequired => widget.condition.requiresListingPhoto;
+  bool get _photosRequired => _condition.requiresListingPhoto;
+
+  /// The level's condition, or NM for a sealed product — the only condition
+  /// one is ever listed or bid at.
+  CardCondition get _condition => widget.card.tradeCondition(widget.condition);
 
   /// What one proposal may offer: the quantity still open across the bids
   /// that haven't heard from this seller yet.
@@ -222,7 +226,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
     if (target == null) {
       result = await repository.broadcastBidProposal(
         cardId: widget.card.id,
-        condition: widget.condition,
+        condition: _condition,
         price: widget.price,
         quantity: _quantity,
         photoUrls: photoUrls,
@@ -233,7 +237,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
     } else {
       final single = await repository.submitBidProposal(
         bidSlug: target.slug,
-        condition: widget.condition,
+        condition: _condition,
         quantity: _quantity,
         photoUrls: photoUrls,
         message: message,
@@ -285,7 +289,7 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                 buyerCount: _level.buyerCount,
                 availableQty: _level.availableQty,
                 price: widget.price,
-                condition: widget.condition,
+                condition: widget.card.isSealed ? null : _condition,
                 buyerName: widget.target?.buyerName,
               ),
 
@@ -460,7 +464,9 @@ class _LevelSummary extends StatelessWidget {
   final int buyerCount;
   final int availableQty;
   final int price;
-  final CardCondition condition;
+
+  /// Null for a sealed product, which web shows no condition for.
+  final CardCondition? condition;
 
   /// Set when the proposal is aimed at one bid: who it goes to is more use
   /// than a count of one.
@@ -491,8 +497,10 @@ class _LevelSummary extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(width: 12),
-          ConditionBadge(condition: condition, dense: true),
+          if (condition case final condition?) ...[
+            const SizedBox(width: 12),
+            ConditionBadge(condition: condition, dense: true),
+          ],
           const Spacer(),
           if (loading)
             const SizedBox(

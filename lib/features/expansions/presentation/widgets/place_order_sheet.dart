@@ -74,6 +74,10 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
 
   bool get _isBid => widget.side == 'bid';
 
+  /// What the order is written with — NM for a sealed product, whose picker
+  /// `PlaceOrderModal` hides (`hideCondition`).
+  CardCondition get _orderCondition => widget.card.tradeCondition(_condition);
+
   Future<void> _pickPhoto() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -116,7 +120,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
       setState(() => _error = 'Masukkan harga.');
       return;
     }
-    if (!_isBid && _condition.requiresListingPhoto && _photos.isEmpty) {
+    if (!_isBid && _orderCondition.requiresListingPhoto && _photos.isEmpty) {
       setState(() => _error = gradedPhotoRequiredMessage);
       return;
     }
@@ -133,7 +137,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
       final matches = await repository.fetchMatchingAsks(
         cardId: widget.card.id,
         price: price,
-        condition: _condition,
+        condition: _orderCondition,
       );
       if (!mounted) return;
       if (matches.isNotEmpty) {
@@ -165,7 +169,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
       cardId: widget.card.id,
       side: widget.side,
       price: price,
-      condition: _condition,
+      condition: _orderCondition,
       quantity: _quantity,
       replace: replace,
       photoUrls: photoUrls,
@@ -424,18 +428,20 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                 : 'Ask terendah saat ini ${formatRupiah(widget.bestPrice!)}',
           ),
         ),
-        const SizedBox(height: 14),
-        Text(
-          'Kondisi',
-          style: AppTypography.captionSemibold(context.mutedForeground),
-        ),
-        const SizedBox(height: 6),
-        ConditionGradePicker(
-          value: _condition,
-          showAllOption: false,
-          onChanged: (value) =>
-              setState(() => _condition = value ?? CardCondition.nm),
-        ),
+        if (!widget.card.isSealed) ...[
+          const SizedBox(height: 14),
+          Text(
+            'Kondisi',
+            style: AppTypography.captionSemibold(context.mutedForeground),
+          ),
+          const SizedBox(height: 6),
+          ConditionGradePicker(
+            value: _condition,
+            showAllOption: false,
+            onChanged: (value) =>
+                setState(() => _condition = value ?? CardCondition.nm),
+          ),
+        ],
         const SizedBox(height: 14),
         Row(
           children: [
@@ -461,7 +467,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                 style: AppTypography.captionSemibold(context.mutedForeground),
               ),
               const SizedBox(width: 6),
-              if (_condition.requiresListingPhoto)
+              if (_orderCondition.requiresListingPhoto)
                 Text(
                   'wajib untuk kartu graded',
                   style: AppTypography.caption(colors.error),

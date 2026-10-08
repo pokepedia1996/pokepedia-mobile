@@ -16,7 +16,10 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/photo_strip.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../cart/presentation/checkout_page.dart';
+import '../../cart/usecase/cart_deals.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
+import '../../orders/usecase/orders_notifier.dart';
 import '../repository/models/bid_proposal_model.dart';
 import '../repository/models/my_bid.dart';
 import '../repository/models/sent_proposal.dart';
@@ -223,6 +226,55 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     }
   }
 
+  /// Accepts, then offers the way to pay. Web sends the buyer to the cart,
+  /// where the deal waits as its own group; the toast here opens the deal the
+  /// accept just opened straight into its checkout.
+  Future<void> _accept(BidProposalModel proposal) async {
+    setState(() => _busySlug = proposal.slug);
+    final result = await ref
+        .read(proposalsRepositoryProvider)
+        .acceptBidProposal(proposal.slug);
+    if (!mounted) return;
+    setState(() => _busySlug = null);
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    final error = result.error;
+    if (error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(error), persist: false));
+      return;
+    }
+    ref.invalidate(receivedProposalsProvider);
+    ref.invalidate(sentProposalsProvider);
+    ref.invalidate(myBidsProvider);
+    ref.invalidate(proposalsSummaryProvider);
+    ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
+    final externalId = result.externalId;
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Proposal diterima. Bayar dalam 24 jam.'),
+        duration: const Duration(seconds: 6),
+        persist: false,
+        action: externalId == null
+            ? null
+            : SnackBarAction(
+                label: 'Bayar',
+                onPressed: () => _payAcceptedDeal(externalId),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _payAcceptedDeal(String externalId) async {
+    // The snack bar outlives the page on the root messenger.
+    if (!mounted) return;
+    await Navigator.of(context).push(dealCheckoutRoute([externalId]));
+    if (!mounted) return;
+    ref.invalidate(myBidsProvider);
+    ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
+  }
+
   Future<void> _editBid(MyBidModel bid) async {
     final result = await showBidEditSheet(context, bid: bid);
     if (result == null || !mounted) return;
@@ -292,13 +344,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
           _ReceivedRow(
             proposal: proposal,
             busy: _busySlug == proposal.slug,
-            onAccept: () => _run(
-              proposal.slug,
-              () => ref
-                  .read(proposalsRepositoryProvider)
-                  .acceptBidProposal(proposal.slug),
-              'Proposal diterima — lanjutkan pembayaran',
-            ),
+            onAccept: () => _accept(proposal),
             onReject: () => _run(
               proposal.slug,
               () => ref

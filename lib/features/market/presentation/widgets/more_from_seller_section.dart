@@ -139,7 +139,18 @@ class _SellerListingThumb extends StatelessWidget {
                       style: AppTypography.captionSemibold(colors.onSurface),
                     ),
                     const SizedBox(height: 4),
-                    ConditionBadge(condition: listing.condition, dense: true),
+                    // Kept in layout for a sealed product so its tile
+                    // lines up with the singles beside it.
+                    Visibility(
+                      visible: !listing.card.isSealed,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: ConditionBadge(
+                        condition: listing.condition,
+                        dense: true,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       formatRupiah(listing.price),

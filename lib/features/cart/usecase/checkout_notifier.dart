@@ -10,6 +10,7 @@ import '../repository/checkout_gateway.dart';
 import '../repository/checkout_pricing.dart';
 import '../repository/coupon_rules.dart';
 import '../repository/models/cart_item.dart';
+import '../repository/models/checkout_deal.dart';
 import '../repository/models/checkout_models.dart';
 import 'cart_selection.dart';
 import '../../../core/errors/user_message.dart';
@@ -22,6 +23,7 @@ class SellerShipping {
     this.options = const [],
     this.selected,
     this.error,
+    this.reason,
   });
 
   final bool loading;
@@ -29,19 +31,25 @@ class SellerShipping {
   final CourierOption? selected;
   final String? error;
 
+  /// Why [options] is short or empty, as `/api/shipping/rates` reported it.
+  final RatesReason? reason;
+
   SellerShipping copyWith({
     bool? loading,
     List<CourierOption>? options,
     CourierOption? selected,
     String? error,
+    RatesReason? reason,
     bool clearSelected = false,
     bool clearError = false,
+    bool clearReason = false,
   }) {
     return SellerShipping(
       loading: loading ?? this.loading,
       options: options ?? this.options,
       selected: clearSelected ? null : (selected ?? this.selected),
       error: clearError ? null : (error ?? this.error),
+      reason: clearReason ? null : (reason ?? this.reason),
     );
   }
 }
@@ -67,6 +75,7 @@ class CheckoutState {
     this.contextLoading = true,
     this.contextError,
     this.submitting = false,
+    this.deals = const [],
   });
 
   final AddressModel? address;
@@ -119,6 +128,10 @@ class CheckoutState {
 
   final bool submitting;
 
+  /// The accepted bid proposals being paid, loaded with the checkout
+  /// context. Empty outside a deal checkout.
+  final List<CheckoutDeal> deals;
+
   CheckoutState copyWith({
     AddressModel? address,
     Map<String, SellerShipping>? shippingBySeller,
@@ -139,6 +152,7 @@ class CheckoutState {
     bool? contextLoading,
     String? contextError,
     bool? submitting,
+    List<CheckoutDeal>? deals,
     bool clearCouponNotice = false,
     bool clearChannel = false,
     bool clearContextError = false,
@@ -169,9 +183,22 @@ class CheckoutState {
           ? null
           : (contextError ?? this.contextError),
       submitting: submitting ?? this.submitting,
+      deals: deals ?? this.deals,
     );
   }
 }
+
+/// The accepted bid proposals a checkout pays for, by external id.
+///
+/// Empty for a cart checkout. A deal checkout overrides it in the
+/// `ProviderScope` around its page — `dealCheckoutRoute` — which is what web
+/// carries in `?d=`, so [checkoutProvider] is scoped along with it.
+final checkoutDealIdsProvider = Provider<List<String>>((ref) => const []);
+
+/// Whether the deals of [checkoutDealIdsProvider] are paid together with the
+/// lines ticked in the cart — web's `?s=&d=` from the cart page — rather
+/// than on their own. Scoped by `dealCheckoutRoute` alongside the ids.
+final checkoutWithCartSelectionProvider = Provider<bool>((ref) => false);
 
 /// Drives the native WTS checkout: address, per-seller courier and
 /// insurance, coupons, note, payment choice, and the totals that follow from
@@ -181,6 +208,8 @@ class CheckoutState {
 class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   @override
   CheckoutState build() {
+    _dealIds = ref.watch(checkoutDealIdsProvider);
+    _withCartSelection = ref.watch(checkoutWithCartSelectionProvider);
     Future.microtask(loadContext);
     Future.microtask(loadLastPaidChannel);
 
@@ -223,7 +252,22 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   /// continuation checks this before touching `ref` or `state`.
   bool _disposed = false;
 
-  List<CartItem> get _items => ref.read(selectedCartItemsProvider);
+  List<String> _dealIds = const [];
+  bool _withCartSelection = false;
+
+  /// A deal checkout pays for its deals alone, as web's proposal-only
+  /// checkout does — never the cart lines sitting beside them.
+  bool get isDealCheckout => _dealIds.isNotEmpty && !_withCartSelection;
+
+  /// The deals actually loaded, which is what gets priced and invoiced: one
+  /// that lapsed since the cart page was read is left out rather than
+  /// failing the whole submit.
+  List<String> get _loadedDealIds => [
+    for (final deal in state.deals) deal.externalId,
+  ];
+
+  List<CartItem> get _items =>
+      isDealCheckout ? const [] : ref.read(selectedCartItemsProvider);
 
   Map<String, List<CartItem>> get _itemsBySeller {
     final map = <String, List<CartItem>>{};
@@ -233,11 +277,25 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     return map;
   }
 
+  /// Every seller that ships a parcel: cart lines first, then the deal-only
+  /// ones — `allSellerGroups` in `checkout-client.tsx`.
+  List<String> get sellerIds => {
+    ..._itemsBySeller.keys,
+    for (final deal in state.deals) deal.sellerId,
+  }.toList();
+
+  int _dealSubtotalForSeller(String sellerId) => state.deals
+      .where((deal) => deal.sellerId == sellerId)
+      .fold(0, (sum, deal) => sum + deal.subtotal);
+
+  /// Cart lines plus deals — the route's `sellerTotalValue`, which is what it
+  /// both declares to the courier and holds the insurance threshold against.
   int subtotalForSeller(String sellerId) =>
       (_itemsBySeller[sellerId] ?? const []).fold(
         0,
         (sum, item) => sum + item.subtotal,
-      );
+      ) +
+      _dealSubtotalForSeller(sellerId);
 
   Future<void> loadContext() async {
     if (_disposed) return;
@@ -249,12 +307,14 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final results = await Future.wait([
         gateway.fetchContext(),
         gateway.fetchSellerOrigins(),
+        if (_dealIds.isNotEmpty) gateway.fetchDeals(externalIds: _dealIds),
       ]);
       if (_disposed) return;
       state = state.copyWith(
         contextLoading: false,
         phoneVerified: (results[0] as CheckoutContext).phoneVerified,
         sellerOrigins: results[1] as Map<String, SellerOrigin>,
+        deals: _dealIds.isNotEmpty ? results[2] as List<CheckoutDeal> : null,
       );
       await _refreshAllRates();
     } on ApiException catch (e) {
@@ -311,8 +371,10 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       // explanation reads as a bug, so say whose side it is on.
       _setShipping(
         sellerId,
-        const SellerShipping(
-          error: 'Toko ini belum melengkapi alamat pengiriman.',
+        SellerShipping(
+          error: origin == null && !_itemsBySeller.containsKey(sellerId)
+              ? 'Alamat pengirim toko ini belum bisa dimuat. Coba lagi nanti.'
+              : 'Toko ini belum melengkapi alamat pengiriman.',
         ),
       );
       return;
@@ -325,14 +387,17 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       return;
     }
 
+    // Weighed from cart lines only, as the route's `totalQty` is, so the
+    // preview and the submit-time quote see the same parcel; valued with the
+    // deals included, as `declaredItemValue` is.
     final sellerItems = _itemsBySeller[sellerId] ?? const [];
     final quantity = sellerItems.fold(0, (sum, item) => sum + item.quantity);
-    final subtotal = sellerItems.fold(0, (sum, item) => sum + item.subtotal);
+    final subtotal = subtotalForSeller(sellerId);
 
     try {
-      final options = await ref
+      final quote = await ref
           .read(checkoutGatewayProvider)
-          .fetchRates(
+          .fetchRateQuote(
             originCityId: originCityId,
             destinationCityId: destination.cityId,
             quantity: quantity < 1 ? 1 : quantity,
@@ -345,6 +410,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
             acceptedCourierServices:
                 origin?.acceptedCourierServices ?? const [],
           );
+      final options = quote.services;
 
       // Instant couriers need a map pinpoint on the destination; without one
       // they're still listed but never preselected, matching the web.
@@ -357,7 +423,11 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 
       _setShipping(
         sellerId,
-        SellerShipping(options: options, selected: preselected),
+        SellerShipping(
+          options: options,
+          selected: preselected,
+          reason: quote.reason,
+        ),
       );
       _syncMandatoryInsurance(sellerId);
       _scheduleCouponCatalog();
@@ -527,7 +597,8 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 
   String get _currentCouponSignature =>
       '$itemsSubtotal|$shippingTotal|${state.paymentChannel?.code ?? '-'}|'
-      '${[for (final item in _items) item.cartItemId].join(',')}';
+      '${[for (final item in _items) item.cartItemId].join(',')}|'
+      '${_loadedDealIds.join(',')}';
 
   /// Auto-apply needs the catalog before the picker is ever opened, so it
   /// is fetched as soon as the cart and a courier are both settled.
@@ -565,6 +636,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
             shippingTotal: shippingTotal,
             paymentChannel: state.paymentChannel,
             selectedCartItemIds: [for (final item in _items) item.cartItemId],
+            dealExternalIds: _loadedDealIds,
           );
       if (_disposed || generation != _couponGeneration) return;
       _couponSignature = signature;
@@ -634,7 +706,11 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     _syncChannel();
   }
 
-  int get itemsSubtotal => _items.fold(0, (sum, item) => sum + item.subtotal);
+  /// Cart lines plus deals — web's `cardsSubtotal`, the base coupons and
+  /// totals are both priced from.
+  int get itemsSubtotal =>
+      _items.fold(0, (sum, item) => sum + item.subtotal) +
+      state.deals.fold(0, (sum, deal) => sum + deal.subtotal);
 
   int get shippingTotal => state.shippingBySeller.values.fold(
     0,
@@ -667,7 +743,16 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   /// Every reason the pay button stays disabled, in the same order the web
   /// evaluates them.
   String? get blockedReason {
-    if (_items.isEmpty) return 'Keranjang kosong.';
+    if (isDealCheckout && state.deals.isEmpty) {
+      if (state.contextLoading) return 'Memuat penawaran...';
+      return state.contextError == null
+          ? 'Penawaran ini sudah tidak tersedia.'
+          : 'Gagal memuat penawaran.';
+    }
+    if (_dealIds.isNotEmpty && state.contextLoading) {
+      return 'Memuat penawaran...';
+    }
+    if (_items.isEmpty && state.deals.isEmpty) return 'Keranjang kosong.';
     if (state.address == null) return 'Pilih alamat pengiriman dulu.';
     if (!state.phoneVerified) {
       return 'Verifikasi nomor HP dulu di pengaturan akun.';
@@ -684,7 +769,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         return 'Saldo dompet tidak cukup.';
       }
     }
-    for (final sellerId in _itemsBySeller.keys) {
+    for (final sellerId in sellerIds) {
       if (state.shippingBySeller[sellerId]?.selected == null) {
         return 'Pilih kurir untuk semua toko.';
       }
@@ -716,17 +801,38 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         );
       }
 
-      final result = await ref
-          .read(checkoutGatewayProvider)
-          .submit(
-            courierChoices: choices,
-            deliveryAddressSlug: state.address!.slug,
-            paymentMethod: state.paymentMethod,
-            paymentChannel: state.paymentChannel,
-            buyerNote: state.buyerNote,
-            couponIds: coupons.ids,
-            selectedCartItemIds: [for (final item in _items) item.cartItemId],
-          );
+      final gateway = ref.read(checkoutGatewayProvider);
+      final dealIds = _loadedDealIds;
+      final result = isDealCheckout
+          ? await gateway.submitDeals(
+              dealExternalIds: dealIds,
+              courierChoices: choices,
+              deliveryAddressSlug: state.address!.slug,
+              paymentMethod: state.paymentMethod,
+              paymentChannel: state.paymentChannel,
+              buyerNote: state.buyerNote,
+              couponIds: coupons.ids,
+            )
+          : dealIds.isNotEmpty
+          ? await gateway.submitCartWithDeals(
+              selectedCartItemIds: [for (final item in _items) item.cartItemId],
+              dealExternalIds: dealIds,
+              courierChoices: choices,
+              deliveryAddressSlug: state.address!.slug,
+              paymentMethod: state.paymentMethod,
+              paymentChannel: state.paymentChannel,
+              buyerNote: state.buyerNote,
+              couponIds: coupons.ids,
+            )
+          : await gateway.submit(
+              courierChoices: choices,
+              deliveryAddressSlug: state.address!.slug,
+              paymentMethod: state.paymentMethod,
+              paymentChannel: state.paymentChannel,
+              buyerNote: state.buyerNote,
+              couponIds: coupons.ids,
+              selectedCartItemIds: [for (final item in _items) item.cartItemId],
+            );
 
       // A saldo checkout is already settled server-side when this returns:
       // `pay_checkout_with_wallet` debited the balance through `credit_wallet`
@@ -758,7 +864,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   Future<void> _refreshAllRates() async {
     if (_disposed || state.address == null) return;
     await Future.wait([
-      for (final sellerId in _itemsBySeller.keys) fetchRatesForSeller(sellerId),
+      for (final sellerId in sellerIds) fetchRatesForSeller(sellerId),
     ]);
   }
 
@@ -802,4 +908,8 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 final checkoutProvider =
     NotifierProvider.autoDispose<CheckoutNotifier, CheckoutState>(
       CheckoutNotifier.new,
+      dependencies: [
+        checkoutDealIdsProvider,
+        checkoutWithCartSelectionProvider,
+      ],
     );

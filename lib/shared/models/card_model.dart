@@ -1,19 +1,33 @@
 import '../../core/utils/image_url.dart';
+import 'card_condition.dart';
 import 'card_market_price.dart';
 import 'pokemon_type.dart';
 
 /// `cards.category` check constraint.
-enum CardCategory { pokemon, trainer, energy }
-
-/// Sealed products — booster boxes, packs, gift sets — live in `cards` like
-/// everything else, marked by this category. Ports `SEALED_CATEGORY` from
-/// `pokepedia-web/lib/sealed/keys.ts`.
 ///
-/// It is not a [CardCategory] member: 'Sealed' falls through
-/// [CardCategoryX.fromRaw]'s default and arrives as [CardCategory.pokemon].
-/// The catalog queries filter it out in SQL before a row ever becomes a
-/// [CardModel], which is where web draws the same line.
+/// [sealed] is the booster boxes, packs and gift sets that share the table
+/// with the singles — `SEALED_CATEGORY` in `pokepedia-web/lib/sealed/keys.ts`.
+enum CardCategory { pokemon, trainer, energy, sealed }
+
+/// The raw `cards.category` value of [CardCategory.sealed], for the catalog
+/// queries that cut sealed products out in SQL.
 const sealedCategory = 'Sealed';
+
+/// Sealed products take catalog ids above this — `SEALED_CARD_ID_BASE` on
+/// web, and the bound `force_nm_condition_for_sealed` checks server-side.
+const sealedCardIdBase = 9000000;
+
+/// Ports `isSealedCardId`: rows that carry only a card id (listings, drafts,
+/// order-book levels) can still tell a sealed product from a single.
+bool isSealedCardId(int? cardId) => cardId != null && cardId > sealedCardIdBase;
+
+/// The cards that are not sealed products — web's
+/// `.filter((card) => !isSealedCategory(card.category))` for the surfaces a
+/// product cannot go on, such as a deck.
+List<CardModel> excludeSealed(Iterable<CardModel> cards) => [
+  for (final card in cards)
+    if (!card.isSealed) card,
+];
 
 extension CardCategoryX on CardCategory {
   String get raw {
@@ -24,6 +38,8 @@ extension CardCategoryX on CardCategory {
         return 'Trainer';
       case CardCategory.energy:
         return 'Energy';
+      case CardCategory.sealed:
+        return sealedCategory;
     }
   }
 
@@ -33,6 +49,8 @@ extension CardCategoryX on CardCategory {
         return CardCategory.trainer;
       case 'Energy':
         return CardCategory.energy;
+      case sealedCategory:
+        return CardCategory.sealed;
       case 'Pokemon':
       default:
         return CardCategory.pokemon;
@@ -47,6 +65,8 @@ extension CardCategoryX on CardCategory {
         return 'Trainer';
       case CardCategory.energy:
         return 'Energy';
+      case CardCategory.sealed:
+        return 'Produk Segel';
     }
   }
 }
@@ -373,6 +393,18 @@ class CardModel {
 
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
+
+  /// A sealed product rather than a single: no condition to grade, no place
+  /// in a deck. Either signal is enough — a card built from a listing row
+  /// carries only its id, one built from `cards` carries its category.
+  bool get isSealed => category == CardCategory.sealed || isSealedCardId(id);
+
+  /// The condition an order or listing of this card is written with: what
+  /// the seller picked, or NM for a sealed product, whose picker is hidden.
+  /// The `force_nm_condition_for_sealed` trigger stamps NM on listings and
+  /// drafts anyway; sending it keeps bids and matching on the same level.
+  CardCondition tradeCondition(CardCondition chosen) =>
+      isSealed ? CardCondition.nm : chosen;
 
   /// How far the market price has moved in the last week, as a percentage,
   /// or null when there is nothing to say.

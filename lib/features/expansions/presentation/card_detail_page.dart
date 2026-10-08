@@ -216,7 +216,11 @@ class _Artwork extends ConsumerWidget {
         children: [
           Hero(
             tag: 'card-image-${card.id}',
-            child: CardArt(imageUrl: card.imageUrl, borderRadius: AppRadius.lg),
+            child: CardArt(
+              imageUrl: card.imageUrl,
+              borderRadius: AppRadius.lg,
+              thumbnail: false,
+            ),
           ),
           if (owned > 0)
             Positioned(

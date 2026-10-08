@@ -3,7 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
+import '../../expansions/repository/models/store_identity.dart';
 import 'cart_repository.dart';
+import 'models/checkout_deal.dart';
 import 'models/checkout_models.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -239,6 +241,36 @@ class CheckoutGateway {
     List<String> acceptedCouriers = const [],
     List<String> acceptedCourierServices = const [],
   }) async {
+    final quote = await fetchRateQuote(
+      originCityId: originCityId,
+      destinationCityId: destinationCityId,
+      quantity: quantity,
+      itemValue: itemValue,
+      originLat: originLat,
+      originLng: originLng,
+      destinationLat: destinationLat,
+      destinationLng: destinationLng,
+      acceptedCouriers: acceptedCouriers,
+      acceptedCourierServices: acceptedCourierServices,
+    );
+    return quote.services;
+  }
+
+  /// [fetchRates] with the route's `reason` kept — `fetchShippingRates` in
+  /// `rates.repository.ts`, which the courier section needs to say whether an
+  /// empty list is the route, the seller's whitelist, or an outage.
+  Future<RateQuote> fetchRateQuote({
+    required String originCityId,
+    required String destinationCityId,
+    required int quantity,
+    required int itemValue,
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
+    List<String> acceptedCouriers = const [],
+    List<String> acceptedCourierServices = const [],
+  }) async {
     final json = await _api.post('/api/shipping/rates', {
       'originCityId': originCityId,
       'destinationCityId': destinationCityId,
@@ -254,13 +286,21 @@ class CheckoutGateway {
       'acceptedCouriers': acceptedCouriers,
       'acceptedCourierServices': acceptedCourierServices,
     });
+    return parseRateQuote(json);
+  }
 
+  /// Reads a `/api/shipping/rates` body.
+  static RateQuote parseRateQuote(Map<String, dynamic> json) {
     final services = json['services'];
-    if (services is! List) return const [];
-    return services
-        .whereType<Map<String, dynamic>>()
-        .map(_courierFromJson)
-        .toList();
+    return RateQuote(
+      services: services is List
+          ? services
+                .whereType<Map<String, dynamic>>()
+                .map(_courierFromJson)
+                .toList()
+          : const [],
+      reason: RatesReason.fromWire(json['reason']),
+    );
   }
 
   /// Ports `submitCartCheckout`. The server validates and locks the cart,
@@ -276,36 +316,124 @@ class CheckoutGateway {
     List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
   }) async {
-    final json = await _postCheckout({
-      'courierChoices': [
-        for (final choice in courierChoices)
-          {
-            'sellerId': choice.sellerId,
-            'courier': choice.courier,
-            'service': choice.service,
-            'insuranceEnabled': choice.insuranceEnabled,
-          },
-      ],
-      'deliveryAddressSlug': deliveryAddressSlug,
-      'paymentMethod': paymentMethod == PaymentMethod.wallet
-          ? 'wallet'
-          : 'xendit',
-      if (paymentMethod == PaymentMethod.xendit && paymentChannel != null)
-        'paymentChannel': paymentChannel.code,
-      if (buyerNote.trim().isNotEmpty) 'buyerNote': buyerNote.trim(),
-      if (couponIds.isNotEmpty) 'couponIds': couponIds,
-      if (selectedCartItemIds.isNotEmpty)
-        'selectedCartItemIds': selectedCartItemIds,
-    });
-
-    return CheckoutResult(
-      invoiceUrl: json['invoiceUrl'] as String?,
-      redirect: json['redirect'] as String?,
-      externalId: json['externalId'] as String?,
-      totalAmount: (json['totalAmount'] as num?)?.round(),
-      droppedItems: parseDroppedItems(json['droppedItems']),
+    final json = await _postCheckout(
+      checkoutRequestBody(
+        courierChoices: courierChoices,
+        deliveryAddressSlug: deliveryAddressSlug,
+        paymentMethod: paymentMethod,
+        paymentChannel: paymentChannel,
+        buyerNote: buyerNote,
+        couponIds: couponIds,
+        selectedCartItemIds: selectedCartItemIds.isEmpty
+            ? null
+            : selectedCartItemIds,
+      ),
     );
+    return _resultFrom(json);
   }
+
+  /// Pays the ticked cart lines and the accepted proposals ticked beside
+  /// them in one invoice — web's `/cart/checkout?s=&d=` from the cart page.
+  ///
+  /// The line selection is always sent, even empty, for the reason
+  /// [submitDeals] gives.
+  Future<CheckoutResult> submitCartWithDeals({
+    required List<int> selectedCartItemIds,
+    required List<String> dealExternalIds,
+    required List<CourierChoice> courierChoices,
+    required String deliveryAddressSlug,
+    required PaymentMethod paymentMethod,
+    PaymentChannel? paymentChannel,
+    String buyerNote = '',
+    List<int> couponIds = const [],
+  }) async {
+    final json = await _postCheckout(
+      checkoutRequestBody(
+        courierChoices: courierChoices,
+        deliveryAddressSlug: deliveryAddressSlug,
+        paymentMethod: paymentMethod,
+        paymentChannel: paymentChannel,
+        buyerNote: buyerNote,
+        couponIds: couponIds,
+        selectedCartItemIds: selectedCartItemIds,
+        selectedDealExternalIds: dealExternalIds,
+      ),
+    );
+    return _resultFrom(json);
+  }
+
+  /// Pays accepted bid proposals and nothing else from the cart.
+  ///
+  /// `selectedCartItemIds` goes out as an explicit empty list: the route
+  /// reads an *absent* selection as "the whole cart", so leaving it off — as
+  /// [submit] does for an empty one — invoiced the buyer for every unticked
+  /// cart line on top of the deal (web's e6bfd54d).
+  Future<CheckoutResult> submitDeals({
+    required List<String> dealExternalIds,
+    required List<CourierChoice> courierChoices,
+    required String deliveryAddressSlug,
+    required PaymentMethod paymentMethod,
+    PaymentChannel? paymentChannel,
+    String buyerNote = '',
+    List<int> couponIds = const [],
+  }) async {
+    final json = await _postCheckout(
+      checkoutRequestBody(
+        courierChoices: courierChoices,
+        deliveryAddressSlug: deliveryAddressSlug,
+        paymentMethod: paymentMethod,
+        paymentChannel: paymentChannel,
+        buyerNote: buyerNote,
+        couponIds: couponIds,
+        selectedCartItemIds: const [],
+        selectedDealExternalIds: dealExternalIds,
+      ),
+    );
+    return _resultFrom(json);
+  }
+
+  /// The `CheckoutBodySchema` body. A null [selectedCartItemIds] is left off
+  /// (the whole cart); an empty one is sent, meaning no cart lines at all.
+  static Map<String, dynamic> checkoutRequestBody({
+    required List<CourierChoice> courierChoices,
+    required String deliveryAddressSlug,
+    required PaymentMethod paymentMethod,
+    PaymentChannel? paymentChannel,
+    String buyerNote = '',
+    List<int> couponIds = const [],
+    List<int>? selectedCartItemIds,
+    List<String> selectedDealExternalIds = const [],
+  }) => {
+    'courierChoices': [
+      for (final choice in courierChoices)
+        {
+          'sellerId': choice.sellerId,
+          'courier': choice.courier,
+          'service': choice.service,
+          'insuranceEnabled': choice.insuranceEnabled,
+        },
+    ],
+    'deliveryAddressSlug': deliveryAddressSlug,
+    'paymentMethod': paymentMethod == PaymentMethod.wallet
+        ? 'wallet'
+        : 'xendit',
+    if (paymentMethod == PaymentMethod.xendit && paymentChannel != null)
+      'paymentChannel': paymentChannel.code,
+    if (buyerNote.trim().isNotEmpty) 'buyerNote': buyerNote.trim(),
+    if (couponIds.isNotEmpty) 'couponIds': couponIds,
+    if (selectedCartItemIds != null) 'selectedCartItemIds': selectedCartItemIds,
+    if (selectedDealExternalIds.isNotEmpty)
+      'selectedDealExternalIds': selectedDealExternalIds,
+  };
+
+  static CheckoutResult _resultFrom(Map<String, dynamic> json) =>
+      CheckoutResult(
+        invoiceUrl: json['invoiceUrl'] as String?,
+        redirect: json['redirect'] as String?,
+        externalId: json['externalId'] as String?,
+        totalAmount: (json['totalAmount'] as num?)?.round(),
+        droppedItems: parseDroppedItems(json['droppedItems']),
+      );
 
   /// Raises the two refusals checkout acts on as their own types; every
   /// other failure stays a plain [ApiException] carrying the server's text.
@@ -338,23 +466,72 @@ class CheckoutGateway {
   /// `POST /api/coupons/available` web's `fetchAvailableCoupons` calls.
   ///
   /// Through the route rather than `list_available_coupons` directly: the
-  /// route prices the items subtotal itself from [selectedCartItemIds], so
-  /// eligibility is never judged against a number the client supplied.
+  /// route prices the items subtotal itself from [selectedCartItemIds] and
+  /// the snapshots of [dealExternalIds], so eligibility is never judged
+  /// against a number the client supplied.
   Future<List<AvailableCoupon>> fetchAvailableCoupons({
     required int shippingTotal,
     required PaymentChannel? paymentChannel,
     required List<int> selectedCartItemIds,
+    List<String> dealExternalIds = const [],
   }) async {
     final json = await _api.post('/api/coupons/available', {
       'shippingTotal': shippingTotal,
       'paymentChannel': paymentChannel?.code,
       'selectedCartItemIds': selectedCartItemIds,
+      if (dealExternalIds.isNotEmpty) 'dealExternalIds': dealExternalIds,
     });
     final rows = json['coupons'];
     if (rows is! List) return const [];
     return [
       for (final row in rows)
         if (AvailableCoupon.tryParse(row) case final coupon?) coupon,
+    ];
+  }
+
+  /// The buyer's accepted bid proposals still waiting for checkout, newest
+  /// first — or just [externalIds], when given.
+  ///
+  /// The same filter `/api/cart/checkout` applies before it will combine a
+  /// deal (`kind = 'bid'`, `pending`, no invoice yet), read straight off
+  /// `carts` under `carts_select_own`. Expired rows are left out because the
+  /// route's lock would refuse them anyway.
+  Future<List<CheckoutDeal>> fetchDeals({List<String>? externalIds}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const [];
+    if (externalIds != null && externalIds.isEmpty) return const [];
+
+    var query = _client
+        .from('carts')
+        .select('external_id, expires_at, created_at, cart_snapshot')
+        .eq('user_id', userId)
+        .eq('kind', 'bid')
+        .eq('status', 'pending')
+        .isFilter('invoice_url', null)
+        .gt('expires_at', DateTime.now().toUtc().toIso8601String());
+    if (externalIds != null) query = query.inFilter('external_id', externalIds);
+
+    final List<dynamic> rows;
+    try {
+      rows = await query.order('created_at', ascending: false);
+    } on PostgrestException catch (e) {
+      throw ApiException(userFacingError(e));
+    }
+
+    final deals = [
+      for (final row in rows.whereType<Map<String, dynamic>>())
+        if (CheckoutDeal.fromCartRow(row) case final deal?) deal,
+    ];
+    final stores = await fetchStoreIdentities(
+      _client,
+      deals.map((deal) => deal.sellerId),
+    );
+    return [
+      for (final deal in deals)
+        deal.withStore(
+          storeName: stores[deal.sellerId]?.storeName,
+          storeLogoUrl: stores[deal.sellerId]?.storeLogoUrl,
+        ),
     ];
   }
 

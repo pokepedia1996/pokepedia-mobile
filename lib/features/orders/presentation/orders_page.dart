@@ -20,7 +20,13 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../../core/errors/user_message.dart';
+import '../../../core/network/pokepedia_api.dart';
+import '../../cart/presentation/checkout_page.dart';
 import '../../cart/presentation/payment_webview_page.dart';
+import '../../cart/repository/checkout_gateway.dart';
+import '../../cart/repository/models/checkout_deal.dart';
+import '../../cart/usecase/cart_deals.dart';
 import '../repository/models/order_model.dart';
 import '../repository/models/pending_checkout.dart';
 import '../usecase/orders_notifier.dart';
@@ -102,11 +108,13 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     );
   }
 
-  /// Reopens the hosted invoice so the buyer can finish paying.
+  /// Reopens the hosted invoice so the buyer can finish paying, or, for an
+  /// accepted bid proposal that has none yet, opens its checkout — web
+  /// routes the same row through the cart into `/cart/checkout?d=`.
   Future<void> _resumePayment(PendingCheckout checkout) async {
     final invoiceUrl = checkout.invoiceUrl;
     if (invoiceUrl == null) {
-      _toast('Tagihan belum dibuat untuk pesanan ini.');
+      await _payDeal(checkout);
       return;
     }
     await Navigator.of(context).push(
@@ -118,6 +126,32 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     // Returning is not proof of payment — the webhook decides — so just
     // re-read both sources.
     ref.invalidate(myPendingCheckoutsProvider);
+    _reload();
+  }
+
+  /// A row without an invoice is payable only if it is a deal; any other
+  /// kind never got as far as the payment page and simply lapses.
+  Future<void> _payDeal(PendingCheckout checkout) async {
+    final List<CheckoutDeal> deals;
+    try {
+      deals = await ref
+          .read(checkoutGatewayProvider)
+          .fetchDeals(externalIds: [checkout.externalId]);
+    } on ApiException catch (e) {
+      if (mounted) _toast(userFacingError(e));
+      return;
+    }
+    if (!mounted) return;
+    if (deals.isEmpty) {
+      _toast('Tagihan belum dibuat untuk pesanan ini.');
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(dealCheckoutRoute([for (final deal in deals) deal.externalId]));
+    if (!mounted) return;
+    ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
     _reload();
   }
 
@@ -153,6 +187,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
     }
     _toast('Pembayaran dibatalkan');
     ref.invalidate(myPendingCheckoutsProvider);
+    ref.invalidate(cartDealsProvider);
     _reload();
   }
 
@@ -1004,7 +1039,6 @@ class _PendingCheckoutCard extends StatelessWidget {
           _PendingCountdownBand(remaining: checkout.remaining),
           _PendingFooter(
             total: checkout.total,
-            canPay: checkout.hasInvoice,
             onPay: onPay,
             onCancel: onCancel,
           ),
@@ -1174,13 +1208,11 @@ class _PendingCountdownBand extends StatelessWidget {
 class _PendingFooter extends StatelessWidget {
   const _PendingFooter({
     required this.total,
-    required this.canPay,
     required this.onPay,
     required this.onCancel,
   });
 
   final int total;
-  final bool canPay;
   final VoidCallback onPay;
   final VoidCallback onCancel;
 
@@ -1222,9 +1254,7 @@ class _PendingFooter extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton(
-                  // Without an invoice the buyer never reached the payment
-                  // page, so there is nothing to resume — the cart lapses.
-                  onPressed: canPay ? onPay : null,
+                  onPressed: onPay,
                   child: const Text('Lanjutkan Bayar'),
                 ),
               ),
