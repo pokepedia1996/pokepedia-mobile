@@ -368,9 +368,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     final originCityId = origin?.cityId;
     if (originCityId == null || originCityId.isEmpty) {
       // Web simply skips the call; on a phone an empty courier list with no
-      // explanation reads as a bug, so say whose side it is on. A deal seller
-      // missing from `sellerOrigins` is a gap in `GET /api/cart`, which only
-      // resolves the sellers of cart lines, not a store left unfinished.
+      // explanation reads as a bug, so say whose side it is on.
       _setShipping(
         sellerId,
         SellerShipping(
