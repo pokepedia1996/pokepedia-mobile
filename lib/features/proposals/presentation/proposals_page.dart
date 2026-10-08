@@ -14,6 +14,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/proposal_card_group.dart';
+import '../repository/models/sent_proposal.dart';
 import '../usecase/proposals_notifier.dart';
 
 /// Ports `app/proposals/page.tsx` — negotiated offers on ask listings
@@ -302,8 +303,10 @@ class _CardGroupRow extends StatelessWidget {
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
                   Text(
-                    '${card.expansionCode.toUpperCase()} #'
-                    '${card.collectorNumber}',
+                    card.id == unavailableProposalCard.id
+                        ? 'Bid pembeli sudah tidak aktif'
+                        : '${card.expansionCode.toUpperCase()} #'
+                              '${card.collectorNumber}',
                     style: AppTypography.caption(context.mutedForeground),
                   ),
                   if (group.subtitle.isNotEmpty)

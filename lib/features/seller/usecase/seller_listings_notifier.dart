@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../repository/models/seller_listing.dart';
 import '../repository/seller_listings_repository.dart';
-import 'offers_notifier.dart';
 
 /// Which bucket the products screen is showing.
 final sellerBucketProvider = StateProvider<SellerListingBucket>(
@@ -18,56 +17,180 @@ final sellerSortProvider = StateProvider<ListingSort>(
   (ref) => const ListingSort(ListingSortCol.price),
 );
 
-/// The seller's listings for the selected bucket and search.
-/// Web's `?offers=1` — narrows the table to listings holding a live offer.
-///
-/// A view filter rather than a query parameter: the offer counts are already
-/// loaded for the row menus, so this costs nothing the page hasn't paid for.
+/// Web's `?offers=1` — narrows the table to listings holding a live offer,
+/// through `get_seller_listings_page`'s `p_with_offers`.
 final sellerOfferFilterProvider = StateProvider<bool>((ref) => false);
 
-final sellerListingsProvider = FutureProvider<List<SellerListing>>((ref) async {
+/// How many rows each `get_seller_listings_page` call asks for.
+const sellerListingsPageSize = 30;
+
+/// The first page of the selected bucket, with the bucket-wide totals.
+final sellerListingsPageProvider = FutureProvider<SellerListingsPage>((
+  ref,
+) async {
   final user = ref.watch(authProvider).valueOrNull;
-  if (user == null) return const <SellerListing>[];
+  if (user == null) return const SellerListingsPage();
 
   final bucket = ref.watch(sellerBucketProvider);
-  // Draft and Preferensi read elsewhere; asking `listings` for them would
-  // spend a round trip to be handed rows that can never match the bucket.
-  if (!bucket.isListingBucket) return const <SellerListing>[];
+  if (!bucket.isListingBucket) return const SellerListingsPage();
 
-  final query = ref.watch(sellerListingQueryProvider);
-  final listings = await ref
+  return ref
       .read(sellerListingsRepositoryProvider)
-      .fetchListings(bucket: bucket, query: query);
-  final sorted = ref.watch(sellerSortProvider).apply(listings);
-  if (!ref.watch(sellerOfferFilterProvider)) return sorted;
-
-  final counts = ref.watch(offerCountsProvider);
-  return [
-    for (final listing in sorted)
-      if (counts.containsKey(listing.slug)) listing,
-  ];
+      .fetchListingsPage(
+        bucket: bucket,
+        query: ref.watch(sellerListingQueryProvider),
+        sort: ref.watch(sellerSortProvider),
+        withOffers: ref.watch(sellerOfferFilterProvider),
+        limit: sellerListingsPageSize,
+      );
 });
 
-/// The seller's unposted drafts, for the Draft tab.
-/// How many listings sit in each bucket, for the dashboard's tiles.
+/// The first page's rows — the seam [SellerListingsFeed] seeds from.
+final sellerListingsProvider = FutureProvider<List<SellerListing>>((ref) async {
+  final page = await ref.watch(sellerListingsPageProvider.future);
+  return page.rows;
+});
+
+class SellerListingsFeedState {
+  const SellerListingsFeedState({
+    this.rows = const [],
+    this.totalCount = 0,
+    this.offersCount,
+    this.loading = true,
+    this.loadingMore = false,
+    this.error = false,
+  });
+
+  final List<SellerListing> rows;
+
+  /// Every listing the bucket's filters match, not just those loaded.
+  final int totalCount;
+
+  /// Null until the page payload arrives.
+  final int? offersCount;
+  final bool loading;
+  final bool loadingMore;
+  final bool error;
+
+  bool get hasMore => rows.length < totalCount;
+
+  SellerListingsFeedState copyWith({
+    List<SellerListing>? rows,
+    int? totalCount,
+    bool? loadingMore,
+  }) => SellerListingsFeedState(
+    rows: rows ?? this.rows,
+    totalCount: totalCount ?? this.totalCount,
+    offersCount: offersCount,
+    loading: loading,
+    loadingMore: loadingMore ?? this.loadingMore,
+    error: error,
+  );
+}
+
+/// The product list, paged by offset the way web's table pages.
 ///
-/// Counted by fetching rather than with a SQL `count`: "aktif" is not a
-/// column. A listing is active only if it is unarchived *and* still in stock
-/// *and* unexpired, and the last two are settled in Dart — see
-/// `fetchListings`. A count query would have to reimplement that rule in SQL
-/// and then drift from it.
+/// Rebuilt from the first page whenever the bucket, search, sort or offers
+/// filter changes, or a mutation invalidates it; [loadMore] appends after.
+class SellerListingsFeed extends Notifier<SellerListingsFeedState> {
+  @override
+  SellerListingsFeedState build() {
+    final first = ref.watch(sellerListingsProvider);
+    final page = ref.watch(sellerListingsPageProvider).valueOrNull;
+    return first.when(
+      loading: () => const SellerListingsFeedState(),
+      error: (_, __) =>
+          const SellerListingsFeedState(loading: false, error: true),
+      data: (rows) => SellerListingsFeedState(
+        rows: rows,
+        totalCount: page?.totalCount ?? rows.length,
+        offersCount: page?.offersCount,
+        loading: false,
+      ),
+    );
+  }
+
+  /// Appends the next page. Safe to call on every scroll frame.
+  Future<void> loadMore() async {
+    if (state.loading || state.loadingMore || !state.hasMore) return;
+
+    final pending = state.copyWith(loadingMore: true);
+    state = pending;
+    try {
+      final page = await ref
+          .read(sellerListingsRepositoryProvider)
+          .fetchListingsPage(
+            bucket: ref.read(sellerBucketProvider),
+            query: ref.read(sellerListingQueryProvider),
+            sort: ref.read(sellerSortProvider),
+            withOffers: ref.read(sellerOfferFilterProvider),
+            offset: pending.rows.length,
+            limit: sellerListingsPageSize,
+          );
+      // A filter change or refresh mid-flight rebuilt the feed; this page
+      // belongs to the old one.
+      if (!identical(state, pending)) return;
+      final seen = {for (final row in pending.rows) row.slug};
+      state = pending.copyWith(
+        rows: [
+          ...pending.rows,
+          for (final row in page.rows)
+            if (seen.add(row.slug)) row,
+        ],
+        // An empty page means the total moved under us; stop asking.
+        totalCount: page.rows.isEmpty ? pending.rows.length : page.totalCount,
+        loadingMore: false,
+      );
+    } catch (_) {
+      if (identical(state, pending)) {
+        state = pending.copyWith(loadingMore: false);
+      }
+    }
+  }
+}
+
+final sellerListingsFeedProvider =
+    NotifierProvider<SellerListingsFeed, SellerListingsFeedState>(
+      SellerListingsFeed.new,
+    );
+
+/// Per-tab counts from `get_seller_listing_tab_counts`. Empty when signed
+/// out or when the call fails, so the tabs simply show no number.
+final sellerListingTabCountsProvider =
+    FutureProvider<Map<SellerListingBucket, int>>((ref) async {
+      final user = ref.watch(authProvider).valueOrNull;
+      if (user == null) return const {};
+      try {
+        return await ref
+            .read(sellerListingsRepositoryProvider)
+            .fetchTabCounts();
+      } catch (_) {
+        return const {};
+      }
+    });
+
+/// How many listings sit in each bucket, for the dashboard's tiles.
 final sellerListingCountsProvider =
     FutureProvider<({int active, int inactive})>((ref) async {
-      final user = ref.watch(authProvider).valueOrNull;
-      if (user == null) return (active: 0, inactive: 0);
-
-      final repo = ref.read(sellerListingsRepositoryProvider);
-      final results = await Future.wait([
-        repo.fetchListings(bucket: SellerListingBucket.active),
-        repo.fetchListings(bucket: SellerListingBucket.inactive),
-      ]);
-      return (active: results[0].length, inactive: results[1].length);
+      final counts = await ref.watch(sellerListingTabCountsProvider.future);
+      return (
+        active: counts[SellerListingBucket.active] ?? 0,
+        inactive: counts[SellerListingBucket.inactive] ?? 0,
+      );
     });
+
+/// Re-reads the product list and every tab count after something changed
+/// which listings exist or where they sit.
+void refreshSellerListings(Ref ref) => _refresh(ref.invalidate);
+
+/// [refreshSellerListings] for widgets.
+void refreshSellerListingsFromWidget(WidgetRef ref) => _refresh(ref.invalidate);
+
+void _refresh(void Function(ProviderOrFamily) invalidate) {
+  invalidate(sellerListingsPageProvider);
+  invalidate(sellerListingsProvider);
+  invalidate(sellerListingTabCountsProvider);
+}
 
 /// Which drafts are ticked, by id.
 ///
@@ -148,7 +271,7 @@ final listingDefaultsProvider = FutureProvider<ListingDefaults>((ref) {
 ///
 /// Returns an error message, or null on success. Kept in one place so every
 /// action on the products screen invalidates the same things — the list
-/// itself, and the dashboard counters that read from the same rows.
+/// itself, and the tab and dashboard counts that read from the same rows.
 class SellerListingActions {
   SellerListingActions(this._ref);
 
@@ -175,7 +298,7 @@ class SellerListingActions {
 
   Future<String?> _run(Future<String?> Function() action) async {
     final error = await action();
-    if (error == null) _ref.invalidate(sellerListingsProvider);
+    if (error == null) refreshSellerListings(_ref);
     return error;
   }
 }

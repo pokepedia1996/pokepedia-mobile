@@ -2,6 +2,20 @@ import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
 import 'bid_proposal_model.dart';
 
+/// Stands in for the card of a sent proposal whose bid the seller can no
+/// longer read: `listings` RLS only shows another user's bid while it is
+/// open, and `bid_proposals` carries no `card_id` of its own. Every such
+/// proposal folds into this one group rather than vanishing from the list.
+const unavailableProposalCard = CardModel(
+  id: 0,
+  category: CardCategory.pokemon,
+  nameId: 'Kartu tidak tersedia',
+  expansionCode: '',
+  packSlug: '',
+  collectorNumber: '',
+  rarity: null,
+);
+
 /// A proposal this user sent **as a seller** against someone else's WTB bid.
 ///
 /// The mirror of [BidProposalModel], which is the same table read from the
@@ -25,18 +39,30 @@ class SentProposalModel {
     this.photos = const [],
   });
 
+  /// Maps a `bid_proposals` row embedding `bid` (the buyer's listing) and
+  /// `match` (the `order_items` row an accepted proposal produced).
+  ///
+  /// Either embed may be null. Web reads this list with a service client so
+  /// the bid is always there; the app reads it as the seller, who loses
+  /// sight of the bid once it closes. The match is visible to both parties
+  /// for good, so an accepted proposal still recovers its card and buyer
+  /// from it; anything else falls back to [unavailableProposalCard].
   factory SentProposalModel.fromRow(
     Map<String, dynamic> row, {
     String? buyerUsername,
   }) {
-    final bid = row['bid'] as Map<String, dynamic>;
+    final bid = row['bid'] as Map<String, dynamic>?;
+    final match = row['match'] as Map<String, dynamic>?;
+    final cardRow = (bid?['cards'] ?? match?['card']) as Map<String, dynamic>?;
     return SentProposalModel(
       slug: row['slug'] as String? ?? '',
-      card: CardModel.fromRow(bid['cards'] as Map<String, dynamic>),
+      card: cardRow == null
+          ? unavailableProposalCard
+          : CardModel.fromRow(cardRow),
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       proposedQuantity: (row['proposed_quantity'] as num?)?.toInt() ?? 1,
       status: BidProposalStatusX.fromRaw(row['status'] as String?),
-      bidPrice: (bid['price'] as num?)?.toInt() ?? 0,
+      bidPrice: (bid?['price'] as num?)?.toInt(),
       proposedPrice: (row['proposed_price'] as num?)?.toInt(),
       buyerUsername: buyerUsername,
       createdAt: DateTime.tryParse(
@@ -54,6 +80,14 @@ class SentProposalModel {
     );
   }
 
+  /// Whose bid [row] answers: the bid's owner while it is readable, the
+  /// match's buyer once it isn't.
+  static String? buyerIdOf(Map<String, dynamic> row) {
+    final bid = row['bid'] as Map<String, dynamic>?;
+    final match = row['match'] as Map<String, dynamic>?;
+    return (bid?['user_id'] ?? match?['bid_user_id']) as String?;
+  }
+
   final String slug;
   final CardModel card;
   final CardCondition condition;
@@ -61,8 +95,8 @@ class SentProposalModel {
   final BidProposalStatus status;
 
   /// What the buyer's bid offers per card — the number the proposal is
-  /// negotiating against.
-  final int bidPrice;
+  /// negotiating against. Null once the bid is out of the seller's sight.
+  final int? bidPrice;
 
   /// What this seller asked for instead. Null means they accepted the bid
   /// price as it stands.
@@ -86,11 +120,19 @@ class SentProposalModel {
   /// the seller sent stock imagery rather than their own copy.
   bool get usesStockPhoto => photos.isNotEmpty && photos.first == card.imageUrl;
 
+  /// Whether [card] is the real card rather than [unavailableProposalCard].
+  bool get hasCard => card.id != unavailableProposalCard.id;
+
   /// The price actually being proposed, falling back to the bid's own.
-  int get effectivePrice => proposedPrice ?? bidPrice;
+  /// Null when neither is known.
+  int? get effectivePrice => proposedPrice ?? bidPrice;
 
   /// Web strikes through the bid price only when the seller asked for more.
-  bool get isCounterOffer => proposedPrice != null && proposedPrice! > bidPrice;
+  bool get isCounterOffer {
+    final proposed = proposedPrice;
+    final bid = bidPrice;
+    return proposed != null && bid != null && proposed > bid;
+  }
 
   /// Only a settled proposal can be cleared from the list —
   /// `dismiss_bid_proposal` refuses while it is still pending.

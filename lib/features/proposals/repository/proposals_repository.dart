@@ -9,6 +9,7 @@ import 'models/listing_offer_model.dart';
 import 'models/my_bid.dart';
 import 'models/sent_proposal.dart';
 import 'models/proposals_summary.dart';
+import 'paging.dart';
 import '../../../core/errors/user_message.dart';
 
 /// The `cards` columns these rows embed — same list the other repositories
@@ -29,6 +30,18 @@ const _proposalColumns =
 slug, status, proposed_quantity, proposed_price, condition, message, photos,
 created_at, expires_at, seen_at, seller_id,
 bid:listings!inner(id, price, user_id, card:cards!inner($_cardColumns))
+''';
+
+/// Both embeds are left joins: the seller loses sight of the buyer's bid
+/// once it closes (`listings` RLS shows other users' rows only while open),
+/// and an inner join would drop the proposal with it. The match survives —
+/// `order_items` is readable by both parties.
+const _sentProposalColumns =
+    '''
+slug, status, proposed_quantity, proposed_price, condition, message, photos,
+seen_at, created_at, expires_at,
+bid:listings!bid_order_id(id, price, user_id, cards($_cardColumns)),
+match:order_items!order_item_id(bid_user_id, card:cards($_cardColumns))
 ''';
 
 /// Data access for the buyer's side of negotiation, backed by Supabase.
@@ -153,45 +166,43 @@ class ProposalsRepository {
 
   /// Proposals this user sent as a seller against other people's WTB bids.
   ///
-  /// Ports `SentProposalsList`. The same policy that lets a buyer read
-  /// proposals on their bids lets a seller read the ones they sent, so this
-  /// is the same table filtered the other way. Archived rows are excluded —
-  /// `dismiss_bid_proposal` stamps `seller_archived_at` to clear a settled
-  /// proposal off this list.
-  Future<List<SentProposalModel>> fetchSentProposals({int limit = 100}) async {
+  /// Ports `SentProposalsList` (`GET /api/bid-proposals`). The same policy
+  /// that lets a buyer read proposals on their bids lets a seller read the
+  /// ones they sent, so this is the same table filtered the other way.
+  /// Archived rows are excluded — `dismiss_bid_proposal` stamps
+  /// `seller_archived_at` to clear a settled proposal off this list.
+  ///
+  /// Walked to the end rather than capped: the feed groups these by card,
+  /// so a missing page would silently drop whole cards from it.
+  Future<List<SentProposalModel>> fetchSentProposals() async {
     final userId = _userId;
     if (userId == null) return const [];
 
-    final rows =
-        await _client
-                .from('bid_proposals')
-                .select(
-                  'slug, status, proposed_quantity, proposed_price, condition,'
-                  'message, photos, seen_at, created_at, expires_at,'
-                  'bid:listings!inner(id, price, user_id,'
-                  'cards!inner($_cardColumns))',
-                )
-                .eq('seller_id', userId)
-                .isFilter('seller_archived_at', null)
-                .order('created_at', ascending: false)
-                .limit(limit)
-            as List;
+    final rows = await fetchAllPages<Map<String, dynamic>>(
+      (from, to) => _client
+          .from('bid_proposals')
+          .select(_sentProposalColumns)
+          .eq('seller_id', userId)
+          .isFilter('seller_archived_at', null)
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to),
+      keyOf: (row) => row['slug'] as String,
+    );
     if (rows.isEmpty) return const [];
 
-    final buyerIds = rows
-        .map((r) => (r as Map<String, dynamic>)['bid'] as Map<String, dynamic>)
-        .map((bid) => bid['user_id'] as String?)
-        .whereType<String>()
-        .toSet();
-    final usernames = await _usernames(buyerIds);
+    final usernames = await _usernames(
+      rows.map(SentProposalModel.buyerIdOf).whereType<String>().toSet(),
+    );
 
-    return rows.cast<Map<String, dynamic>>().map((row) {
-      final bid = row['bid'] as Map<String, dynamic>;
-      return SentProposalModel.fromRow(
-        row,
-        buyerUsername: usernames[bid['user_id']],
-      );
-    }).toList();
+    return rows
+        .map(
+          (row) => SentProposalModel.fromRow(
+            row,
+            buyerUsername: usernames[SentProposalModel.buyerIdOf(row)],
+          ),
+        )
+        .toList();
   }
 
   /// Usernames off `profiles`, which is world-readable — unlike
@@ -219,31 +230,35 @@ class ProposalsRepository {
   /// The user's own open WTB bids, newest first, each carrying how many
   /// proposals are waiting on it.
   ///
-  /// Ports the bid half of web's card feed (`/api/listings/bids`). The
-  /// proposal counts come from the same policy-scoped `bid_proposals` read
-  /// the summary uses, so the number on a row and the number in the market
-  /// banner can't disagree.
-  Future<List<MyBidModel>> fetchMyBids({int limit = 100}) async {
+  /// Ports the bid half of web's card feed (`fetchAllBuyerBids` over
+  /// `/api/listings/bids`), paging through every open bid — a buyer past
+  /// one page must still see and manage the rest. The proposal counts come
+  /// from the same policy-scoped `bid_proposals` read the summary uses, so
+  /// the number on a row and the number in the market banner can't
+  /// disagree.
+  Future<List<MyBidModel>> fetchMyBids() async {
     final userId = _userId;
     if (userId == null) return const [];
 
-    final rows =
-        await _client
-                .from('listings')
-                .select(
-                  'id, slug, price, condition, quantity, qty_locked,'
-                  'created_at, expires_at, cards!inner($_cardColumns)',
-                )
-                .eq('user_id', userId)
-                .eq('side', 'bid')
-                .eq('status', 'open')
-                .order('created_at', ascending: false)
-                .limit(limit)
-            as List;
+    final rows = await fetchAllPages<Map<String, dynamic>>(
+      (from, to) => _client
+          .from('listings')
+          .select(
+            'id, slug, price, condition, quantity, qty_locked,'
+            'created_at, expires_at, cards!inner($_cardColumns)',
+          )
+          .eq('user_id', userId)
+          .eq('side', 'bid')
+          .eq('status', 'open')
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to),
+      keyOf: (row) => row['slug'] as String,
+    );
     if (rows.isEmpty) return const [];
 
     final countsByBid = await _proposalCountsByBid();
-    return rows.cast<Map<String, dynamic>>().map((row) {
+    return rows.map((row) {
       final counts = countsByBid[(row['id'] as num).toInt()];
       return MyBidModel.fromRow(
         row,
@@ -263,22 +278,13 @@ class ProposalsRepository {
     final userId = _userId;
     if (userId == null) return const {};
 
-    final rows =
-        await _client
-                .from('bid_proposals')
-                .select(
-                  'bid_order_id, status, created_at,'
-                  'bid:listings!inner(user_id)',
-                )
-                .limit(500)
-            as List;
+    final rows = await _fetchReceivedProposalRows(
+      userId,
+      'slug, bid_order_id, status, created_at, bid:listings!inner(user_id)',
+    );
 
     final counts = <int, ({int pending, int total, DateTime? latest})>{};
-    for (final row in rows.cast<Map<String, dynamic>>()) {
-      final bid = row['bid'] as Map<String, dynamic>?;
-      // The policy also returns proposals this user *sent*; only the ones on
-      // their own bids belong on a bid row.
-      if (bid == null || bid['user_id'] != userId) continue;
+    for (final row in rows) {
       final bidId = (row['bid_order_id'] as num?)?.toInt();
       if (bidId == null) continue;
 
@@ -328,27 +334,36 @@ class ProposalsRepository {
   /// token, which reaches the same rows: `listings` is own-row for the
   /// buyer's bids, `bid_proposals`' policy exposes both sides of a
   /// negotiation this user is party to, and `seller_profiles` is self-read.
+  /// The sent side reads `bid_proposals` alone, with no bid embed, because
+  /// the seller can't see a bid that has closed and the proposal still
+  /// counts.
   Future<ProposalsSummary> fetchSummary() async {
     final userId = _userId;
     if (userId == null) return const ProposalsSummary();
 
-    final results = await Future.wait([
+    final results = await Future.wait<Object?>([
       _client
           .from('listings')
           .select('id')
           .eq('user_id', userId)
           .eq('side', 'bid')
           .eq('status', 'open'),
-      // One read for both directions: the policy returns proposals on this
-      // user's bids *and* the ones they sent as a seller, so they're split
-      // apart below rather than fetched twice.
-      _client
-          .from('bid_proposals')
-          .select(
-            'status, seen_at, seller_id, seller_archived_at,'
-            'bid:listings!inner(user_id)',
-          )
-          .limit(200),
+      _fetchReceivedProposalRows(
+        userId,
+        'slug, status, seen_at, bid:listings!inner(user_id, status)',
+        openBidsOnly: true,
+      ),
+      fetchAllPages<Map<String, dynamic>>(
+        (from, to) => _client
+            .from('bid_proposals')
+            .select('slug, status')
+            .eq('seller_id', userId)
+            .isFilter('seller_archived_at', null)
+            .order('created_at', ascending: false)
+            .order('id', ascending: false)
+            .range(from, to),
+        keyOf: (row) => row['slug'] as String,
+      ),
       _client
           .from('seller_profiles')
           .select('is_active')
@@ -357,31 +372,20 @@ class ProposalsRepository {
     ]);
 
     final bidCount = (results[0] as List).length;
-    final profile = results[2] as Map<String, dynamic>?;
+    final received = results[1] as List<Map<String, dynamic>>;
+    final sent = results[2] as List<Map<String, dynamic>>;
+    final profile = results[3] as Map<String, dynamic>?;
 
     var receivedPending = 0;
     var receivedPendingUnseen = 0;
-    var receivedTotal = 0;
-    var sentPending = 0;
-    var sentTotal = 0;
-
-    for (final row in (results[1] as List).cast<Map<String, dynamic>>()) {
-      final bid = row['bid'] as Map<String, dynamic>?;
-      final status = row['status'] as String?;
-
-      if (bid != null && bid['user_id'] == userId) {
-        receivedTotal++;
-        if (status == 'pending') {
-          receivedPending++;
-          if (row['seen_at'] == null) receivedPendingUnseen++;
-        }
-      } else if (row['seller_id'] == userId) {
-        // Web drops archived rows from the sent side.
-        if (row['seller_archived_at'] != null) continue;
-        sentTotal++;
-        if (status == 'pending') sentPending++;
-      }
+    for (final row in received) {
+      if (row['status'] != 'pending') continue;
+      receivedPending++;
+      if (row['seen_at'] == null) receivedPendingUnseen++;
     }
+    final receivedTotal = received.length;
+    final sentPending = sent.where((row) => row['status'] == 'pending').length;
+    final sentTotal = sent.length;
 
     return ProposalsSummary(
       receivedPending: receivedPending,
@@ -402,18 +406,7 @@ class ProposalsRepository {
     final userId = _userId;
     if (userId == null) return const [];
 
-    final rows = await _client
-        .from('bid_proposals')
-        .select(_proposalColumns)
-        .order('created_at', ascending: false)
-        .limit(50);
-
-    // The policy also exposes proposals this user *sent* as a seller; the
-    // buyer inbox only wants the ones on their own bids.
-    final mine = rows.where((row) {
-      final bid = row['bid'] as Map<String, dynamic>?;
-      return bid != null && bid['user_id'] == userId;
-    }).toList();
+    final mine = await _fetchReceivedProposalRows(userId, _proposalColumns);
     if (mine.isEmpty) return const [];
 
     final storeNames = await _storeNamesFor(
@@ -465,6 +458,31 @@ class ProposalsRepository {
   }
 
   // --- Shared helpers -----------------------------------------------------
+
+  /// Every proposal on this user's own bids, newest first.
+  ///
+  /// The policy also exposes proposals this user *sent* as a seller, so the
+  /// bid owner is filtered in the query, not after it — a client-side
+  /// filter over a page lets sent rows crowd received ones out. [columns] must
+  /// embed `bid:listings!inner(user_id, ...)` for that filter to apply;
+  /// [openBidsOnly] narrows to bids still live, as web's summary counts.
+  Future<List<Map<String, dynamic>>> _fetchReceivedProposalRows(
+    String userId,
+    String columns, {
+    bool openBidsOnly = false,
+  }) {
+    return fetchAllPages<Map<String, dynamic>>((from, to) {
+      var query = _client
+          .from('bid_proposals')
+          .select(columns)
+          .eq('bid.user_id', userId);
+      if (openBidsOnly) query = query.eq('bid.status', 'open');
+      return query
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(from, to);
+    }, keyOf: (row) => row['slug'] as String);
+  }
 
   /// Calls an RPC that answers `{ ok: true }` or `{ error: '...' }`,
   /// returning null on success and a human-readable message otherwise.
@@ -559,32 +577,35 @@ class ProposalsRepository {
   /// otherwise their username — a seller who never opened a storefront has
   /// no `seller_profiles` name at all, and naming them "Toko" throws away
   /// the handle the profile row is carrying.
+  ///
+  /// Shop names come through `get_store_identities`: `seller_profiles` is
+  /// self-select only, so reading it directly returns nothing for anyone
+  /// but the caller.
   Future<Map<String, String>> _storeNamesFor(Set<String> sellerIds) async {
     if (sellerIds.isEmpty) return const {};
     final ids = sellerIds.toList();
 
-    Future<List<Map<String, dynamic>>> read(
-      String table,
-      String columns,
-      String key,
+    Future<List<Map<String, dynamic>>> guarded(
+      Future<dynamic> Function() read,
     ) async {
       try {
-        final rows = await _client
-            .from(table)
-            .select(columns)
-            .inFilter(key, ids);
-        return rows.cast<Map<String, dynamic>>();
+        return ((await read()) as List).cast<Map<String, dynamic>>();
       } catch (_) {
         return const [];
       }
     }
 
-    final storeRows = await read(
-      'seller_profiles',
-      'user_id, store_name',
-      'user_id',
-    );
-    final profileRows = await read('profiles', 'id, username', 'id');
+    final results = await Future.wait([
+      guarded(
+        () => _client.rpc('get_store_identities', params: {'p_user_ids': ids}),
+      ),
+      guarded(
+        () =>
+            _client.from('profiles').select('id, username').inFilter('id', ids),
+      ),
+    ]);
+    final storeRows = results[0];
+    final profileRows = results[1];
 
     final storeNameBy = {
       for (final row in storeRows)

@@ -1,9 +1,7 @@
 /// A seller's feedback, as the storefront's Penilaian tab shows it.
 ///
-/// Two sources: `get_feedback_counts_matrix` for the summary (it buckets by
-/// period server-side) and `trade_ratings` for the reviews themselves —
-/// `get_feedback_list` exists in the web repo but isn't deployed to this
-/// project, and `ratings_select_public` makes the rows readable anyway.
+/// Two sources, as on web: `get_feedback_counts_matrix` for the summary (it
+/// buckets by period server-side) and `get_feedback_list` for the reviews.
 class StoreFeedbackSummary {
   const StoreFeedbackSummary({
     required this.positive,
@@ -55,7 +53,9 @@ extension FeedbackKindX on FeedbackKind {
   };
 }
 
-/// One review left on a seller.
+/// One review left on a seller — a `get_feedback_list` row, which stands for
+/// a whole transaction: its `feedback` is the worst tone across the order's
+/// items and `is_auto` is true only when every item was auto-rated.
 class StoreFeedback {
   const StoreFeedback({
     required this.id,
@@ -67,10 +67,7 @@ class StoreFeedback {
     this.isAuto = false,
   });
 
-  factory StoreFeedback.fromRow(
-    Map<String, dynamic> row, {
-    String? raterUsername,
-  }) {
+  factory StoreFeedback.fromRow(Map<String, dynamic> row) {
     return StoreFeedback(
       id: (row['id'] as num).toInt(),
       kind: FeedbackKindX.fromRaw(row['feedback'] as String?),
@@ -79,9 +76,22 @@ class StoreFeedback {
           DateTime.now(),
       comment: row['comment'] as String?,
       reply: row['reply'] as String?,
-      raterUsername: raterUsername,
+      raterUsername: row['rater_username'] as String?,
       isAuto: row['is_auto'] as bool? ?? false,
     );
+  }
+
+  /// The `rows` of a `get_feedback_list` payload (`{total, rows}`). Anything
+  /// else — an error body, a null — reads as no reviews.
+  static List<StoreFeedback> parseList(Object? payload) {
+    if (payload is! Map) return const [];
+    final rows = payload['rows'];
+    if (rows is! List) return const [];
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .where((row) => row['id'] is num)
+        .map(StoreFeedback.fromRow)
+        .toList();
   }
 
   final int id;
