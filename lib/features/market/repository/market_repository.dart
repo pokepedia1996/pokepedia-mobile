@@ -275,7 +275,10 @@ class MarketRepository {
         .toList();
   }
 
-  static const storeListingsPageSize = 40;
+  /// One screen and a bit: enough that the next page is asked for before
+  /// the reader reaches the end, few enough that opening a store fetches
+  /// and decodes little more than what is shown.
+  static const storeListingsPageSize = 20;
 
   /// What one seller's listings on one side hold — the counts and options
   /// behind a storefront's filter sheet. `get_seller_listing_facets` is the

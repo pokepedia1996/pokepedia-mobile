@@ -334,6 +334,12 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) => _onScroll(n, feedKey),
               child: CustomScrollView(
+                // Only what is on screen is built, so only what is on screen
+                // fetches and decodes its art. The default builds 250pt
+                // ahead in both directions, which on a store of large
+                // catalog images meant a screenful of downloads and decodes
+                // the reader had not scrolled to.
+                cacheExtent: 0,
                 slivers: [
                   SliverToBoxAdapter(child: _Header(store: store)),
                   SliverToBoxAdapter(
