@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
@@ -82,26 +81,7 @@ class MarketRepository {
                   // is always sent alongside the other two.
                   'p_cursor_price': cursor.price,
                 },
-                if (filters.conditions.isNotEmpty)
-                  'p_conditions': filters.conditions.map((c) => c.raw).toList(),
-                if (filters.rarities.isNotEmpty)
-                  'p_rarities': filters.rarities.toList(),
-                if (filters.categories.isNotEmpty)
-                  'p_categories': filters.categories.toList(),
-                if (filters.trainerSubtypes.isNotEmpty)
-                  'p_trainer_subtypes': filters.trainerSubtypes.toList(),
-                if (filters.languages.isNotEmpty)
-                  'p_card_languages': filters.languages
-                      .map((l) => l.raw)
-                      .toList(),
-                if (filters.cities.isNotEmpty)
-                  'p_cities': filters.cities.toList(),
-                if (filters.excludeRarities != null)
-                  'p_exclude_rarities': filters.excludeRarities,
-                if (filters.verifiedOnly) 'p_verified_only': true,
-                if (filters.wishlistOnly) 'p_wishlist_only': true,
-                if (filters.minPrice != null) 'p_min_price': filters.minPrice,
-                if (filters.maxPrice != null) 'p_max_price': filters.maxPrice,
+                ...filters.rpcParams,
               },
             )
             as List;
@@ -256,6 +236,63 @@ class MarketRepository {
     return rows
         .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
         .toList();
+  }
+
+  /// One page of a storefront's listings, searched, filtered and sorted by
+  /// the server — web's storefront feed.
+  ///
+  /// [fetchStoreListingsByUserId] takes the 100 newest and leaves the rest to
+  /// the client, which was fine for browsing a small shop and wrong for
+  /// searching a big one: a store with 2,000 listings answered "spinarak"
+  /// from its latest hundred, and said it had none.
+  Future<List<ListingModel>> fetchStoreListingsPage({
+    required String sellerUserId,
+    required String side,
+    String? search,
+    MarketFilters filters = const MarketFilters(),
+    String sort = 'created_desc',
+    int offset = 0,
+    int limit = storeListingsPageSize,
+  }) async {
+    final trimmed = search?.trim() ?? '';
+    final rows =
+        await _client.rpc(
+              'get_recent_marketplace_listings',
+              params: {
+                'p_seller_user_id': sellerUserId,
+                'p_side': side,
+                'p_search': trimmed.isEmpty ? null : trimmed,
+                ...filters.rpcParams,
+                'p_sort': sort,
+                'p_window_hours': 0,
+                'p_limit': limit,
+                'p_offset': offset,
+              },
+            )
+            as List;
+    return rows
+        .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// One screen and a bit: enough that the next page is asked for before
+  /// the reader reaches the end, few enough that opening a store fetches
+  /// and decodes little more than what is shown.
+  static const storeListingsPageSize = 20;
+
+  /// What one seller's listings on one side hold — the counts and options
+  /// behind a storefront's filter sheet. `get_seller_listing_facets` is the
+  /// aggregate web's storefront reads, in the same shape as the market's.
+  Future<ListingFacets> fetchSellerListingFacets({
+    required String sellerUserId,
+    required String side,
+  }) async {
+    final json = await _client.rpc(
+      'get_seller_listing_facets',
+      params: {'p_seller_user_id': sellerUserId, 'p_side': side},
+    );
+    if (json is! Map) return ListingFacets.empty;
+    return ListingFacets.fromJson(json.cast<String, dynamic>());
   }
 
   /// One seller's open asks (WTS) for a single card, plus how many *other*

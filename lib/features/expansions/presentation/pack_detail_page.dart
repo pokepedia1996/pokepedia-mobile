@@ -23,9 +23,9 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../home/repository/models/portfolio_value.dart';
-import '../../home/usecase/portfolio_value_notifier.dart';
-import '../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
+import '../../portfolio/presentation/widgets/portfolio_toggle.dart';
 import '../../portfolio/presentation/widgets/add_destination_sheet.dart';
+import '../../portfolio/usecase/portfolio_counter.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
@@ -147,24 +147,8 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
   /// rather than a local patch, so the "Dimiliki" count above the grid moves
   /// with the tile that was just changed.
   Future<void> _setQuantity(CardModel card, int next) async {
-    final user = ref.read(authProvider).valueOrNull;
-    if (user == null) return;
-
-    final target = ref.read(selectedPortfolioProvider);
-    final controller = ref.read(cardOwnershipControllerProvider);
-    final listId = target.listId;
-
-    final error = listId == null
-        ? await controller.adjustQuantity(
-            userId: user.id,
-            cardId: card.id,
-            delta: next - card.owned,
-          )
-        : await controller.setListCardQuantity(
-            listId: listId,
-            cardId: card.id,
-            quantity: next,
-          );
+    if (ref.read(authProvider).valueOrNull == null) return;
+    final error = await setPortfolioQuantity(ref, card, next);
 
     if (!mounted) return;
     if (error != null) {
@@ -343,14 +327,11 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                       // of the grid.
                       AppBottomNav.reservedSpace(context) + 12,
                     ),
-                    sliver: SliverGrid(
-                      gridDelegate: cardGridDelegate(
-                        context,
-                        extraChrome: user == null
-                            ? 0
-                            : cardGridItemFooterChrome,
-                      ),
-                      delegate: SliverChildBuilderDelegate((context, i) {
+                    sliver: SliverCardGrid(
+                      extraChrome: user == null ? 0 : cardGridItemFooterChrome,
+                      hasVariant: (i) => visible[i].variantLabel != null,
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) {
                         final card = visible[i];
                         return CardGridItem(
                           card: card,
@@ -372,7 +353,7 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
                                   ),
                                 ),
                         );
-                      }, childCount: visible.length),
+                      },
                     ),
                   )
                 else
@@ -491,65 +472,9 @@ class _PackHeader extends ConsumerWidget {
           // "Dimiliki 27 / 211", and that number is meaningless without it.
           if (ownedCount != null) ...[
             const SizedBox(height: 6),
-            _PortfolioToggle(selected: ref.watch(selectedPortfolioProvider)),
+            const PortfolioToggle(),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// "Portofolio: Utama ⌄" — the same switcher Beranda and Koleksi carry, so
-/// the three surfaces agree on which portfolio is being worked on.
-class _PortfolioToggle extends ConsumerWidget {
-  const _PortfolioToggle({required this.selected});
-
-  final PortfolioTarget selected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        onTap: () => showPortfolioPicker(context, ref),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 5, 8, 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            border: Border.all(color: context.borderColor),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                LucideIcons.layers,
-                size: 13,
-                color: context.mutedForeground,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Portofolio: ',
-                style: AppTypography.caption(context.mutedForeground),
-              ),
-              Flexible(
-                child: Text(
-                  selected.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.captionSemibold(colors.onSurface),
-                ),
-              ),
-              Icon(
-                LucideIcons.chevronDown,
-                size: 15,
-                color: context.mutedForeground,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

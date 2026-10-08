@@ -13,8 +13,11 @@ import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/quick_search_field.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../portfolio/presentation/widgets/portfolio_toggle.dart';
+import '../../portfolio/usecase/portfolio_counter.dart';
 import '../usecase/quick_search_notifier.dart';
 
 /// Ports `app/search/page.tsx` — everything matching one query, as a grid.
@@ -112,6 +115,11 @@ class SearchResultsPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 2),
                       _Subtitle(state: state),
+                      // Which shelf the counters below count into.
+                      if (signedIn) ...[
+                        const SizedBox(height: 8),
+                        const PortfolioToggle(),
+                      ],
                     ],
                   ),
                 ),
@@ -137,6 +145,8 @@ class SearchResultsPage extends ConsumerWidget {
                     onViewModeChanged: notifier.setViewMode,
                     // The query is already in the heading above.
                     showSearch: false,
+                    languages: state.languages,
+                    onLanguagesChanged: notifier.setLanguages,
                   ),
                 ),
               ),
@@ -158,8 +168,14 @@ class SearchResultsPage extends ConsumerWidget {
                   hasScrollBody: false,
                   child: state.cards.isEmpty
                       ? _Placeholder(
-                          message:
-                              "Tidak ada kartu yang cocok dengan '$trimmed'.",
+                          message: state.languages.isEmpty
+                              ? "Tidak ada kartu yang cocok dengan '$trimmed'."
+                              : "Tidak ada kartu '$trimmed' dalam bahasa "
+                                    '${state.languages.map((l) => l.shortLabel).join(', ')}.',
+                          onRetry: state.languages.isEmpty
+                              ? null
+                              : () => notifier.setLanguages(const {}),
+                          retryLabel: 'Semua bahasa',
                         )
                       : _Placeholder(
                           // The query matched; the facets then excluded
@@ -176,17 +192,38 @@ class SearchResultsPage extends ConsumerWidget {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   sliver: state.viewMode == CardViewMode.grid
-                      ? SliverGrid(
-                          gridDelegate: cardGridDelegate(context),
-                          delegate: SliverChildBuilderDelegate((context, i) {
+                      ? SliverCardGrid(
+                          extraChrome: signedIn ? cardGridItemFooterChrome : 0,
+                          hasVariant: (i) => visible[i].variantLabel != null,
+                          itemCount: visible.length,
+                          itemBuilder: (context, i) {
                             final card = visible[i];
                             return CardGridItem(
                               card: card,
                               onTap: () => context.push(
                                 Routes.cardDetail(card.packSlug, card.id),
                               ),
+                              // Web's search tile carries the same counter
+                              // as an expansion's. Signed out there is no
+                              // portfolio to count into.
+                              footer: signedIn
+                                  ? Align(
+                                      alignment: Alignment.centerRight,
+                                      child: QuantitySelector(
+                                        value: card.owned,
+                                        size: QuantitySelectorSize.sm,
+                                        onChanged: (next) => _setQuantity(
+                                          context,
+                                          ref,
+                                          notifier,
+                                          card,
+                                          next,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
                             );
-                          }, childCount: visible.length),
+                          },
                         )
                       : SliverList(
                           delegate: SliverChildBuilderDelegate((context, i) {
@@ -234,6 +271,28 @@ class SearchResultsPage extends ConsumerWidget {
             ],
           );
   }
+}
+
+/// One tap on a tile's counter. The tile moves first and is put back if the
+/// save fails: a second tap landing before the first save returns then counts
+/// from the number on screen, not a stale one, and re-running the search to
+/// learn a number already known would reset the buyer's scroll.
+Future<void> _setQuantity(
+  BuildContext context,
+  WidgetRef ref,
+  FullSearchNotifier notifier,
+  CardModel card,
+  int next,
+) async {
+  notifier.setOwned(card.id, next);
+  final error = await setPortfolioQuantity(ref, card, next);
+  // Checked before the rollback too: the results are auto-disposed with the
+  // page, and a buyer who left mid-save has nothing left to put back.
+  if (error == null || !context.mounted) return;
+  notifier.setOwned(card.id, card.owned);
+  ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(content: Text(error), persist: false));
 }
 
 /// The match count, or a loading line while the first page is in flight.

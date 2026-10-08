@@ -31,12 +31,18 @@ class ListDetailPage extends ConsumerWidget {
                 title: 'List ini masih kosong',
               );
             }
-            return GridView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: cards.length,
-              gridDelegate: cardGridDelegate(context),
-              itemBuilder: (context, i) =>
-                  CardGridItem(card: cards[i], onTap: () {}),
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverCardGrid(
+                    hasVariant: (i) => cards[i].variantLabel != null,
+                    itemCount: cards.length,
+                    itemBuilder: (context, i) =>
+                        CardGridItem(card: cards[i], onTap: () {}),
+                  ),
+                ),
+              ],
             );
           },
           loading: () => const PikachuLoader(),

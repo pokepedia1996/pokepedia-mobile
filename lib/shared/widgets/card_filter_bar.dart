@@ -8,6 +8,7 @@ import '../../core/theme/app_typography.dart';
 import '../models/card_model.dart';
 import '../models/pokemon_type.dart';
 import '../utils/card_filtering.dart';
+import 'language_filter_chip.dart';
 import 'type_icon.dart';
 import 'view_mode_toggle.dart';
 
@@ -29,6 +30,8 @@ class CardFilterBar extends StatefulWidget {
     this.showSearch = true,
     this.optionsOverride,
     this.sortOptions = cardSortOptionsWithinPack,
+    this.languages,
+    this.onLanguagesChanged,
   });
 
   final List<CardModel> cards;
@@ -59,6 +62,13 @@ class CardFilterBar extends StatefulWidget {
   /// spans expansions passes [CardSortOption.values].
   final List<CardSortOption> sortOptions;
 
+  /// Web's "Bahasa" filter. Shown only when [onLanguagesChanged] is given,
+  /// as the panel's first section: an ID, EN and JP print share a name and
+  /// art, so it is usually the first thing a search needs narrowing by.
+  /// Empty means every language.
+  final Set<CardLanguage>? languages;
+  final ValueChanged<Set<CardLanguage>>? onLanguagesChanged;
+
   @override
   State<CardFilterBar> createState() => _CardFilterBarState();
 }
@@ -73,7 +83,13 @@ class _CardFilterBarState extends State<CardFilterBar> {
     final ownershipActive =
         widget.ownershipFilter != null &&
         widget.ownershipFilter != OwnershipFilter.all;
-    final activeCount = widget.filters.activeCount + (ownershipActive ? 1 : 0);
+    final languages = widget.languages ?? const <CardLanguage>{};
+    final activeCount =
+        widget.filters.activeCount +
+        (ownershipActive ? 1 : 0) +
+        // Counted only where the bar offers it — a page that doesn't can't
+        // show the buyer what they would be clearing.
+        (widget.onLanguagesChanged == null ? 0 : languages.length);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,6 +135,12 @@ class _CardFilterBarState extends State<CardFilterBar> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (widget.onLanguagesChanged != null)
+                  _LanguageSection(
+                    selected: languages,
+                    onToggle: (v) =>
+                        widget.onLanguagesChanged!(_toggled(languages, v)),
+                  ),
                 _ChipSection<CardCategory>(
                   label: 'Kategori',
                   options: options.categories,
@@ -228,6 +250,9 @@ class _CardFilterBarState extends State<CardFilterBar> {
                             widget.filters.clearedKeepingSearch(),
                           );
                           widget.onOwnershipChanged?.call(OwnershipFilter.all);
+                          if (languages.isNotEmpty) {
+                            widget.onLanguagesChanged?.call(const {});
+                          }
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: context.appColors.error,
@@ -439,6 +464,47 @@ class _SortButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Bahasa": the three print languages split the row evenly, as in the
+/// market's filter sheet.
+class _LanguageSection extends StatelessWidget {
+  const _LanguageSection({required this.selected, required this.onToggle});
+
+  final Set<CardLanguage> selected;
+  final ValueChanged<CardLanguage> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Bahasa',
+            style: AppTypography.captionSemibold(context.appColors.onSurface),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final language in CardLanguage.values) ...[
+                if (language != CardLanguage.values.first)
+                  const SizedBox(width: 6),
+                Expanded(
+                  child: LanguageFilterChip(
+                    language: language,
+                    active: selected.contains(language),
+                    onTap: () => onToggle(language),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

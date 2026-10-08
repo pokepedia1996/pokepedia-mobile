@@ -261,6 +261,41 @@ extension CardSortOptionX on CardSortOption {
   };
 }
 
+/// Print finishes in catalog order — the base print first, then the holo
+/// finishes. Ports web's `HOLO_ORDER`, which mirrors `_card_holo_rank` in SQL.
+const _holoOrder = {
+  'normal': 0,
+  // WOTC printings: 1st Edition is the base row, the later print run follows.
+  '1st-edition': 0,
+  'shadowless': 1,
+  'unlimited': 1,
+  'Pokeball': 1,
+  'Masterball': 2,
+  'Master Ball': 2,
+  'Energy': 3,
+  'Tim Roket': 4,
+  'Reverse': 5,
+};
+const _unknownHoloRank = 99;
+
+/// Ports web's `compareVariant`: a card's prints sit together under its
+/// number as normal, Poké Ball, Master Ball, then the rest.
+int compareVariant(String a, String b) {
+  final rankA = _holoOrder[a] ?? _unknownHoloRank;
+  final rankB = _holoOrder[b] ?? _unknownHoloRank;
+  if (rankA != rankB) return rankA - rankB;
+  return a.compareTo(b);
+}
+
+/// By number, then by finish. Without the second key the prints sharing a
+/// number came out in whatever order the server sent them, so a Master Ball
+/// could lead its own normal print. Both keys flip together, as on web.
+int _compareNumber(CardModel a, CardModel b, int dir) {
+  final byNumber = compareNatural(a.collectorNumber, b.collectorNumber);
+  if (byNumber != 0) return dir * byNumber;
+  return dir * compareVariant(a.variant, b.variant);
+}
+
 List<CardModel> sortCards(List<CardModel> cards, CardSortOption sortBy) {
   final result = [...cards];
   result.sort((a, b) {
@@ -277,9 +312,9 @@ List<CardModel> sortCards(List<CardModel> cards, CardSortOption sortBy) {
       case CardSortOption.nameDesc:
         return b.name.compareTo(a.name);
       case CardSortOption.numberAsc:
-        return compareNatural(a.collectorNumber, b.collectorNumber);
+        return _compareNumber(a, b, 1);
       case CardSortOption.numberDesc:
-        return compareNatural(b.collectorNumber, a.collectorNumber);
+        return _compareNumber(a, b, -1);
       case CardSortOption.rarityAsc:
         return rarityRank(
           a.rarity ?? 'Tanpa tanda',

@@ -43,13 +43,15 @@ class SellerDashboardPage extends ConsumerWidget {
       body: SafeArea(
         bottom: false,
         child: user == null
-            ? EmptyState(
-                icon: LucideIcons.store,
-                title: 'Masuk untuk membuka dasbor',
-                description: 'Dasbor penjual hanya untuk pemilik toko.',
-                action: ElevatedButton(
-                  onPressed: () => context.push(Routes.login),
-                  child: const Text('Masuk'),
+            ? Center(
+                child: EmptyState(
+                  icon: LucideIcons.store,
+                  title: 'Masuk untuk membuka dasbor',
+                  description: 'Dasbor penjual hanya untuk pemilik toko.',
+                  action: ElevatedButton(
+                    onPressed: () => context.push(Routes.login),
+                    child: const Text('Masuk'),
+                  ),
                 ),
               )
             : const _DashboardBody(),
@@ -80,14 +82,16 @@ class _NoStoreState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EmptyState(
-      icon: LucideIcons.store,
-      title: 'Belum punya toko',
-      description:
-          'Buka toko dulu di pokepedia.id, lalu kelola penjualannya dari sini.',
-      action: ElevatedButton(
-        onPressed: () => context.push(Routes.settings),
-        child: const Text('Buka Pengaturan'),
+    return Center(
+      child: EmptyState(
+        icon: LucideIcons.store,
+        title: 'Belum punya toko',
+        description:
+            'Buka toko dulu di pokepedia.id, lalu kelola penjualannya dari sini.',
+        action: ElevatedButton(
+          onPressed: () => context.push(Routes.settings),
+          child: const Text('Buka Pengaturan'),
+        ),
       ),
     );
   }

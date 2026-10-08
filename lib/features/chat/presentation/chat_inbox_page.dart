@@ -22,20 +22,39 @@ class ChatInboxPage extends ConsumerStatefulWidget {
   ConsumerState<ChatInboxPage> createState() => _ChatInboxPageState();
 }
 
-class _ChatInboxPageState extends ConsumerState<ChatInboxPage> {
+class _ChatInboxPageState extends ConsumerState<ChatInboxPage>
+    with WidgetsBindingObserver {
   final _scroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
+    // Fresh on arrival, not only on a pull: the list is cached for the
+    // session, and whatever realtime missed meanwhile would otherwise sit
+    // there until the reader thought to drag it down.
+    Future.microtask(_refresh);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Back from the background with the inbox open — the window in which the
+  /// realtime socket is most likely to have missed something.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    await ref.read(chatThreadsProvider.notifier).refresh();
   }
 
   void _onScroll() {
@@ -73,9 +92,10 @@ class _ChatInboxPageState extends ConsumerState<ChatInboxPage> {
                 }
                 final more = ref.read(chatThreadsProvider.notifier).hasMore;
                 return RefreshIndicator(
+                  // The same in-place refresh, so pulling no longer tears
+                  // down the realtime channel to rebuild it.
                   onRefresh: () async {
-                    ref.invalidate(chatThreadsProvider);
-                    await ref.read(chatThreadsProvider.future);
+                    await _refresh();
                   },
                   child: ListView.separated(
                     controller: _scroll,

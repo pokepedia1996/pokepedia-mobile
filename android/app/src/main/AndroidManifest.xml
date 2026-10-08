@@ -31,17 +31,21 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <!-- Both hosts: App Links do not follow redirects, so an
-                     apex link would silently open the browser if only www
-                     were claimed. `NEXT_PUBLIC_APP_URL` falls back to the
-                     apex and the emails observed use www. -->
+                <!-- www only. The apex 308s to www, and Google's verifier
+                     does not follow redirects, so pokepedia.id's
+                     assetlinks.json is never read and that host can only
+                     ever fail verification. On Android 11 and below one
+                     failed host fails the whole intent-filter, so claiming
+                     the apex "as well" took www down with it and nothing
+                     opened the app at all.
+
+                     Nothing is lost: the emails are built from
+                     `{{ .SiteURL }}`, which is https://www.pokepedia.id. An
+                     apex link opens the browser, which is what it did
+                     anyway. -->
                 <data
                     android:scheme="https"
                     android:host="www.pokepedia.id"
-                    android:pathPrefix="/auth/confirm"/>
-                <data
-                    android:scheme="https"
-                    android:host="pokepedia.id"
                     android:pathPrefix="/auth/confirm"/>
             </intent-filter>
         </activity>

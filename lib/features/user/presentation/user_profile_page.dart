@@ -188,11 +188,8 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                       message: 'Tidak ada kartu yang sesuai filter.',
                     )
                   else if (_viewMode == CardViewMode.grid)
-                    GridView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: cardGridDelegate(context),
+                    CardGridRows(
+                      hasVariant: (i) => visible[i].variantLabel != null,
                       itemCount: visible.length,
                       itemBuilder: (context, i) => CardGridItem(
                         card: visible[i],

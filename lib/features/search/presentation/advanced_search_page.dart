@@ -15,14 +15,16 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pokemon_type.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/app_top_bar.dart';
 import '../../expansions/presentation/expansions_page.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/catalog_language_toggle.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/pokeball_icon.dart';
+import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/type_icon.dart';
+import '../../portfolio/presentation/widgets/portfolio_toggle.dart';
+import '../../portfolio/usecase/portfolio_counter.dart';
 import '../repository/models/advanced_search_query.dart';
 import '../repository/search_repository.dart';
 import '../usecase/search_notifier.dart';
@@ -69,20 +71,13 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
   /// has happened is a question asked too early.
   bool _filtersOpen = false;
 
-  final _searchController = TextEditingController();
-
-  /// Live search fires per keystroke, so it waits for a pause first. Without
-  /// it "charizard" is nine searches, eight of them already stale by the time
-  /// they answer.
-  Timer? _debounce;
-  static const _debounceDelay = Duration(milliseconds: 300);
-
   @override
   void initState() {
     super.initState();
+    // A `/search?q=` link fills the panel's name field and runs it — the
+    // advanced search's own input, now that the bar above is quick search.
     final seed = widget.initialQuery?.trim();
     if (seed == null || seed.isEmpty) return;
-    _searchController.text = seed;
     // After the frame: the notifier is read by a tree that is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -92,36 +87,10 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
     });
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onTyped(String value) {
-    final notifier = ref.read(searchNotifierProvider.notifier);
-    notifier.setQuery(value);
-    _debounce?.cancel();
-
-    // An empty box is not a search that found nothing, it is no search at
-    // all — the expansions come straight back rather than after a round trip
-    // that was only ever going to return everything.
-    if (value.trim().isEmpty) {
-      notifier.reset();
-      setState(() {});
-      return;
-    }
-    _debounce = Timer(_debounceDelay, () {
-      if (mounted) notifier.search();
-    });
-  }
-
   /// Whether the screen is answering a question rather than offering the
-  /// catalog. Either half counts: text in the box, or a filter set from the
-  /// panel — a search for "every Kelangkaan: SAR" carries no text at all.
-  bool _isSearching(SearchState state) =>
-      _searchController.text.trim().isNotEmpty || state.hasAnyFilter;
+  /// catalog: anything set in the panel, its name field included — a search
+  /// for "every Kelangkaan: SAR" carries no text at all.
+  bool _isSearching(SearchState state) => state.hasAnyFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -137,16 +106,11 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
         child: Column(
           children: [
             AppTopBar(
-              // The app's one search input, rather than a second one built
-              // here. This field used to be its own `TextField` on the card
-              // fill with a taller decoration, so the box on the tab people
-              // search from was the one box that did not match the rest.
-              searchField: AppSearchField(
-                hintText: 'Cari Pokemon...',
-                controller: _searchController,
-                onChanged: _onTyped,
-                onScan: () => context.push(Routes.scan),
-              ),
+              // Beranda's quick search, suggestions and all — not wired to
+              // the filters below. The two used to share one query, so typing
+              // up here rewrote the panel's "Cari nama kartu" and a filtered
+              // search could not be told apart from a typed one. The panel's
+              // own name field is the advanced search's text input.
               trailing: _FilterToggle(
                 open: _filtersOpen,
                 duration: _panelDuration,
@@ -263,6 +227,7 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
         ),
       ];
     }
+    final signedIn = ref.watch(authProvider).valueOrNull != null;
 
     return [
       SliverPadding(
@@ -272,9 +237,12 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
           16,
           AppBottomNav.reservedSpace(context) + 12,
         ),
-        sliver: SliverGrid(
-          gridDelegate: cardGridDelegate(context),
-          delegate: SliverChildBuilderDelegate((context, i) {
+        sliver: SliverCardGrid(
+          extraChrome: signedIn ? cardGridItemFooterChrome : 0,
+          hasVariant: (i) =>
+              i < state.results.length && state.results[i].variantLabel != null,
+          itemCount: state.results.length + (state.hasNext ? 1 : 0),
+          itemBuilder: (context, i) {
             if (i >= state.results.length) {
               return LoadMoreTile(
                 loading: state.loadingMore,
@@ -286,11 +254,40 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
               card: card,
               onTap: () =>
                   context.push(Routes.cardDetail(card.packSlug, card.id)),
+              // The expansion page's counter, counting into the portfolio
+              // the header's switcher names. Signed out there is nowhere to
+              // put a copy.
+              footer: signedIn
+                  ? Align(
+                      alignment: Alignment.centerRight,
+                      child: QuantitySelector(
+                        value: card.owned,
+                        size: QuantitySelectorSize.sm,
+                        onChanged: (next) => _setQuantity(notifier, card, next),
+                      ),
+                    )
+                  : null,
             );
-          }, childCount: state.results.length + (state.hasNext ? 1 : 0)),
+          },
         ),
       ),
     ];
+  }
+
+  /// One tap on a result's counter. The tile moves first and is put back if
+  /// the save fails, so a quick second tap counts from the number on screen.
+  Future<void> _setQuantity(
+    SearchNotifier notifier,
+    CardModel card,
+    int next,
+  ) async {
+    notifier.setOwned(card.id, next);
+    final error = await setPortfolioQuantity(ref, card, next);
+    if (error == null || !mounted) return;
+    notifier.setOwned(card.id, card.owned);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(error), persist: false));
   }
 
   Widget _placeholder(
@@ -374,7 +371,10 @@ class _FilterToggle extends StatelessWidget {
                   open ? LucideIcons.x : LucideIcons.slidersHorizontal,
                   key: ValueKey(open),
                   size: 20,
-                  color: Colors.white,
+                  // Paired with the fill rather than fixed white: open, the
+                  // circle is `onSurface`, which dark mode turns near-white,
+                  // and a white cross on it disappeared.
+                  color: open ? colors.surface : colors.onPrimary,
                 ),
               ),
             ),
@@ -799,7 +799,7 @@ class _ResultsHeader extends ConsumerWidget {
     final signedIn = ref.watch(authProvider).valueOrNull != null;
     final found = state.total > 0 ? state.total : state.results.length;
 
-    return Row(
+    final row = Row(
       children: [
         Expanded(
           child: Text(
@@ -829,6 +829,14 @@ class _ResultsHeader extends ConsumerWidget {
           onSelected: notifier.setSort,
         ),
       ],
+    );
+    if (!signedIn) return row;
+
+    // Which shelf the counters and the "Koleksi" filter answer for — the
+    // expansion page's switcher, in the same place relative to its grid.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [const PortfolioToggle(), const SizedBox(height: 8), row],
     );
   }
 }

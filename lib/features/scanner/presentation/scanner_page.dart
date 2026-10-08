@@ -22,9 +22,10 @@ import '../utils/detector_worker.dart';
 import '../utils/card_capture.dart';
 import '../utils/corner_model.dart';
 import '../utils/warp_quad.dart';
-import 'widgets/scan_lock_overlay.dart';
+import 'widgets/scan_hint.dart';
 import 'widgets/scan_result_sheet.dart';
 import 'widgets/scan_session_sheet.dart';
+import 'widgets/scan_price_burst.dart';
 import 'widgets/scan_status_pill.dart';
 import 'widgets/scanner_top_bar.dart';
 
@@ -109,9 +110,34 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// is only ever asked about the card immediately before this one.
   int? _lastCapturedCardId;
 
-  /// What the hint text reflects.
+  /// The card the price burst is showing, and the timer that clears it.
+  ///
+  /// Separate from [_activeTempId], which drives the result sheet and stays
+  /// up until the next scan: the burst is a moment, not a state.
+  int? _burstCardId;
+  Timer? _burstTimer;
+
+  /// How long the big price stays up. Web's `PRICE_BURST_VISIBLE_MS` — long
+  /// enough to read at arm's length, short enough not to sit over the next
+  /// card.
+  static const _burstVisible = Duration(milliseconds: 2200);
+
+  /// How long the opening hint stays up. Web's `HINT_VISIBLE_MS`.
+  static const _hintVisibleFor = Duration(milliseconds: 3000);
+
+  /// What the status pill reflects.
   bool _cardDetected = false;
   bool _locking = false;
+
+  /// The opening "Arahkan kamera ke kartu" hint. Goes after
+  /// [_hintVisibleFor] or the first capture, whichever is sooner, and does
+  /// not come back.
+  var _hintVisible = true;
+  Timer? _hintTimer;
+
+  /// The top bar's pause. Stops detection without stopping the camera, so
+  /// the user can reposition a binder without it firing on every page.
+  var _paused = false;
 
   CameraController? _controller;
   Future<void>? _initialization;
@@ -181,6 +207,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     _worker?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _rearmTimer?.cancel();
+    _burstTimer?.cancel();
+    _hintTimer?.cancel();
     _tickTimer?.cancel();
     final controller = _controller;
     if (controller != null) {
@@ -272,6 +300,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         _controller = controller;
         _cameraError = null;
       });
+      _hintTimer ??= Timer(_hintVisibleFor, () {
+        if (mounted) setState(() => _hintVisible = false);
+      });
       await _startDetection(controller);
     } on CameraException catch (e) {
       if (!mounted) return;
@@ -314,7 +345,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       Platform.isIOS ? 0 : controller.description.sensorOrientation;
 
   Future<void> _tick() async {
-    if (!mounted || _detecting || _capturing) return;
+    if (!mounted || _detecting || _capturing || _paused) return;
     final model = _model;
     final frame = _latestFrame;
     final controller = _controller;
@@ -429,7 +460,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     required double presence,
   }) async {
     if (_capturing) return;
-    setState(() => _capturing = true);
+    setState(() {
+      _capturing = true;
+      _hintVisible = false;
+    });
     _rearmTimer?.cancel();
 
     try {
@@ -540,6 +574,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     setState(() {
       _activeTempId = tempId;
       _lastCapturedCardId = result.card.id;
+      _burstCardId = result.card.id;
+    });
+    _burstTimer?.cancel();
+    _burstTimer = Timer(_burstVisible, () {
+      if (mounted) setState(() => _burstCardId = null);
     });
     // Fired once per card that actually lands, matching web. With no
     // shutter this is the only confirmation the user gets — they are
@@ -696,6 +735,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     final session = ref.watch(scanSessionProvider);
     final language = ref.watch(scanLanguageProvider);
 
+    final cameraReady =
+        _cameraError == null && (_controller?.value.isInitialized ?? false);
+
     final activeItem = _activeTempId == null
         ? null
         : session.where((it) => it.tempId == _activeTempId).firstOrNull;
@@ -709,37 +751,47 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
             fit: StackFit.expand,
             children: [
               _buildPreview(screenSize),
-              ScanLockOverlay(detected: _cardDetected, locking: _locking),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 64,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: ScanStatusPill(
-                    status: _capturing
-                        ? ScanPillStatus.capturing
-                        : scanState is ScanLoading
-                        ? ScanPillStatus.processing
-                        : ScanPillStatus.ready,
+              ScanHint(
+                visible: _hintVisible && cameraReady && scanState is ScanIdle,
+              ),
+              // Web shows the pill only while detection is live — not over
+              // the session sheet, where nothing is being looked for.
+              if (cameraReady && !_sessionOpen)
+                Positioned(
+                  // Web's `top-[9.5rem]`.
+                  top: MediaQuery.of(context).padding.top + 152,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: ScanStatusPill(status: _pillStatus(scanState)),
+                    ),
                   ),
                 ),
+              ScanPriceBurst(
+                visible: _burstCardId != null,
+                price: _burstCardId == null
+                    ? null
+                    : ref
+                          .watch(scanSessionPricesProvider)
+                          .valueOrNull?[_burstCardId]
+                          ?.price,
               ),
               ScannerTopBar(
                 language: language,
                 onLanguageChanged: _onLanguageChanged,
                 busy: _capturing || scanState is ScanLoading,
+                paused: _paused,
+                onTogglePause: _togglePause,
                 torchSupported: _torchSupported,
                 torchOn: _torchOn,
                 onToggleTorch: _toggleTorch,
+                soundOn: !ref.watch(scanSoundProvider).muted,
+                onToggleSound: _toggleSound,
                 onClose: () => Navigator.of(context).maybePop(),
               ),
               ScanResultSheet(
                 item: activeItem,
-                sessionCount: session.fold(
-                  0,
-                  (sum, item) => sum + item.quantity,
-                ),
-                busy: _capturing || scanState is ScanLoading,
                 onSelectVariant: (card) {
                   if (activeItem != null) _selectVariant(activeItem, card);
                 },
@@ -755,6 +807,38 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         },
       ),
     );
+  }
+
+  /// What the pill says, in the order the stages actually happen.
+  ///
+  /// Capturing and processing win over the tracking states: both run while a
+  /// quad is still locked on screen, and "Mengunci..." over a request in
+  /// flight would say the scanner was still deciding.
+  ScanPillStatus _pillStatus(ScanState scanState) {
+    if (_capturing) return ScanPillStatus.capturing;
+    if (scanState is ScanLoading) return ScanPillStatus.processing;
+    if (_paused) return ScanPillStatus.paused;
+    if (_activeTempId != null) return ScanPillStatus.done;
+    if (_locking || _cardDetected) return ScanPillStatus.locking;
+    return ScanPillStatus.searching;
+  }
+
+  /// Web's `handleTogglePause`. Resuming starts the lock from scratch: a
+  /// stability count carried across the pause would fire on a card the user
+  /// never held still.
+  void _togglePause() {
+    _autoCapture.reset();
+    setState(() {
+      _paused = !_paused;
+      _cardDetected = false;
+      _locking = false;
+    });
+  }
+
+  Future<void> _toggleSound() async {
+    final sound = ref.read(scanSoundProvider);
+    await sound.setMuted(!sound.muted);
+    if (mounted) setState(() {});
   }
 
   Widget _buildPreview(Size screenSize) {

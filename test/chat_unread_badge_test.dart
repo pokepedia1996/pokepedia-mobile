@@ -129,4 +129,53 @@ void main() {
 
     expect(open.container.read(chatUnreadCountProvider), 2);
   });
+
+  group('refresh on entering the inbox', () {
+    test('picks up what realtime missed, on the same channel', () async {
+      final open = await _open(
+        _FakeChatRepository([_thread(roomId: 1, unread: 0)]),
+      );
+      expect(open.repository.subscriptions, 1);
+
+      // A message that arrived while the socket was down: the server has it,
+      // the cached list does not.
+      open.repository.threads = [
+        _thread(roomId: 2, unread: 1),
+        _thread(roomId: 1, unread: 0),
+      ];
+      await open.container.read(chatThreadsProvider.notifier).refresh();
+
+      expect(
+        open.container.read(chatThreadsProvider).value!.map((t) => t.roomId),
+        [2, 1],
+      );
+      expect(open.container.read(chatUnreadCountProvider), 1);
+      // Refreshed in place — not invalidated, so not re-subscribed.
+      expect(open.repository.subscriptions, 1);
+    });
+
+    test('a failed refresh leaves the inbox as it was', () async {
+      final open = await _open(
+        _FakeChatRepository([_thread(roomId: 1, unread: 2)]),
+      );
+      open.repository.failFetch = true;
+
+      await open.container.read(chatThreadsProvider.notifier).refresh();
+
+      expect(open.container.read(chatThreadsProvider).hasValue, isTrue);
+      expect(open.container.read(chatUnreadCountProvider), 2);
+    });
+
+    test('recovers an inbox whose first load failed', () async {
+      final open = await _open(
+        _FakeChatRepository([_thread(roomId: 1, unread: 1)], failFetch: true),
+      );
+      expect(open.container.read(chatThreadsProvider).hasError, isTrue);
+
+      open.repository.failFetch = false;
+      await open.container.read(chatThreadsProvider.notifier).refresh();
+
+      expect(open.container.read(chatUnreadCountProvider), 1);
+    });
+  });
 }

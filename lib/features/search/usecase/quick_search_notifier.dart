@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
+import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../portfolio/usecase/portfolio_counter.dart';
 import '../repository/quick_search_repository.dart';
 
 export '../repository/quick_search_repository.dart'
@@ -44,6 +46,7 @@ class FullSearchState {
     this.ownership = OwnershipFilter.all,
     this.sort = CardSortOption.setDesc,
     this.viewMode = CardViewMode.grid,
+    this.languages = const {},
   });
 
   final List<CardModel> cards;
@@ -67,6 +70,11 @@ class FullSearchState {
   /// Grid or list. Presentation only — it never re-queries.
   final CardViewMode viewMode;
 
+  /// Which print languages to search, empty for all. Re-queries, as [sort]
+  /// does: web sends it as `p_languages`, and narrowing a fetched page
+  /// instead would hide matches that sit past it.
+  final Set<CardLanguage> languages;
+
   FullSearchState copyWith({
     List<CardModel>? cards,
     int? total,
@@ -78,6 +86,7 @@ class FullSearchState {
     OwnershipFilter? ownership,
     CardSortOption? sort,
     CardViewMode? viewMode,
+    Set<CardLanguage>? languages,
   }) => FullSearchState(
     cards: cards ?? this.cards,
     total: total ?? this.total,
@@ -89,6 +98,7 @@ class FullSearchState {
     ownership: ownership ?? this.ownership,
     sort: sort ?? this.sort,
     viewMode: viewMode ?? this.viewMode,
+    languages: languages ?? this.languages,
   );
 }
 
@@ -100,6 +110,14 @@ class FullSearchNotifier
       return const FullSearchState(loading: false);
     }
     Future.microtask(_loadFirstPage);
+    // The counters answer for whichever portfolio the switcher names.
+    // Deferred so the collection id derived from the switch has caught up —
+    // read mid-notification, it still names the portfolio just left.
+    ref.listen(
+      selectedPortfolioProvider,
+      (_, __) => Future.microtask(_refreshOwned),
+    );
+    ref.onDispose(() => _disposed = true);
     return const FullSearchState();
   }
 
@@ -110,12 +128,17 @@ class FullSearchNotifier
     final ownership = state.ownership;
     final sort = state.sort;
     final viewMode = state.viewMode;
+    final languages = state.languages;
     try {
       final page = await ref
           .read(quickSearchRepositoryProvider)
-          .searchAll(arg, sort: sort);
+          .searchAll(arg, sort: sort, languages: languages);
+      final cards = await _withOwned(page.cards);
+      // A newer language or sort request started while this one was out;
+      // its answer is the one that counts.
+      if (languages != state.languages || sort != state.sort) return;
       state = FullSearchState(
-        cards: page.cards,
+        cards: cards,
         total: page.total,
         hasNext: page.hasNext,
         loading: false,
@@ -123,8 +146,10 @@ class FullSearchNotifier
         ownership: ownership,
         sort: sort,
         viewMode: viewMode,
+        languages: languages,
       );
     } catch (_) {
+      if (languages != state.languages || sort != state.sort) return;
       state = FullSearchState(
         loading: false,
         failed: true,
@@ -132,6 +157,7 @@ class FullSearchNotifier
         ownership: ownership,
         sort: sort,
         viewMode: viewMode,
+        languages: languages,
       );
     }
   }
@@ -151,6 +177,45 @@ class FullSearchNotifier
     unawaited(_loadFirstPage());
   }
 
+  void setLanguages(Set<CardLanguage> languages) {
+    if (languages.length == state.languages.length &&
+        languages.containsAll(state.languages)) {
+      return;
+    }
+    state = state.copyWith(languages: languages, loading: true, failed: false);
+    unawaited(_loadFirstPage());
+  }
+
+  /// Patches one card's owned count after the counter has saved it, rather
+  /// than re-running the whole search to learn a number already known.
+  void setOwned(int cardId, int owned) {
+    state = state.copyWith(
+      cards: [
+        for (final card in state.cards)
+          card.id == cardId ? card.copyWith(owned: owned) : card,
+      ],
+    );
+  }
+
+  /// `search_cards_fuzzy` returns catalog rows, which know nothing about
+  /// the viewer, so without this every result read as unowned: the counter
+  /// would start at zero and the "Dimiliki" filter would match nothing.
+  Future<List<CardModel>> _withOwned(List<CardModel> cards) =>
+      withOwnedQuantities(ref, cards);
+
+  /// Re-counts the rows already on screen against a newly picked portfolio.
+  /// The search itself doesn't change, so it isn't re-run.
+  Future<void> _refreshOwned() async {
+    if (_disposed || state.cards.isEmpty) return;
+    final cards = await _withOwned(state.cards);
+    if (_disposed) return;
+    state = state.copyWith(cards: cards);
+  }
+
+  /// The results go with the page, and a portfolio switch's re-count can
+  /// land after the buyer has left it.
+  bool _disposed = false;
+
   /// Local: the same rows, drawn differently.
   void setViewMode(CardViewMode viewMode) {
     if (viewMode == state.viewMode) return;
@@ -163,9 +228,15 @@ class FullSearchNotifier
     try {
       final page = await ref
           .read(quickSearchRepositoryProvider)
-          .searchAll(arg, offset: state.cards.length, sort: state.sort);
+          .searchAll(
+            arg,
+            offset: state.cards.length,
+            sort: state.sort,
+            languages: state.languages,
+          );
+      final more = await _withOwned(page.cards);
       state = state.copyWith(
-        cards: [...state.cards, ...page.cards],
+        cards: [...state.cards, ...more],
         hasNext: page.hasNext,
         loadingMore: false,
       );

@@ -86,7 +86,7 @@ class AppBottomNav extends StatelessWidget {
   static const items = [
     BottomNavItem(label: 'Beranda', icon: LucideIcons.house),
     BottomNavItem(label: 'Pencarian', icon: LucideIcons.search),
-    BottomNavItem(label: 'Koleksi', icon: LucideIcons.archive),
+    BottomNavItem(label: 'Portofolio', icon: LucideIcons.archive),
     BottomNavItem(label: 'Market', icon: LucideIcons.store),
     BottomNavItem(label: 'Jual', icon: LucideIcons.tag),
     BottomNavItem(label: 'Akun', icon: LucideIcons.user),

@@ -336,6 +336,7 @@ class SearchRepository {
     required AdvancedSearchQuery query,
     int offset = 0,
     int limit = _searchBatchSize,
+    String? collectionId,
   }) async {
     if (!query.hasAnyFilter) return SearchPage.empty;
 
@@ -370,6 +371,9 @@ class SearchRepository {
         'p_attack_cost_min': query.attackCostMin,
         'p_attack_cost_max': query.attackCostMax,
         'p_ownership': query.ownership.raw,
+        // The portfolio the switcher names, so "Dimiliki" means owned in the
+        // shelf the counters count into. Null is the main collection.
+        'p_collection_id': collectionId,
         'p_sort': query.sort.raw,
         'p_offset': offset,
         'p_limit': limit,

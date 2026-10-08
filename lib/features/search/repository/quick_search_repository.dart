@@ -104,6 +104,7 @@ class QuickSearchRepository {
     int offset = 0,
     int limit = searchBatchSize,
     CardSortOption? sort,
+    Set<CardLanguage> languages = const {},
   }) async {
     final needle = query.trim();
     if (needle.length < minQueryLength) return FullSearchPage.empty;
@@ -127,7 +128,12 @@ class QuickSearchRepository {
                 'p_evolution_stages': null,
                 'p_trainer_subtypes': null,
                 'p_regulation_marks': null,
-                'p_languages': null,
+                // Language is the exception, as on web: the same card is
+                // printed in all three, so a page filtered after fetching
+                // could come back empty while matches sat further down.
+                'p_languages': languages.isEmpty
+                    ? null
+                    : [for (final l in languages) l.raw],
               },
             )
             as List;

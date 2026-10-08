@@ -295,13 +295,10 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
           else if (_viewMode == CardViewMode.grid)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              sliver: SliverGrid(
-                gridDelegate: cardGridDelegate(context),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => _tile(visible[i]),
-                  childCount: shown,
-                  addAutomaticKeepAlives: false,
-                ),
+              sliver: SliverCardGrid(
+                hasVariant: (i) => visible[i].variantLabel != null,
+                itemCount: shown,
+                itemBuilder: (context, i) => _tile(visible[i]),
               ),
             )
           else

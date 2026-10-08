@@ -77,13 +77,13 @@ PayoutSpeed describePayoutSpeed(DateTime now) {
   }
   if (isWeekend) {
     return PayoutSpeed(
-      eta: 'Diterima hari kerja berikutnya (Senin pagi)',
+      eta: 'Pembayaran akan segera diproses.',
       cutoffPassed: cutoffPassed,
       isWeekend: true,
     );
   }
   return const PayoutSpeed(
-    eta: 'Diterima besok pagi (hari kerja)',
+    eta: 'Pembayaran akan segera diproses.',
     cutoffPassed: true,
     isWeekend: false,
   );
