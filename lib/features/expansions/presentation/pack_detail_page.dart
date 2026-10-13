@@ -430,7 +430,9 @@ class _PackHeader extends ConsumerWidget {
                     pack.image!,
                     width: double.infinity,
                     height: 120,
-                    fit: BoxFit.cover,
+                    // Set logos are wide or tall artwork, not photos — cover
+                    // cut the top and bottom off the taller ones.
+                    fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) =>
                         _PackImageFallback(mark: pack.mark),
                   )

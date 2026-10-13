@@ -4,6 +4,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
+import '../../../shared/utils/collector_number.dart';
 import '../../../shared/utils/primary_collection.dart';
 import 'models/market_models.dart';
 import 'models/store_identity.dart';
@@ -122,7 +123,9 @@ class ExpansionsRepository {
         .neq('category', sealedCategory)
         .order('collector_number', ascending: true);
     final cards = rows.map((r) => CardModel.fromRow(r)).toList();
-    cards.sort((a, b) => compareNatural(a.collectorNumber, b.collectorNumber));
+    cards.sort(
+      (a, b) => compareCollectorNumber(a.collectorNumber, b.collectorNumber),
+    );
     return cards;
   }
 

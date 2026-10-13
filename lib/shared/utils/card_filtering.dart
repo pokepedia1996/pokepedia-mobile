@@ -2,6 +2,7 @@ import '../models/card_model.dart';
 import '../models/pokemon_type.dart';
 import '../../features/expansions/repository/expansions_repository.dart'
     show compareNatural;
+import 'collector_number.dart';
 
 /// Ports `CardFilters`/`applyFilters`/`deriveFilterOptions` from
 /// `components/card/card-filters.tsx`.
@@ -291,7 +292,10 @@ int compareVariant(String a, String b) {
 /// number came out in whatever order the server sent them, so a Master Ball
 /// could lead its own normal print. Both keys flip together, as on web.
 int _compareNumber(CardModel a, CardModel b, int dir) {
-  final byNumber = compareNatural(a.collectorNumber, b.collectorNumber);
+  final byNumber = compareCollectorNumber(
+    a.collectorNumber,
+    b.collectorNumber,
+  );
   if (byNumber != 0) return dir * byNumber;
   return dir * compareVariant(a.variant, b.variant);
 }
