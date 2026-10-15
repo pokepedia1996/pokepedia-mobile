@@ -111,6 +111,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _google() async {
+    // Drop the field's focus first, or the keyboard comes back over the
+    // screen once the native sheet closes.
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _googleLoading = true;
       _generalError = null;
@@ -133,6 +136,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _apple() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _appleLoading = true;
       _generalError = null;
@@ -255,7 +259,6 @@ class _EmailStep extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
-          autofocus: true,
           onChanged: (_) => onChanged(),
           onSubmitted: (_) => onContinue(),
           decoration: InputDecoration(labelText: 'Email', errorText: error),

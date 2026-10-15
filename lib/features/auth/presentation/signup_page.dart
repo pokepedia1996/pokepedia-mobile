@@ -138,6 +138,9 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   /// No email confirmation step either: Google has already verified the
   /// address, so the session exists by the time this returns.
   Future<void> _google() async {
+    // Drop the field's focus first, or the keyboard comes back over the
+    // screen once the native sheet closes.
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _googleLoading = true;
       _generalError = null;
@@ -163,6 +166,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
   /// Kept although the web page offers Google alone — App Store review
   /// expects an Apple option wherever other third-party sign-ins are shown.
   Future<void> _apple() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _appleLoading = true;
       _generalError = null;
@@ -288,7 +292,6 @@ class _EmailStep extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
-          autofocus: true,
           onChanged: (_) => onChanged(),
           onSubmitted: (_) => onContinue(),
           decoration: InputDecoration(labelText: 'Email', errorText: error),

@@ -66,6 +66,9 @@ Widget _host(_FakeAuth auth) {
   );
 }
 
+FocusNode _emailFocus(WidgetTester tester) =>
+    tester.widget<EditableText>(find.byType(EditableText).first).focusNode;
+
 void main() {
   testWidgets('asks for the email first, password only after', (tester) async {
     await tester.pumpWidget(_host(_FakeAuth()));
@@ -165,6 +168,35 @@ void main() {
     expect(find.text('Akun'), findsNothing);
     // Still on the email step, no error shown.
     expect(find.widgetWithText(ElevatedButton, 'Lanjutkan'), findsOneWidget);
+  });
+
+  testWidgets('opens with the keyboard down', (tester) async {
+    // Autofocus put the keyboard over the Google and Apple buttons, and on
+    // iOS nothing could close it again.
+    await tester.pumpWidget(_host(_FakeAuth()));
+    await tester.pumpAndSettle();
+
+    expect(_emailFocus(tester).hasFocus, isFalse);
+  });
+
+  testWidgets('the Google sheet takes the keyboard down with it', (
+    tester,
+  ) async {
+    // Otherwise the still-focused field brings the keyboard back over the
+    // screen once the sheet closes.
+    final auth = _FakeAuth()..googleSignedIn = false;
+    await tester.pumpWidget(_host(auth));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    expect(_emailFocus(tester).hasFocus, isTrue);
+
+    await tester.tap(find.text('Masuk dengan Google'));
+    await tester.pumpAndSettle();
+
+    expect(auth.googleCalls, 1);
+    expect(_emailFocus(tester).hasFocus, isFalse);
   });
 
   testWidgets('a disabled provider reads as a plain message', (tester) async {
