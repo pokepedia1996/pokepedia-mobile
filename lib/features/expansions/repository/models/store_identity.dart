@@ -4,14 +4,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// user, which a direct `seller_profiles` read can't return because that
 /// table is self-select only under RLS.
 ///
-/// Carries no `city_name` or `is_verified`: the RPC doesn't return them, and
-/// web reads those through its service client instead.
+/// Carries no `is_verified`: the RPC doesn't return it, and web reads that
+/// through its service client instead. `city_name` arrived with migration
+/// `add_city_to_store_identities`; against an older backend it's just null.
 class StoreIdentity {
   const StoreIdentity({
     required this.userId,
     this.storeName,
     this.storeSlug,
     this.storeLogoUrl,
+    this.cityName,
   });
 
   factory StoreIdentity.fromRow(Map<String, dynamic> row) => StoreIdentity(
@@ -19,12 +21,16 @@ class StoreIdentity {
     storeName: row['store_name'] as String?,
     storeSlug: row['store_slug'] as String?,
     storeLogoUrl: row['store_logo_url'] as String?,
+    cityName: row['city_name'] as String?,
   );
 
   final String userId;
   final String? storeName;
   final String? storeSlug;
   final String? storeLogoUrl;
+
+  /// `seller_profiles.city_name` — where the seller ships from.
+  final String? cityName;
 
   /// Keys a `get_store_identities` result by user id. Rows without a
   /// `user_id` are skipped rather than failing the whole batch.

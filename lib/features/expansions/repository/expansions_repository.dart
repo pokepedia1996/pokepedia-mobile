@@ -47,12 +47,13 @@ ListingModel cardListingFromRow(
     storeName: store?.storeName,
     sellerUsername: profile?['username'] as String?,
     isVerified: false,
-    cityName: '',
+    cityName: store?.cityName ?? '',
     storeLogoUrl: store?.storeLogoUrl,
     sellerAvatarUrl: profile?['avatar_url'] as String?,
     sellerFeedbackScore:
         ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
         ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),
+    sellerRating: reputation == null ? null : SellerRating.fromRow(reputation),
   );
 }
 
@@ -359,9 +360,9 @@ class ExpansionsRepository {
   /// list is the same signed out. A direct `listings` read is not: its
   /// policy needs a session.
   ///
-  /// The storefront fields come from `get_store_identities`, since
-  /// `seller_profiles` is self-select only. That RPC has no city or verified
-  /// flag (web reads them with its service client), so those stay unset.
+  /// The storefront fields and city come from `get_store_identities`, since
+  /// `seller_profiles` is self-select only. It has no verified flag (web
+  /// reads that with its service client), so that stays unset.
   Future<List<ListingModel>> fetchListingsForCard(
     int cardId, {
     String? variantKey,
@@ -404,13 +405,17 @@ class ExpansionsRepository {
       // Swallowed — rows fall back to the storefront fields alone.
     }
 
-    // Reputation drives the seller's star on each row; a failure here just
-    // leaves the score at 0 rather than dropping the whole list.
+    // Reputation drives the seller's rating on each row (web's
+    // `SellerRatingBadge`); a failure here just leaves it as "Penjual baru"
+    // rather than dropping the whole list.
     var reputationByUser = <String, Map<String, dynamic>>{};
     try {
       final reputationRows = await _client
           .from('user_reputation')
-          .select('user_id, positive_count_total, negative_count_total')
+          .select(
+            'user_id, positive_pct, successful_trades, positive_count_total, '
+            'neutral_count_12mo, negative_count_total',
+          )
           .inFilter('user_id', userIds);
       reputationByUser = {
         for (final r in reputationRows) r['user_id'] as String: r,

@@ -38,6 +38,33 @@ extension ListingStatusX on ListingStatus {
   }
 }
 
+/// A seller's `user_reputation` row, as web's `SellerRatingBadgeData`.
+class SellerRating {
+  const SellerRating({
+    this.positivePct,
+    this.totalSales = 0,
+    this.positiveCount = 0,
+    this.neutralCount = 0,
+    this.negativeCount = 0,
+  });
+
+  /// `positive_pct` is null until the seller has reviews to average;
+  /// `successful_trades` is web's `totalSales`.
+  factory SellerRating.fromRow(Map<String, dynamic> row) => SellerRating(
+    positivePct: (row['positive_pct'] as num?)?.toDouble(),
+    totalSales: (row['successful_trades'] as num?)?.toInt() ?? 0,
+    positiveCount: (row['positive_count_total'] as num?)?.toInt() ?? 0,
+    neutralCount: (row['neutral_count_12mo'] as num?)?.toInt() ?? 0,
+    negativeCount: (row['negative_count_total'] as num?)?.toInt() ?? 0,
+  );
+
+  final double? positivePct;
+  final int totalSales;
+  final int positiveCount;
+  final int neutralCount;
+  final int negativeCount;
+}
+
 /// A marketplace listing (ask = for sale / WTS, bid = wanted / WTB),
 /// mirroring `public.listings` in
 /// `supabase/migrations/00000000000000_baseline.sql`.
@@ -65,6 +92,7 @@ class ListingModel {
     this.sellerAvatarUrl,
     this.storeLogoUrl,
     this.sellerFeedbackScore = 0,
+    this.sellerRating,
     this.photoUrls = const [],
     this.sellerId = '',
     this.sellerUsername,
@@ -116,6 +144,10 @@ class ListingModel {
   /// counts), used by the seller footer's reputation star.
   final int sellerFeedbackScore;
 
+  /// The seller's `user_reputation` as web's `SellerRatingBadge` shows it —
+  /// positive %, sales and review counts. Null where the source carries none.
+  final SellerRating? sellerRating;
+
   /// `listings.photo_urls` — the seller's own photos of this exact copy. The
   /// per-seller card page shows the first as the hero image (falling back to
   /// the catalog artwork) with the rest as thumbnails, like `heroPhotos` in
@@ -154,6 +186,7 @@ class ListingModel {
     String? sellerAvatarUrl,
     String? storeLogoUrl,
     int sellerFeedbackScore = 0,
+    SellerRating? sellerRating,
   }) {
     return ListingModel(
       id: row['id'] as int,
@@ -189,6 +222,7 @@ class ListingModel {
       sellerAvatarUrl: proxyImageUrl(sellerAvatarUrl),
       storeLogoUrl: proxyImageUrl(storeLogoUrl),
       sellerFeedbackScore: sellerFeedbackScore,
+      sellerRating: sellerRating,
       photoUrls: _parsePhotoUrls(row),
     );
   }

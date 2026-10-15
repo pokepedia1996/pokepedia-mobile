@@ -16,10 +16,12 @@ import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/condition_grade_picker.dart';
 import '../../../../shared/widgets/image_lightbox.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
-import '../../../../shared/widgets/reputation_star.dart';
+import '../../../../shared/widgets/seller_rating_badge.dart';
 import '../../../../shared/widgets/seller_avatar.dart';
 import '../../../cart/repository/cart_repository.dart';
 import '../../../cart/usecase/cart_notifier.dart';
+import '../../../chat/repository/models/chat_models.dart';
+import '../../../chat/usecase/chat_notifier.dart';
 import '../../../proposals/presentation/widgets/make_offer_sheet.dart';
 import '../../../proposals/repository/models/listing_offer_model.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
@@ -326,6 +328,48 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
     );
   }
 
+  /// Web's "Chat penjual" button: the listing-scoped room with this seller,
+  /// opened the way `StoreCardListingPage._contactSeller` does.
+  Future<void> _chat(ListingModel listing) async {
+    if (ref.read(authProvider).valueOrNull == null) {
+      context.push(Routes.login);
+      return;
+    }
+    if (listing.sellerId.isEmpty) return;
+    final arg = await ref
+        .read(chatOpenerProvider)
+        .withUser(
+          otherUserId: listing.sellerId,
+          title: listing.storeName,
+          listingId: listing.id,
+        );
+    if (!mounted) return;
+    final target = ChatTarget(
+      otherUserId: listing.sellerId,
+      title: listing.storeName,
+      listingId: listing.id,
+      listingContext: ChatListingContext(
+        listingOrderId: listing.id,
+        cardId: listing.card.id,
+        priceIdr: listing.price,
+        cardName: listing.card.name,
+        cardImage: listing.card.imageUrl,
+        packSlug: listing.card.packSlug,
+        variantKey: listing.variantKey,
+        condition: listing.condition.raw,
+      ),
+    );
+    final slug = arg.slug;
+    if (slug != null) {
+      context.push(
+        Routes.chatThread(slug, listingId: listing.id),
+        extra: target,
+      );
+    } else {
+      context.push(Routes.chatNew, extra: target);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final listing = widget.listing;
@@ -385,11 +429,13 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        ReputationStar(score: listing.sellerFeedbackScore),
-                        if (listing.cityName.isNotEmpty) ...[
-                          const SizedBox(width: 8),
+                    // Web's row: rating · sales, then the city on its own
+                    // line (`listings-section.tsx`).
+                    SellerRatingBadge(rating: listing.sellerRating),
+                    if (listing.cityName.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
                           Icon(
                             LucideIcons.mapPin,
                             size: 12,
@@ -407,11 +453,19 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                             ),
                           ),
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              if (!_isMine)
+                IconButton(
+                  tooltip: 'Chat penjual',
+                  icon: const Icon(LucideIcons.messageCircle, size: 18),
+                  color: context.mutedForeground,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _chat(listing),
+                ),
               const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
