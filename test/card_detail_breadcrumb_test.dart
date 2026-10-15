@@ -11,6 +11,7 @@ import 'package:pokepedia_mobile/features/expansions/usecase/expansions_notifier
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/models/pack_model.dart';
 import 'package:pokepedia_mobile/shared/widgets/cart_app_bar_button.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 
 /// The card page opened straight onto artwork, with nothing saying which
 /// expansion the card came from or how to get back to it.
@@ -39,6 +40,10 @@ class _FakeAuth extends AuthNotifier {
 }
 
 class _EmptyCart implements CartRepository {
+  // No realtime in tests: the cart is driven by the calls below.
+  @override
+  RealtimeChannel? subscribeToCart(void Function() onChange) => null;
+
   @override
   Future<List<CartItem>> fetchCart() async => const [];
 

@@ -15,6 +15,7 @@ import 'package:pokepedia_mobile/shared/models/card_condition.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/models/listing_model.dart';
 import 'package:pokepedia_mobile/shared/models/store_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 
 /// A seller opening their own product page was offered "Hubungi" — a chat
 /// with themselves — and "Ikuti", which `follow_shop` refuses outright.
@@ -61,6 +62,10 @@ final _listing = ListingModel(
 /// The app bar's cart badge builds the cart, which would otherwise reach for
 /// an uninitialised Supabase.
 class _EmptyCart implements CartRepository {
+  // No realtime in tests: the cart is driven by the calls below.
+  @override
+  RealtimeChannel? subscribeToCart(void Function() onChange) => null;
+
   @override
   Future<List<CartItem>> fetchCart() async => const [];
 

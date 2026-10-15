@@ -68,6 +68,35 @@ class CartRepository {
   final PokepediaApi _api;
   final DeviceFingerprint _fingerprint;
 
+  /// Any change to the caller's `cart_items` — web's `cart-count-context`
+  /// subscription. `accept_offer` writes the accepted listing straight into
+  /// the buyer's cart on the server, so without this it only showed up after
+  /// the next add happened to refetch.
+  ///
+  /// Suffixed channel name for the reason `ChatRepository.subscribeToInbox`
+  /// gives. Null when signed out.
+  RealtimeChannel? subscribeToCart(void Function() onChange) {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+    return _client
+        .channel('cart-$userId-${DateTime.now().microsecondsSinceEpoch}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'cart_items',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => onChange(),
+        )
+        .subscribe();
+  }
+
+  Future<void> unsubscribe(RealtimeChannel channel) =>
+      _client.removeChannel(channel);
+
   Future<List<CartItem>> fetchCart() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const [];
@@ -114,9 +143,29 @@ class CartRepository {
           .from('profiles')
           .select('id, username, avatar_url')
           .inFilter('id', sellerIds),
+      // Accepted offers still running — web's `offerDiscountMap`.
+      _client
+          .from('listing_offers')
+          .select('ask_order_id, current_price, quantity, qty_used')
+          .eq('buyer_id', userId)
+          .inFilter('ask_order_id', askIds)
+          .eq('status', 'accepted')
+          .gt('expires_at', DateTime.now().toUtc().toIso8601String()),
     ]);
     final cardRows = results[0];
     final profileRows = results[1];
+    final offerByListing = <int, ({int price, int remaining})>{};
+    for (final row in results[2]) {
+      final listingId = (row['ask_order_id'] as num?)?.toInt();
+      final price = (row['current_price'] as num?)?.toInt();
+      if (listingId == null || price == null) continue;
+      final remaining =
+          ((row['quantity'] as num?)?.toInt() ?? 0) -
+          ((row['qty_used'] as num?)?.toInt() ?? 0);
+      if (remaining > 0) {
+        offerByListing[listingId] = (price: price, remaining: remaining);
+      }
+    }
 
     // Storefront names, through `get_listings_by_ids` rather than off
     // `seller_profiles` directly.
@@ -184,11 +233,16 @@ class CartRepository {
     for (final row in cartRows) {
       final listing = listingById[row['ask_order_id'] as int];
       if (listing == null) continue;
+      // Only an offer below the list price counts, as web's `isOfferPrice`.
+      final offer = offerByListing[listing.id];
+      final discounted = offer != null && offer.price < listing.price;
       items.add(
         CartItem(
           cartItemId: row['id'] as int,
           listing: listing,
           quantity: row['quantity'] as int,
+          offerPrice: discounted ? offer.price : null,
+          offerRemainingQty: discounted ? offer.remaining : null,
         ),
       );
     }

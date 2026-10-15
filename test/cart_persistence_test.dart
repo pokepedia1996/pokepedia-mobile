@@ -7,6 +7,7 @@ import 'package:pokepedia_mobile/features/cart/usecase/cart_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_condition.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/models/listing_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 
 /// The cart lives in `cart_items`, but `supabase_flutter` restores a
 /// persisted session asynchronously — so the read has to be keyed to the
@@ -65,6 +66,10 @@ class _FakeAuth extends AuthNotifier {
 }
 
 class _FakeCartRepository implements CartRepository {
+  // No realtime in tests: the cart is driven by the calls below.
+  @override
+  RealtimeChannel? subscribeToCart(void Function() onChange) => null;
+
   _FakeCartRepository(this.rows);
 
   List<CartItem> rows;
@@ -82,6 +87,9 @@ class _FakeCartRepository implements CartRepository {
 }
 
 void main() {
+  // CartNotifier listens for the app returning to the foreground.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late _FakeCartRepository repository;
 
   /// `AuthNotifier.build` is async and the cart's refresh runs in a

@@ -14,6 +14,7 @@ import '../../../proposals/presentation/offers_page.dart';
 import '../../../proposals/repository/models/listing_offer_model.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../repository/models/chat_models.dart';
+import '../../../cart/usecase/cart_notifier.dart';
 
 /// The system-authored bubbles, ported from `features/chat/components/events`.
 ///
@@ -448,6 +449,8 @@ class _OfferFooterState extends ConsumerState<_OfferFooter> {
     if (error == null) {
       ref.invalidate(myOffersProvider);
       ref.invalidate(proposalsSummaryProvider);
+      // Accepting puts the listing in the cart server-side; show it now.
+      ref.read(cartProvider.notifier).reloadAll();
     }
   }
 

@@ -27,11 +27,24 @@ import '../usecase/cart_selection.dart';
 /// Ports `features/cart/components/cart-client.tsx` — the cart grouped per
 /// seller, with per-line selection driving what actually gets checked out,
 /// and the buyer's accepted bid proposals waiting beside the lines.
-class CartPage extends ConsumerWidget {
+class CartPage extends ConsumerStatefulWidget {
   const CartPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartPage> createState() => _CartPageState();
+}
+
+class _CartPageState extends ConsumerState<CartPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Re-read on every visit, as web's force-dynamic cart page does: a deal
+    // or an accepted offer may have landed since the cart was last loaded.
+    Future.microtask(() => ref.read(cartProvider.notifier).reloadAll());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(cartProvider);
     final deals = ref.watch(cartDealsProvider).valueOrNull ?? const [];
 
@@ -582,9 +595,28 @@ class _CartLine extends ConsumerWidget {
                               .updateQuantity(item, q),
                         ),
                       const Spacer(),
-                      Text(
-                        formatRupiah(item.subtotal),
-                        style: AppTypography.bodySmSemibold(colors.onSurface),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            formatRupiah(item.subtotal),
+                            style: AppTypography.bodySmSemibold(
+                              colors.onSurface,
+                            ),
+                          ),
+                          // An accepted offer: the list price struck
+                          // through, as web's cart line shows it.
+                          if (item.hasOfferPrice)
+                            Text(
+                              formatRupiah(listing.price * item.quantity),
+                              style:
+                                  AppTypography.caption(
+                                    context.mutedForeground,
+                                  ).copyWith(
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                            ),
+                        ],
                       ),
                       IconButton(
                         icon: const Icon(LucideIcons.trash2, size: 19),

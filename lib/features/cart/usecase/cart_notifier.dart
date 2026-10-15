@@ -1,11 +1,14 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/device_fingerprint.dart';
 import '../../../core/providers/supabase_provider.dart';
+import '../../notifications/usecase/notifications_notifier.dart';
 import '../repository/cart_repository.dart';
 import '../repository/models/cart_item.dart';
+import 'cart_deals.dart';
 
 final cartRepositoryProvider = Provider(
   (ref) => CartRepository(
@@ -44,6 +47,24 @@ class CartNotifier extends Notifier<List<CartItem>> {
     // trigger a refetch — only an actual change of account does.
     final userId = ref.watch(authProvider.select((a) => a.valueOrNull?.id));
     if (userId == null) return const [];
+
+    // The server adds to this cart on its own — `accept_offer` inserts the
+    // accepted listing, `accept_bid_proposal` opens a deal — so like web's
+    // cart-count-context the cart follows the table, the notification list
+    // and the app coming back, not only the buyer's own adds.
+    final repo = ref.read(cartRepositoryProvider);
+    final channel = repo.subscribeToCart(refresh);
+    ref.onDispose(() {
+      if (channel != null) repo.unsubscribe(channel);
+    });
+    ref.listen(notificationsProvider, (previous, next) {
+      if (previous?.hasValue != true || !next.hasValue) return;
+      if (identical(previous!.value, next.value)) return;
+      reloadAll();
+    });
+    final lifecycle = AppLifecycleListener(onResume: reloadAll);
+    ref.onDispose(lifecycle.dispose);
+
     Future.microtask(refresh);
     return const [];
   }
@@ -59,6 +80,13 @@ class CartNotifier extends Notifier<List<CartItem>> {
   int _openPending = 0;
 
   int get pendingDelta => _pendingDelta;
+
+  /// The lines and the accepted deals together — what opening the cart,
+  /// returning to the app or a new notification should re-read.
+  Future<void> reloadAll() async {
+    ref.invalidate(cartDealsProvider);
+    await refresh();
+  }
 
   Future<void> refresh() async {
     final items = await ref.read(cartRepositoryProvider).fetchCart();
@@ -165,12 +193,18 @@ final cartProvider = NotifierProvider<CartNotifier, List<CartItem>>(
   CartNotifier.new,
 );
 
-/// What the cart badge shows: the real lines plus anything mid-flight.
+/// What the cart badge shows: the real lines, the accepted bid deals
+/// waiting to be paid, and anything mid-flight.
 ///
 /// Separate from `cartProvider` because the two answer different questions —
 /// the list is what the server has agreed to, the count is what the buyer
-/// just did.
+/// just did. Deals count as web's `fetchCartCount` counts them: `kind = 'bid'`
+/// only.
 final cartCountProvider = Provider<int>((ref) {
   final items = ref.watch(cartProvider);
-  return items.length + ref.watch(cartProvider.notifier).pendingDelta;
+  final deals = ref.watch(cartDealsProvider).valueOrNull ?? const [];
+  final bidDeals = deals.where((deal) => deal.kind == 'bid').length;
+  return items.length +
+      bidDeals +
+      ref.watch(cartProvider.notifier).pendingDelta;
 });

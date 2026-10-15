@@ -503,9 +503,11 @@ class CheckoutGateway {
 
     var query = _client
         .from('carts')
-        .select('external_id, expires_at, created_at, cart_snapshot')
+        .select('external_id, kind, expires_at, created_at, cart_snapshot')
         .eq('user_id', userId)
-        .eq('kind', 'bid')
+        // Web's `useCartDeals` keeps both: a `combined` row is a deal merged
+        // with cart lines that hasn't reached its invoice yet.
+        .inFilter('kind', ['bid', 'combined'])
         .eq('status', 'pending')
         .isFilter('invoice_url', null)
         .gt('expires_at', DateTime.now().toUtc().toIso8601String());

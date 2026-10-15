@@ -2,7 +2,8 @@ import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
 
 /// An accepted bid proposal waiting to be paid: a `carts` row of
-/// `kind = 'bid'` that `accept_bid_proposal` opened with no invoice yet.
+/// `kind = 'bid'` (or `combined`) that `accept_bid_proposal` opened with no
+/// invoice yet.
 ///
 /// Ports the `PendingCheckout` deals web's checkout page takes through
 /// `?d=` (`app/cart/checkout/page.tsx`): the price and quantity are already
@@ -14,6 +15,7 @@ class CheckoutDeal {
     required this.externalId,
     required this.sellerId,
     required this.lines,
+    this.kind = 'bid',
     this.expiresAt,
     this.storeName,
     this.storeLogoUrl,
@@ -41,6 +43,7 @@ class CheckoutDeal {
       externalId: externalId,
       sellerId: sellerId,
       lines: lines,
+      kind: row['kind'] as String? ?? 'bid',
       expiresAt: DateTime.tryParse(
         row['expires_at'] as String? ?? '',
       )?.toLocal(),
@@ -53,6 +56,10 @@ class CheckoutDeal {
   /// A deal is one proposal, so one seller — the snapshot's first named one.
   final String sellerId;
   final List<CheckoutDealLine> lines;
+
+  /// `bid` for an accepted proposal, `combined` for one
+  /// `buyer_combine_and_lock` merged with cart lines before the invoice.
+  final String kind;
 
   /// 24 hours after the accept; past it the stock goes back on sale.
   final DateTime? expiresAt;
@@ -72,6 +79,7 @@ class CheckoutDeal {
         externalId: externalId,
         sellerId: sellerId,
         lines: lines,
+        kind: kind,
         expiresAt: expiresAt,
         storeName: storeName ?? this.storeName,
         storeLogoUrl: storeLogoUrl ?? this.storeLogoUrl,

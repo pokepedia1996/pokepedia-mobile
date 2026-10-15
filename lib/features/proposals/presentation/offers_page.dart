@@ -13,6 +13,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/listing_offer_model.dart';
 import '../usecase/proposals_notifier.dart';
+import '../../cart/usecase/cart_notifier.dart';
 
 /// Offers this user made on sellers' ask listings (`listing_offers`).
 ///
@@ -104,6 +105,8 @@ class _OfferTileState extends ConsumerState<_OfferTile> {
     if (error == null) {
       ref.invalidate(myOffersProvider);
       ref.invalidate(proposalsSummaryProvider);
+      // Accepting puts the listing in the cart server-side; show it now.
+      ref.read(cartProvider.notifier).reloadAll();
     }
   }
 

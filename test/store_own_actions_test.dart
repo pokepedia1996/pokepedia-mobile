@@ -11,6 +11,7 @@ import 'package:pokepedia_mobile/features/market/usecase/market_notifier.dart';
 import 'package:pokepedia_mobile/features/portfolio/usecase/portfolio_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/store_model.dart';
 import 'package:pokepedia_mobile/shared/widgets/cart_app_bar_button.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 
 /// A seller browsing their own storefront was offered both a Follow button
 /// that `follow_shop` refuses (`cannot_follow_self`) and a Chat button with
@@ -35,6 +36,10 @@ final _store = StoreModel(
 /// The bar's cart badge builds the cart, which would otherwise reach for an
 /// uninitialised Supabase.
 class _EmptyCart implements CartRepository {
+  // No realtime in tests: the cart is driven by the calls below.
+  @override
+  RealtimeChannel? subscribeToCart(void Function() onChange) => null;
+
   @override
   Future<List<CartItem>> fetchCart() async => const [];
 
