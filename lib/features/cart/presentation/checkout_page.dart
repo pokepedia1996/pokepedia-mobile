@@ -35,6 +35,7 @@ import 'checkout/payment_section.dart';
 import 'checkout/seller_group_card.dart';
 import 'checkout_status_page.dart';
 import 'payment_webview_page.dart';
+import '../../account/usecase/buyer_action_notifier.dart';
 
 /// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
 /// the order grouped per seller, delivery address, live courier quotes,
@@ -256,9 +257,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
         await ref.read(cartProvider.notifier).removeItems(checkedOutItemIds);
         // The checkout now exists as an unpaid cart, which is what Pesanan
-        // shows under Belum Bayar.
+        // shows under Belum Bayar — and, invoiced, what the Pesanan badge
+        // counts, so that moves now rather than on the next resume.
         ref.invalidate(myPendingCheckoutsProvider);
         if (paidDeals) ref.invalidate(cartDealsProvider);
+        ref.read(buyerActionNotifierProvider.notifier).refresh();
 
         await closed;
         if (mounted) setState(() => _paying = false);

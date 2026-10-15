@@ -175,9 +175,9 @@ class OrdersRepository {
         await _client
                 .from('carts')
                 .select(
-                  'id, external_id, status, total_amount, invoice_amount,'
-                  'expires_at,'
-                  'created_at, invoice_url, cart_snapshot',
+                  'id, external_id, kind, status, total_amount, '
+                  'invoice_amount, expires_at, created_at, invoice_url, '
+                  'cart_snapshot',
                 )
                 .eq('user_id', me)
                 .eq('status', 'pending')
@@ -190,6 +190,9 @@ class OrdersRepository {
 
     final checkouts = rows
         .cast<Map<String, dynamic>>()
+        // Web leaves these out of its orders page: the deal waits in the
+        // cart until checkout gives it an invoice.
+        .where((row) => !isPreInvoiceDeal(row))
         .map(pendingCheckoutFromCart)
         .toList();
 
@@ -236,23 +239,37 @@ class OrdersRepository {
         for (final item in checkout.items)
           if (item.askOrderId != null) item.askOrderId!,
     };
+    // Bid lines carry the card id but no listing — web's `bidCardIds`.
+    final bidCardIds = <int>{
+      for (final checkout in checkouts)
+        for (final item in checkout.items)
+          if (item.askOrderId == null && item.cardId > 0) item.cardId,
+    };
 
     Map<String, _SellerIdentity> sellers = const {};
     var artByAskId = <int, Map<String, dynamic>>{};
+    var artByCardId = <int, Map<String, dynamic>>{};
     try {
       final results = await Future.wait([
         _sellerIdentities(sellerIds),
         _cardArtByAskId(askIds),
+        _cardArtById(bidCardIds),
       ]);
       sellers = results[0] as Map<String, _SellerIdentity>;
       artByAskId = results[1] as Map<int, Map<String, dynamic>>;
+      artByCardId = results[2] as Map<int, Map<String, dynamic>>;
     } catch (_) {
       return checkouts;
     }
 
     return [
       for (final checkout in checkouts)
-        _decorate(checkout, sellers[checkout.sellerId], artByAskId),
+        _decorate(
+          checkout,
+          sellers[checkout.sellerId],
+          artByAskId,
+          artByCardId,
+        ),
     ];
   }
 
@@ -260,12 +277,13 @@ class OrdersRepository {
     PendingCheckout checkout,
     _SellerIdentity? seller,
     Map<int, Map<String, dynamic>> artByAskId,
+    Map<int, Map<String, dynamic>> artByCardId,
   ) {
     final decorated = checkout.withItems([
       for (final item in checkout.items)
         () {
           final art = item.askOrderId == null
-              ? null
+              ? artByCardId[item.cardId]
               : artByAskId[item.askOrderId];
           if (art == null) return item;
           return item.withCard(
@@ -288,6 +306,23 @@ class OrdersRepository {
     );
   }
 
+  /// `cards.id` -> the fields a checkout line shows.
+  Future<Map<int, Map<String, dynamic>>> _cardArtById(Set<int> cardIds) async {
+    if (cardIds.isEmpty) return const {};
+    final cards =
+        await _client
+                .from('cards')
+                .select(
+                  'id, name_id, image_url, collector_number, expansion_code',
+                )
+                .inFilter('id', cardIds.toList())
+            as List;
+    return {
+      for (final row in cards.cast<Map<String, dynamic>>())
+        (row['id'] as num).toInt(): row,
+    };
+  }
+
   /// `listings.id` -> the card it sells, with the fields the card needs.
   Future<Map<int, Map<String, dynamic>>> _cardArtByAskId(
     Set<int> askIds,
@@ -307,19 +342,7 @@ class OrdersRepository {
     };
     if (cardIdByAsk.isEmpty) return const {};
 
-    final cards =
-        await _client
-                .from('cards')
-                .select(
-                  'id, name_id, image_url, collector_number, expansion_code',
-                )
-                .inFilter('id', cardIdByAsk.values.toSet().toList())
-            as List;
-
-    final byCardId = <int, Map<String, dynamic>>{
-      for (final row in cards.cast<Map<String, dynamic>>())
-        (row['id'] as num).toInt(): row,
-    };
+    final byCardId = await _cardArtById(cardIdByAsk.values.toSet());
 
     return {
       for (final entry in cardIdByAsk.entries)

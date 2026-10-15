@@ -234,6 +234,12 @@ class PendingCheckoutItem {
 /// Kept separate from [OrderModel] on purpose: until the webhook settles the
 /// payment there is no order — nothing to ship, dispute or receive. Showing
 /// it as one would promise more than exists.
+/// An accepted bid proposal nobody has started paying for yet — web's
+/// `isPreInvoiceDeal`. It lives in the cart (and on the cart badge) until
+/// checkout raises its invoice, so it isn't an unpaid order yet.
+bool isPreInvoiceDeal(Map<String, dynamic> row) =>
+    row['kind'] == 'bid' && ((row['invoice_url'] as String?)?.isEmpty ?? true);
+
 PendingCheckout pendingCheckoutFromCart(Map<String, dynamic> row) {
   final snapshot = (row['cart_snapshot'] as List?) ?? const [];
   final items = <PendingCheckoutItem>[];
@@ -246,7 +252,9 @@ PendingCheckout pendingCheckoutFromCart(Map<String, dynamic> row) {
         cardName: entry['card_name'] as String? ?? 'Kartu',
         expansionCode: entry['expansion_code'] as String? ?? '',
         collectorNumber: entry['collector_number'] as String? ?? '',
-        imageUrl: entry['card_image_url'] as String?,
+        // `accept_bid_proposal` writes the art as `card_image`; cart
+        // checkouts as `card_image_url` — read both, as `CheckoutDealLine`.
+        imageUrl: (entry['card_image'] ?? entry['card_image_url']) as String?,
         condition: entry['condition'] as String?,
         price: (entry['price'] as num?)?.toInt() ?? 0,
         quantity: (entry['quantity'] as num?)?.toInt() ?? 1,
