@@ -170,13 +170,13 @@ void main() {
     expect(find.widgetWithText(ElevatedButton, 'Lanjutkan'), findsOneWidget);
   });
 
-  testWidgets('opens with the keyboard down', (tester) async {
-    // Autofocus put the keyboard over the Google and Apple buttons, and on
-    // iOS nothing could close it again.
+  testWidgets('opens with the email field focused', (tester) async {
+    // A tap outside or the Google button closes the keyboard again, so
+    // focusing up front no longer traps it over the screen.
     await tester.pumpWidget(_host(_FakeAuth()));
     await tester.pumpAndSettle();
 
-    expect(_emailFocus(tester).hasFocus, isFalse);
+    expect(_emailFocus(tester).hasFocus, isTrue);
   });
 
   testWidgets('the Google sheet takes the keyboard down with it', (
@@ -188,8 +188,6 @@ void main() {
     await tester.pumpWidget(_host(auth));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(TextField).first);
-    await tester.pump();
     expect(_emailFocus(tester).hasFocus, isTrue);
 
     await tester.tap(find.text('Masuk dengan Google'));

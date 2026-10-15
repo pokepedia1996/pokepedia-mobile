@@ -259,6 +259,7 @@ class _EmailStep extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
+          autofocus: true,
           onChanged: (_) => onChanged(),
           onSubmitted: (_) => onContinue(),
           decoration: InputDecoration(labelText: 'Email', errorText: error),
