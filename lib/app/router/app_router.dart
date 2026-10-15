@@ -24,6 +24,7 @@ import '../../features/market/presentation/market_page.dart';
 import '../../features/market/presentation/bid_listing_page.dart';
 import '../../features/market/presentation/store_card_listing_page.dart';
 import '../../features/market/presentation/store_detail_page.dart';
+import '../../features/moderation/presentation/blocked_users_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/orders/presentation/dispute_detail_page.dart';
 import '../../features/orders/presentation/order_detail_page.dart';
@@ -405,6 +406,10 @@ final appRouter = GoRouter(
     ),
     GoRoute(path: Routes.settings, builder: (_, __) => const SettingsPage()),
     GoRoute(path: Routes.addresses, builder: (_, __) => const AddressesPage()),
+    GoRoute(
+      path: Routes.blockedUsers,
+      builder: (_, __) => const BlockedUsersPage(),
+    ),
     GoRoute(
       path: Routes.accountFollowing,
       builder: (_, __) => const FollowingPage(),

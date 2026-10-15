@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../moderation/usecase/moderation_notifier.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../repository/models/bid_proposal_model.dart';
@@ -11,7 +12,10 @@ import '../repository/models/proposals_summary.dart';
 import '../repository/proposals_repository.dart';
 
 final proposalsRepositoryProvider = Provider((ref) {
-  return ProposalsRepository(ref.read(supabaseClientProvider));
+  return ProposalsRepository(
+    ref.read(supabaseClientProvider),
+    blockedIds: () => ref.read(blockedPairIdsProvider.future),
+  );
 });
 
 /// Counts behind the market page's proposal banner. Signed out means no

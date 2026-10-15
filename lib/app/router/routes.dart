@@ -143,6 +143,7 @@ class Routes {
   static const notifications = '/notifications';
   static const settings = '/settings';
   static const addresses = '/settings/addresses';
+  static const blockedUsers = '/settings/blocked';
   static const users = '/users';
   static const accountFollowing = '/account/following';
 

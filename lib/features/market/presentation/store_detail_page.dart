@@ -27,6 +27,9 @@ import '../repository/models/store_feedback.dart';
 import '../usecase/market_notifier.dart';
 import 'widgets/listing_filter_sheet.dart';
 import 'widgets/store_share_sheet.dart';
+import '../../moderation/presentation/blocked_user_notice.dart';
+import '../../moderation/presentation/user_safety_menu.dart';
+import '../../moderation/usecase/moderation_notifier.dart';
 
 /// Ports `features/market/store/components/storefront/storefront-view.tsx` —
 /// a seller's storefront: banner and identity, the stats strip, the actions,
@@ -288,6 +291,13 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
   @override
   Widget build(BuildContext context) {
     final storeAsync = ref.watch(storeDetailProvider(widget.handle));
+    final viewerId = ref.watch(authProvider).valueOrNull?.id;
+    final shown = storeAsync.valueOrNull;
+    // Web's storefront safety menu: signed in, and not your own shop.
+    final safetyUserId =
+        viewerId == null || shown?.userId == null || shown!.userId == viewerId
+        ? null
+        : shown.userId;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -308,15 +318,26 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
           // Last, as on every other page that carries it — a storefront is
           // where a basket fills up, so the way to it belongs in reach.
           const CartAppBarButton(),
+          if (safetyUserId != null)
+            UserSafetyButton(
+              userId: safetyUserId,
+              username: shown!.handle,
+              reportContext: UserReportContext.store,
+              // Blocking hides the store from both sides; reloading lands on
+              // the unblock notice below.
+              onBlockChanged: (_) =>
+                  ref.invalidate(storeDetailProvider(widget.handle)),
+            ),
           const SizedBox(width: 4),
         ],
       ),
       body: storeAsync.when(
         data: (store) {
           if (store == null) {
-            return const EmptyState(
-              icon: LucideIcons.store,
-              title: 'Toko tidak ditemukan',
+            return _MissingStore(
+              handle: widget.handle,
+              onUnblocked: () =>
+                  ref.invalidate(storeDetailProvider(widget.handle)),
             );
           }
           // Seeded from the server once, then owned locally so the button
@@ -1229,6 +1250,37 @@ class _FeedbackTile extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// A storefront the RPCs returned nothing for. Either it doesn't exist, the
+/// viewer blocked its owner, or its owner blocked the viewer — web shows the
+/// blocker the unblock notice and everyone else "not found"
+/// (`app/market/[slug]/page.tsx`).
+class _MissingStore extends ConsumerWidget {
+  const _MissingStore({required this.handle, required this.onUnblocked});
+
+  final String handle;
+  final VoidCallback onUnblocked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(blockStatusProvider(handle)).valueOrNull;
+    if (status != null && status.blockedByMe && status.userId != null) {
+      return AppBarOverlayBody(
+        child: Center(
+          child: BlockedUserNotice(
+            userId: status.userId!,
+            username: status.username,
+            onUnblocked: onUnblocked,
+          ),
+        ),
+      );
+    }
+    return const EmptyState(
+      icon: LucideIcons.store,
+      title: 'Toko tidak ditemukan',
     );
   }
 }

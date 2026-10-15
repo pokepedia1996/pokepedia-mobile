@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../moderation/usecase/moderation_notifier.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/providers/supabase_provider.dart';
@@ -38,7 +39,12 @@ final usersSearchProvider = FutureProvider<List<UserSearchResult>>((ref) async {
   ref.onDispose(timer.cancel);
   await debounce.future;
 
-  return ref.read(userRepositoryProvider).searchUsers(query);
+  // People on either side of a block stay out of the results, as web's
+  // `searchUsers` excludes `get_blocked_pair_ids`.
+  final blocked = await ref.watch(blockedPairIdsProvider.future);
+  return ref
+      .read(userRepositoryProvider)
+      .searchUsers(query, excludeIds: blocked);
 });
 
 /// The profile behind `/user/{username}`, re-fetched when the viewer signs

@@ -20,6 +20,9 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
+import '../../moderation/presentation/blocked_user_notice.dart';
+import '../../moderation/presentation/user_safety_menu.dart';
+import '../../moderation/usecase/moderation_notifier.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
 
@@ -80,14 +83,42 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     final colors = context.appColors;
     final profileAsync = ref.watch(userProfileProvider(widget.username));
     final viewer = ref.watch(authProvider).valueOrNull;
+    final shown = profileAsync.valueOrNull;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      appBar: TransparentAppBar(
+        actions: [
+          // Web's profile safety menu: signed in, and not your own profile.
+          if (viewer != null && shown != null && shown.userId != viewer.id)
+            UserSafetyButton(
+              userId: shown.userId,
+              username: shown.username,
+              reportContext: UserReportContext.profile,
+              onBlockChanged: (_) =>
+                  ref.invalidate(userProfileProvider(widget.username)),
+            ),
+        ],
+      ),
       body: AppBarOverlayBody(
         child: profileAsync.when(
           data: (profile) {
             if (profile == null) {
+              // `get_public_profile` is empty for a blocked pair too; the
+              // blocker gets the way back (web's profile page).
+              final status = viewer == null
+                  ? null
+                  : ref.watch(blockStatusProvider(widget.username)).valueOrNull;
+              if (status != null &&
+                  status.blockedByMe &&
+                  status.userId != null) {
+                return BlockedUserNotice(
+                  userId: status.userId!,
+                  username: status.username ?? widget.username,
+                  onUnblocked: () =>
+                      ref.invalidate(userProfileProvider(widget.username)),
+                );
+              }
               return EmptyState(
                 icon: LucideIcons.userX,
                 title: 'Pengguna tidak ditemukan',

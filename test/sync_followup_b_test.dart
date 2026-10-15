@@ -214,6 +214,10 @@ class _FakeCart extends CartNotifier {
 
   @override
   List<CartItem> build() => _items;
+
+  // The cart page reloads on open; the fake's lines are the server here.
+  @override
+  Future<void> refresh() async {}
 }
 
 class _AcceptingRepository extends ProposalsRepository {

@@ -180,17 +180,25 @@ class UserRepository {
 
   /// Ports `searchUsers` — an `ilike` over usernames, then the batched
   /// `get_contribution_counts` RPC for each result's contributor badge.
-  Future<List<UserSearchResult>> searchUsers(String query) async {
+  ///
+  /// [excludeIds] drops users inside the query, so a block never costs a
+  /// slot of the 20 (web's `.not("id", "in", …)`).
+  Future<List<UserSearchResult>> searchUsers(
+    String query, {
+    Set<String> excludeIds = const {},
+  }) async {
     final trimmed = query.trim();
     if (trimmed.length < 2) return const [];
 
-    final profiles = await _client
+    var filter = _client
         .from('profiles')
         .select('id, username, avatar_url')
         .ilike('username', '%${_escapeLike(trimmed)}%')
-        .not('username', 'is', null)
-        .order('username')
-        .limit(20);
+        .not('username', 'is', null);
+    if (excludeIds.isNotEmpty) {
+      filter = filter.not('id', 'in', '(${excludeIds.join(',')})');
+    }
+    final profiles = await filter.order('username').limit(20);
 
     if (profiles.isEmpty) return const [];
 

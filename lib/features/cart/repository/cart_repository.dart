@@ -356,6 +356,9 @@ String cartLineProblemMessage(String? reason, {int? available}) {
       return 'Satu listing sudah kedaluwarsa.';
     case 'listing_matched':
       return 'Satu listing sudah terjual.';
+    case 'seller_blocked':
+      // `validate_cart` drops a line once either side blocked the other.
+      return 'Satu item dari penjual yang tidak dapat berinteraksi denganmu.';
     case 'not_an_ask_order':
       return 'Satu item bukan listing yang bisa dibeli.';
     case 'seller_on_vacation':

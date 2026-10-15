@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../moderation/usecase/moderation_notifier.dart';
 import '../../../core/providers/supabase_provider.dart';
 import 'models/listing_offer.dart';
 import '../../../core/errors/user_message.dart';
@@ -27,9 +28,18 @@ class OfferActionException implements Exception {
 /// (`buyer_id = auth.uid() OR seller_id = auth.uid()`); web reaches for the
 /// service client there only to join tables this fetches separately.
 class OffersRepository {
-  OffersRepository(this._client);
+  OffersRepository(
+    this._client, {
+    Future<Set<String>> Function() blockedIds = _none,
+  }) : _blockedIds = blockedIds;
 
   final SupabaseClient _client;
+
+  /// Everyone on either side of a block with the caller, for reads the
+  /// server's RPC filtering doesn't cover (web's `blocked-ids.ts`).
+  final Future<Set<String>> Function() _blockedIds;
+
+  static Future<Set<String>> _none() async => const {};
 
   String? get _uid => _client.auth.currentUser?.id;
 
@@ -53,14 +63,18 @@ class OffersRepository {
     final me = _uid;
     if (me == null) return const [];
 
+    // Offers from someone on either side of a block stay hidden, as web's
+    // received-offers route excludes them.
+    final blocked = await _blockedIds();
+    var query = _client
+        .from('listing_offers')
+        .select(_columns)
+        .eq('seller_id', me);
+    if (blocked.isNotEmpty) {
+      query = query.not('buyer_id', 'in', '(${blocked.join(',')})');
+    }
     final rows =
-        await _client
-                .from('listing_offers')
-                .select(_columns)
-                .eq('seller_id', me)
-                .order('updated_at', ascending: false)
-                .limit(limit)
-            as List;
+        await query.order('updated_at', ascending: false).limit(limit) as List;
     if (rows.isEmpty) return const [];
 
     final offers = rows
@@ -171,6 +185,9 @@ String offerErrorMessage(String code, String fallback) => switch (code) {
   'cannot_offer_on_own_listing' => 'Tidak bisa menerima penawaran sendiri',
   'insufficient_quantity' => 'Stok tidak mencukupi',
   'seller_unavailable' => 'Penjual sudah tidak aktif',
+  // Either side blocked the other (`submit_offer`, `accept_offer`,
+  // `counter_offer`).
+  'blocked' => 'Kamu tidak dapat berinteraksi dengan pengguna ini.',
   'same_device_self_trade' =>
     'Tidak dapat bertransaksi dengan akun lain di perangkat yang sama.',
   'note_too_long' => 'Catatan maksimal 500 karakter',
@@ -188,5 +205,8 @@ String offerErrorMessage(String code, String fallback) => switch (code) {
 };
 
 final offersRepositoryProvider = Provider<OffersRepository>(
-  (ref) => OffersRepository(ref.read(supabaseClientProvider)),
+  (ref) => OffersRepository(
+    ref.read(supabaseClientProvider),
+    blockedIds: () => ref.read(blockedPairIdsProvider.future),
+  ),
 );

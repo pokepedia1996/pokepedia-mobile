@@ -300,6 +300,8 @@ class TradingRepository {
     // The rest only `submit_bid_proposal` answers with — proposing to one
     // named bid can fail in ways a broadcast to a price level cannot.
     'cannot_propose_on_own_bid' => 'Ini bid kamu sendiri',
+    // Either side blocked the other.
+    'blocked' => 'Kamu tidak dapat berinteraksi dengan pengguna ini.',
     'proposal_already_pending' =>
       'Kamu sudah mengirim proposal untuk bid ini. Cek halaman Proposal.',
     'order_not_found' ||

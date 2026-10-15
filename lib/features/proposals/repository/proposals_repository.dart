@@ -63,9 +63,18 @@ class AcceptBidProposalResult {
 /// `listing_offers` / `bid_proposals`, whose RLS already scopes rows to the
 /// buyer and seller involved.
 class ProposalsRepository {
-  ProposalsRepository(this._client);
+  ProposalsRepository(
+    this._client, {
+    Future<Set<String>> Function() blockedIds = _none,
+  }) : _blockedIds = blockedIds;
 
   final SupabaseClient _client;
+
+  /// Everyone on either side of a block with the caller, for reads the
+  /// server's RPC filtering doesn't cover (web's `blocked-ids.ts`).
+  final Future<Set<String>> Function() _blockedIds;
+
+  static Future<Set<String>> _none() async => const {};
 
   String? get _userId => _client.auth.currentUser?.id;
 
@@ -506,13 +515,19 @@ class ProposalsRepository {
     String userId,
     String columns, {
     bool openBidsOnly = false,
-  }) {
+  }) async {
+    // Proposals from someone on either side of a block stay hidden, as
+    // web's received-proposals route excludes them.
+    final blocked = await _blockedIds();
     return fetchAllPages<Map<String, dynamic>>((from, to) {
       var query = _client
           .from('bid_proposals')
           .select(columns)
           .eq('bid.user_id', userId);
       if (openBidsOnly) query = query.eq('bid.status', 'open');
+      if (blocked.isNotEmpty) {
+        query = query.not('seller_id', 'in', '(${blocked.join(',')})');
+      }
       return query
           .order('created_at', ascending: false)
           .order('id', ascending: false)
@@ -548,6 +563,9 @@ class ProposalsRepository {
         return 'Masuk dulu untuk melanjutkan.';
       case 'phone_not_verified':
         return 'Nomor HP kamu belum diverifikasi.';
+      // Either side blocked the other.
+      case 'blocked':
+        return 'Kamu tidak dapat berinteraksi dengan pengguna ini.';
       case 'not_found':
       case 'offer_not_found':
       case 'proposal_not_found':

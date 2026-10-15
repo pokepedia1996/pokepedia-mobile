@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../../app/router/routes.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -16,6 +17,8 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/user_avatar.dart';
+import '../../moderation/presentation/user_safety_menu.dart';
+import '../../moderation/usecase/moderation_notifier.dart';
 import '../repository/chat_repository.dart';
 import '../repository/models/chat_models.dart';
 import '../usecase/chat_notifier.dart';
@@ -169,11 +172,41 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(SnackBar(content: Text(userFacingError(e))));
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      // The insert policy refuses a message once either side has blocked
+      // the other. Re-check, so the composer turns into the blocked bar, and
+      // say so instead of a bare failure — web's send-rejected toast.
+      final blocked = e.code == '42501';
+      if (blocked) ref.invalidate(roomBlockStateProvider);
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              blocked ? blockedInteractionMessage : 'Pesan gagal dikirim',
+            ),
+          ),
+        );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(const SnackBar(content: Text('Pesan gagal dikirim')));
+    }
+  }
+
+  Future<void> _unblock(String userId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await setUserBlocked(ref, userId, false);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(const SnackBar(content: Text('Blokir dibuka')));
+    } on ModerationException catch (e) {
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -218,6 +251,17 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(chatThreadProvider(_arg));
     final state = async.valueOrNull;
+    final room = state?.room;
+    final otherUserId = room?.otherUserId;
+    // Report and block apply to a direct conversation with a known person —
+    // not a dispute, where an admin is in the room (web's header menu).
+    final safetyKey = room == null || room.isDispute || otherUserId == null
+        ? null
+        : (roomId: room.id, otherUserId: otherUserId);
+    final blockState = safetyKey == null
+        ? RoomBlockState.none
+        : ref.watch(roomBlockStateProvider(safetyKey)).valueOrNull ??
+              RoomBlockState.none;
 
     return Scaffold(
       appBar: AppBar(
@@ -229,6 +273,18 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
           userId: state?.room?.otherUserId,
           storeSlug: state?.room?.otherStoreSlug,
         ),
+        actions: [
+          if (safetyKey != null)
+            UserSafetyButton(
+              userId: safetyKey.otherUserId,
+              // Only set when the party has a store; the slug falls back to
+              // the username, so it's the better handle to show.
+              username: room!.otherUsername ?? room.otherStoreSlug,
+              reportContext: UserReportContext.chat,
+              roomSlug: room.slug,
+              isBlocked: blockState == RoomBlockState.blockedByMe,
+            ),
+        ],
       ),
       body: async.when(
         loading: () => const PikachuLoader(),
@@ -313,17 +369,76 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                         },
                       ),
               ),
-              _Composer(
-                controller: _controller,
-                sending: state.sending,
-                pendingImage: _pendingImage,
-                onSend: _send,
-                onAttach: _pickImage,
-                onDropImage: () => setState(() => _pendingImage = null),
-              ),
+              if (blockState == RoomBlockState.none)
+                _Composer(
+                  controller: _controller,
+                  sending: state.sending,
+                  pendingImage: _pendingImage,
+                  onSend: _send,
+                  onAttach: _pickImage,
+                  onDropImage: () => setState(() => _pendingImage = null),
+                )
+              else
+                _BlockedBar(
+                  blockedByMe: blockState == RoomBlockState.blockedByMe,
+                  onUnblock: otherUserId == null
+                      ? null
+                      : () => _unblock(otherUserId),
+                ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Ports `chat-blocked-bar.tsx`: where the composer was, once either side
+/// has blocked the other.
+class _BlockedBar extends StatelessWidget {
+  const _BlockedBar({required this.blockedByMe, required this.onUnblock});
+
+  final bool blockedByMe;
+  final VoidCallback? onUnblock;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = context.mutedForeground;
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.borderColor)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.ban, size: 16, color: muted),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                blockedByMe
+                    ? 'Kamu memblokir pengguna ini'
+                    : 'Kamu tidak dapat membalas percakapan ini',
+                style: AppTypography.bodySm(muted),
+              ),
+            ),
+            if (blockedByMe && onUnblock != null) ...[
+              Text(' · ', style: AppTypography.bodySm(muted)),
+              GestureDetector(
+                onTap: onUnblock,
+                child: Text(
+                  'Buka blokir',
+                  style: AppTypography.bodySmSemibold(
+                    context.appColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

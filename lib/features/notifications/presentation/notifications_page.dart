@@ -40,6 +40,8 @@ class NotificationsPage extends ConsumerWidget {
         return LucideIcons.star;
       case NotificationType.chatMessage:
         return LucideIcons.messageCircle;
+      case NotificationType.userReported:
+        return LucideIcons.flag;
       case NotificationType.other:
         return LucideIcons.bell;
     }

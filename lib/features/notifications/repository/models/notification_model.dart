@@ -25,6 +25,9 @@ enum NotificationType {
   ratingReceived,
   chatMessage,
 
+  /// Admins only: someone reported a user (`report_user`).
+  userReported,
+
   /// Anything outside the curated list above — still shown, just with the
   /// generic icon. The constraint carries ~48 types and grows server-side.
   other,
@@ -65,6 +68,8 @@ extension NotificationTypeX on NotificationType {
         return 'rating_received';
       case NotificationType.chatMessage:
         return 'chat_message';
+      case NotificationType.userReported:
+        return 'user_reported';
       case NotificationType.other:
         return 'other';
     }

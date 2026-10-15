@@ -350,6 +350,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         label: 'Alamat',
                         onTap: () => context.push(Routes.addresses),
                       ),
+                      const SizedBox(height: 4),
+                      _NavItem(
+                        icon: LucideIcons.ban,
+                        label: 'Pengguna diblokir',
+                        onTap: () => context.push(Routes.blockedUsers),
+                      ),
                       const SizedBox(height: 12),
                       const _LegalLinks(),
                       const SizedBox(height: 20),

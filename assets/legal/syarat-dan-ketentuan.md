@@ -188,6 +188,10 @@ Pengguna memahami bahwa Pusat Resolusi tidak berlaku untuk kendala yang timbul d
 
 Dalam menggunakan setiap fitur dan/atau layanan di Situs, Pengguna dilarang untuk mengunggah atau mempergunakan kata-kata, komentar, gambar, atau konten apapun yang mengandung unsur SARA, diskriminasi, merendahkan atau menyudutkan orang lain, bersifat ancaman, vulgar, mengandung konten seksual eksplisit, beriklan atau melakukan promosi ke situs selain Situs Pokepedia, atau hal-hal lain yang dapat dianggap tidak sesuai dengan nilai dan norma sosial maupun berdasarkan kebijakan yang ditentukan sendiri oleh Pokepedia. Pokepedia berhak melakukan tindakan yang diperlukan atas pelanggaran ketentuan ini, antara lain penghapusan konten, moderasi toko, pemblokiran akun, dan lain-lain.
 
+Pokepedia menerapkan kebijakan **toleransi nol (zero tolerance)** terhadap konten yang tidak pantas dan terhadap Pengguna yang melakukan pelecehan, penipuan, ujaran kebencian, atau perilaku kasar lainnya. Pengguna yang melanggar ketentuan ini dapat dikenakan penghapusan konten dan pemblokiran akun secara permanen tanpa pemberitahuan sebelumnya.
+
+Pengguna dapat melaporkan konten maupun Pengguna lain melalui fitur "Laporkan" pada chat, toko, profil, dan listing, serta dapat memblokir Pengguna lain melalui fitur "Blokir pengguna". Pengguna yang diblokir tidak dapat mengirim pesan, melihat profil, toko, maupun listing Pengguna yang memblokirnya, dan sebaliknya. Setiap laporan akan ditinjau oleh tim Pokepedia dalam waktu paling lambat 24 (dua puluh empat) jam, dan Pokepedia akan menghapus konten yang melanggar serta memblokir akun pelaku apabila terbukti melanggar.
+
 Pengguna dilarang mempergunakan foto atau gambar Barang yang memiliki watermark yang menandakan hak kepemilikan orang lain.
 
 Penjual tidak diperkenankan untuk mempergunakan foto/gambar Barang atau ulasan produk sebagai media untuk beriklan atau melakukan promosi ke situs-situs lain di luar Situs. Penjual dilarang mempromosikan toko dan/atau Barang secara langsung menggunakan fitur ulasan produk, diskusi produk, maupun pesan pribadi yang dapat mengganggu kenyamanan Pengguna lain.
@@ -285,4 +289,4 @@ Website: www.pokepedia.id
 
 ---
 
-*Terakhir diperbarui: 01 Juli 2026*
+*Terakhir diperbarui: 15 Oktober 2026*

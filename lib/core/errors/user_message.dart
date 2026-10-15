@@ -44,6 +44,9 @@ const _tokens = <String, String>{
   'order_not_found': 'Pesanan ini tidak ditemukan.',
   'shipment_not_found': 'Pengiriman ini tidak ditemukan.',
   'deal_unavailable': 'Penawaran ini sudah tidak tersedia.',
+  // Web's BLOCKED_INTERACTION_MESSAGE: either side blocked the other.
+  'blocked': 'Kamu tidak dapat berinteraksi dengan pengguna ini.',
+  'seller_blocked': 'Kamu tidak dapat berinteraksi dengan pengguna ini.',
   'photo_required': gradedPhotoRequiredMessage,
   'insufficient_stock': 'Stok tidak mencukupi.',
   'insufficient_balance': 'Saldo kamu tidak mencukupi.',

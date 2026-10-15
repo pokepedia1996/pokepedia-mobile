@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/network/pokepedia_api.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
@@ -555,12 +556,9 @@ class MarketRepository {
   }
 }
 
-/// A refusal from `report_listing`, already worded for the user.
-class ListingReportException implements Exception {
-  const ListingReportException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
+/// A refusal from `report_listing`, already worded for the user. An
+/// [ApiException] so `userFacingError` shows the sentence rather than the
+/// generic fallback.
+class ListingReportException extends ApiException {
+  const ListingReportException(super.message);
 }

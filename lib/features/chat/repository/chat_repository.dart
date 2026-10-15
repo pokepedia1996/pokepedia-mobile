@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/network/pokepedia_api.dart';
 import '../../../shared/utils/chat_image.dart';
 import 'models/chat_models.dart';
 
@@ -36,12 +37,12 @@ class ChatMediaUpload {
 
 /// Raised when a chat action can't be carried out, carrying a message that is
 /// safe to show the user.
-class ChatException implements Exception {
-  const ChatException(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
+///
+/// An [ApiException] so `userFacingError` shows the sentence: as a bare
+/// `Exception` it fell through to the generic "Terjadi kesalahan", and every
+/// `_roomErrorMessage` was lost.
+class ChatException extends ApiException {
+  const ChatException(super.message);
 }
 
 /// Data access for chat, against `chat_rooms` / `chat_room_participants` /
@@ -642,6 +643,8 @@ class ChatRepository {
   String _roomErrorMessage(String code) => switch (code) {
     'unauthorized' => 'Masuk dulu untuk mengirim pesan',
     'cannot_chat_self' => 'Tidak bisa mengirim pesan ke diri sendiri',
+    // Either side blocked the other — web's BLOCKED_INTERACTION_MESSAGE.
+    'blocked' => 'Kamu tidak dapat berinteraksi dengan pengguna ini.',
     'user_not_found' => 'Pengguna tidak ditemukan',
     'rate_limited' =>
       'Terlalu banyak percakapan baru. Coba lagi beberapa saat lagi.',
