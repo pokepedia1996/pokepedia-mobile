@@ -238,117 +238,122 @@ class _SuggestionsOverlay extends ConsumerWidget {
     return Stack(
       children: [
         barrier,
-        CompositedTransformFollower(
-          link: link,
-          targetAnchor: Alignment.bottomLeft,
-          followerAnchor: Alignment.topLeft,
-          offset: const Offset(0, 8),
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: ConstrainedBox(
-              key: QuickSearchField.panelKey,
-              // The dropdown may grow with its content but never past two
-              // thirds of the screen: past that it stops reading as a panel
-              // over the page and starts reading as a new page.
-              constraints: BoxConstraints(
-                maxWidth: width ?? double.infinity,
-                maxHeight: MediaQuery.sizeOf(context).height * 0.65,
-              ),
-              child: Material(
-                color: Theme.of(context).cardColor,
-                elevation: 8,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                clipBehavior: Clip.antiAlias,
-                child: Container(
-                  width: width,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: context.borderColor),
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Nothing typed yet: the panel offers what this device
-                      // has searched before instead of an empty box.
-                      if (!hasQuery)
-                        Flexible(child: _RecentSearches(onUse: onRecent))
-                      else ...[
-                        // Where to look, before what was found. The same
-                        // three words mean different things in the
-                        // marketplace, the catalog and the shop directory,
-                        // and the reader knows which they meant.
-                        _ScopeRows(query: query, onScope: onScope),
-                        Divider(height: 1, color: context.borderColor),
-                        Flexible(
-                          child: async.when(
-                            // A bar pinned to the top edge of the results
-                            // area read as part of the panel's chrome; a
-                            // spinner sits where the rows will be, so the
-                            // wait happens in the place being waited on.
-                            loading: () => _PanelMessage(
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: context.mutedForeground,
+        // The panel lives in the overlay, so without this a touch on a row is
+        // "outside" the field: the app-wide tap-outside unfocuses on pointer
+        // down, the panel hides, and the row is gone before the tap lands.
+        TextFieldTapRegion(
+          child: CompositedTransformFollower(
+            link: link,
+            targetAnchor: Alignment.bottomLeft,
+            followerAnchor: Alignment.topLeft,
+            offset: const Offset(0, 8),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                key: QuickSearchField.panelKey,
+                // The dropdown may grow with its content but never past two
+                // thirds of the screen: past that it stops reading as a panel
+                // over the page and starts reading as a new page.
+                constraints: BoxConstraints(
+                  maxWidth: width ?? double.infinity,
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.65,
+                ),
+                child: Material(
+                  color: Theme.of(context).cardColor,
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  clipBehavior: Clip.antiAlias,
+                  child: Container(
+                    width: width,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: context.borderColor),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Nothing typed yet: the panel offers what this device
+                        // has searched before instead of an empty box.
+                        if (!hasQuery)
+                          Flexible(child: _RecentSearches(onUse: onRecent))
+                        else ...[
+                          // Where to look, before what was found. The same
+                          // three words mean different things in the
+                          // marketplace, the catalog and the shop directory,
+                          // and the reader knows which they meant.
+                          _ScopeRows(query: query, onScope: onScope),
+                          Divider(height: 1, color: context.borderColor),
+                          Flexible(
+                            child: async.when(
+                              // A bar pinned to the top edge of the results
+                              // area read as part of the panel's chrome; a
+                              // spinner sits where the rows will be, so the
+                              // wait happens in the place being waited on.
+                              loading: () => _PanelMessage(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: context.mutedForeground,
+                                  ),
                                 ),
                               ),
-                            ),
-                            error: (_, __) => _PanelMessage(
-                              child: Text(
-                                'Pencarian gagal. Coba lagi.',
-                                style: AppTypography.caption(colors.error),
+                              error: (_, __) => _PanelMessage(
+                                child: Text(
+                                  'Pencarian gagal. Coba lagi.',
+                                  style: AppTypography.caption(colors.error),
+                                ),
                               ),
+                              data: (results) => results.isEmpty
+                                  ? _PanelMessage(
+                                      child: Text(
+                                        'Tidak ada hasil untuk "$query"',
+                                        style: AppTypography.caption(
+                                          context.mutedForeground,
+                                        ),
+                                      ),
+                                    )
+                                  : _Results(
+                                      results: results,
+                                      onCard: onCard,
+                                      onStore: onStore,
+                                    ),
                             ),
-                            data: (results) => results.isEmpty
-                                ? _PanelMessage(
+                          ),
+                        ],
+                        if (hasQuery) ...[
+                          Divider(height: 1, color: context.borderColor),
+                          InkWell(
+                            onTap: onSearchAll,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Flexible(
                                     child: Text(
-                                      'Tidak ada hasil untuk "$query"',
-                                      style: AppTypography.caption(
+                                      "Cari semua untuk '$query'",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTypography.captionSemibold(
                                         context.mutedForeground,
                                       ),
                                     ),
-                                  )
-                                : _Results(
-                                    results: results,
-                                    onCard: onCard,
-                                    onStore: onStore,
                                   ),
-                          ),
-                        ),
-                      ],
-                      if (hasQuery) ...[
-                        Divider(height: 1, color: context.borderColor),
-                        InkWell(
-                          onTap: onSearchAll,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    "Cari semua untuk '$query'",
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTypography.captionSemibold(
-                                      context.mutedForeground,
-                                    ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    LucideIcons.arrowRight,
+                                    size: 12,
+                                    color: context.mutedForeground,
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Icon(
-                                  LucideIcons.arrowRight,
-                                  size: 12,
-                                  color: context.mutedForeground,
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

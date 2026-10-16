@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/features/search/usecase/quick_search_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 import 'package:pokepedia_mobile/shared/models/store_model.dart';
+import 'package:pokepedia_mobile/shared/widgets/dismiss_keyboard_on_tap_outside.dart';
 import 'package:pokepedia_mobile/shared/widgets/quick_search_field.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,6 +46,25 @@ Widget _harness(QuickSearchResults results) => ProviderScope(
   overrides: [quickSearchProvider.overrideWith((ref, query) async => results)],
   child: const MaterialApp(
     home: Scaffold(
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Align(alignment: Alignment.topCenter, child: QuickSearchField()),
+      ),
+    ),
+  ),
+);
+
+/// As the app mounts it: every touch outside a focused field drops focus,
+/// which is what a panel in an overlay has to survive.
+Widget _appHarness() => ProviderScope(
+  overrides: [
+    quickSearchProvider.overrideWith(
+      (ref, query) async => QuickSearchResults.empty,
+    ),
+  ],
+  child: MaterialApp(
+    builder: (context, child) => DismissKeyboardOnTapOutside(child: child!),
+    home: const Scaffold(
       body: Padding(
         padding: EdgeInsets.all(16),
         child: Align(alignment: Alignment.topCenter, child: QuickSearchField()),
@@ -214,5 +234,45 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('a tap inside the panel lands instead of closing it', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'recent_searches': ['pikachu 130'],
+    });
+    await tester.pumpWidget(_appHarness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('pikachu 130'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'pikachu 130',
+    );
+    expect(find.byKey(QuickSearchField.panelKey), findsOneWidget);
+  });
+
+  testWidgets('a tap outside the panel still closes it', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'recent_searches': ['pikachu 130'],
+    });
+    await tester.pumpWidget(_appHarness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(400, 580));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(QuickSearchField.panelKey), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isFalse,
+    );
   });
 }
