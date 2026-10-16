@@ -375,14 +375,23 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
     final listing = widget.listing;
     final colors = context.appColors;
     final soldOut = listing.available <= 0;
+    final success = context.appSemantic.success;
+    // Web's buttons set their label in the heading face (`font-heading`).
+    // The button's foreground colour overrides the one this carries.
+    final buttonLabel = AppTypography.h3(
+      colors.onSurface,
+    ).copyWith(fontSize: 14, height: 1.2);
+    final buttonShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+    );
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: context.borderColor)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,54 +407,72 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                 ),
               ),
               const SizedBox(width: 10),
+              // Web's row (`listings-section.tsx`), but with the rating and
+              // the city each on a line of their own and room for a long
+              // store name to wrap, so nothing is cut short beside a price.
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Flexible(
                           child: Text(
                             listing.storeName,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodySmSemibold(
                               colors.onSurface,
-                            ),
+                            ).copyWith(height: 1.3),
                           ),
                         ),
                         if (listing.isVerified) ...[
                           const SizedBox(width: 3),
-                          Icon(
-                            LucideIcons.badgeCheck,
-                            size: 13,
-                            color: colors.primary,
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              LucideIcons.badgeCheck,
+                              size: 13,
+                              color: colors.primary,
+                            ),
                           ),
                         ],
                         if (!listing.card.isSealed) ...[
                           const SizedBox(width: 6),
-                          ConditionBadge(condition: listing.condition),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: ConditionBadge(
+                              condition: listing.condition,
+                              colored: true,
+                            ),
+                          ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    // Web's row: rating · sales, then the city on its own
-                    // line (`listings-section.tsx`).
-                    SellerRatingBadge(rating: listing.sellerRating),
+                    const SizedBox(height: 3),
+                    SellerRatingBadge(
+                      score: listing.sellerFeedbackScore,
+                      rating: listing.sellerRating,
+                    ),
                     if (listing.cityName.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            LucideIcons.mapPin,
-                            size: 12,
-                            color: context.mutedForeground,
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              LucideIcons.mapPin,
+                              size: 12,
+                              color: context.mutedForeground,
+                            ),
                           ),
-                          const SizedBox(width: 2),
+                          const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               listing.cityName,
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.caption(
                                 context.mutedForeground,
@@ -458,127 +485,176 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                   ],
                 ),
               ),
-              if (!_isMine)
-                IconButton(
-                  tooltip: 'Chat penjual',
-                  icon: const Icon(LucideIcons.messageCircle, size: 18),
-                  color: context.mutedForeground,
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _chat(listing),
-                ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    formatRupiah(listing.price),
-                    style: AppTypography.bodySemibold(colors.onSurface),
-                  ),
-                  Text(
-                    '${listing.available} tersedia',
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                ],
+              // Never cut short: the seller column gives way first, and on a
+              // narrow phone a huge price scales down rather than squeezing
+              // the seller column below half the row.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.45,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        formatRupiah(listing.price),
+                        maxLines: 1,
+                        style: AppTypography.bodySemibold(colors.onSurface)
+                            .copyWith(
+                              fontSize: 18,
+                              height: 1.3,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ),
+                    Text(
+                      '${listing.available} tersedia',
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          if (listing.photoUrls.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 48,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: listing.photoUrls.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
-                itemBuilder: (context, i) => InkWell(
-                  onTap: () => showImageLightbox(
-                    context,
-                    imageUrl: listing.photoUrls[i],
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: Image.network(
-                      listing.photoUrls[i],
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 48,
-                        height: 48,
-                        color: colors.secondary,
+          // Lined up under the seller's name, past the avatar.
+          Padding(
+            padding: const EdgeInsets.only(left: 46, top: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (!_isMine) ...[
+                      _ChatButton(onPressed: () => _chat(listing)),
+                      const SizedBox(width: 8),
+                    ],
+                    QuantitySelector(
+                      value: _qty,
+                      min: 1,
+                      max: listing.available < 1 ? 1 : listing.available,
+                      onChanged: (v) => setState(() => _qty = v),
+                    ),
+                  ],
+                ),
+                if (listing.photoUrls.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 48,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: listing.photoUrls.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (context, i) => InkWell(
+                        onTap: () => showImageLightbox(
+                          context,
+                          imageUrl: listing.photoUrls[i],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            listing.photoUrls[i],
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 48,
+                              height: 48,
+                              color: colors.secondary,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                ],
+              ],
             ),
-          ],
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: _adding || soldOut ? null : _addToCart,
+            icon: _adding
+                ? SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                    ),
+                  )
+                : const Icon(LucideIcons.shoppingCart, size: 14),
+            label: Text(soldOut ? 'Habis' : 'Keranjang'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.onSurface,
+              foregroundColor: Theme.of(context).scaffoldBackgroundColor,
+              minimumSize: const Size.fromHeight(40),
+              shape: buttonShape,
+              textStyle: buttonLabel,
+            ),
+          ),
           // Own listings are excluded from this feed, but a row can survive
           // a sign-in, and `submit_offer` refuses your own listing anyway.
           if (listing.acceptsOffers && !soldOut && !_isMine) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _myOffer != null
-                    ? () => context.push(Routes.proposals)
-                    : () => _offer(listing),
-                icon: Icon(
-                  _myOffer != null ? LucideIcons.clock : LucideIcons.handshake,
-                  size: 16,
-                ),
-                label: Text(
-                  _myOffer != null ? 'Penawaran terkirim' : 'Buat Penawaran',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: context.appSemantic.success,
-                  side: BorderSide(
-                    color: context.appSemantic.success.withValues(alpha: 0.5),
-                  ),
-                  minimumSize: const Size(0, 38),
-                ),
+            const SizedBox(height: 6),
+            ElevatedButton.icon(
+              onPressed: _myOffer != null
+                  ? () => context.push(Routes.proposals)
+                  : () => _offer(listing),
+              icon: Icon(
+                _myOffer != null ? LucideIcons.clock : LucideIcons.handCoins,
+                size: 14,
+              ),
+              label: Text(_myOffer != null ? 'Penawaran terkirim' : 'Tawar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: success,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(40),
+                shape: buttonShape,
+                textStyle: buttonLabel,
               ),
             ),
           ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              QuantitySelector(
-                value: _qty,
-                min: 1,
-                max: listing.available < 1 ? 1 : listing.available,
-                onChanged: (v) => setState(() => _qty = v),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _adding || soldOut ? null : _addToCart,
-                  icon: _adding
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(LucideIcons.shoppingCart, size: 16),
-                  label: Text(
-                    soldOut ? 'Habis' : 'Tambah ke Keranjang',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.onSurface,
-                    foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-                    minimumSize: const Size(0, 38),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Web's square "Chat penjual" button beside the stepper: a 36px outlined
+/// tile, the same height as the stepper's boxes plus their border.
+class _ChatButton extends StatelessWidget {
+  const _ChatButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadius.md);
+    return Tooltip(
+      message: 'Chat penjual',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: radius,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: context.borderColor),
+            ),
+            child: Icon(
+              LucideIcons.messageCircle,
+              size: 16,
+              color: context.appColors.onSurface,
+            ),
+          ),
+        ),
       ),
     );
   }
