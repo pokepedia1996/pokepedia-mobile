@@ -200,9 +200,9 @@ class _MarketPageState extends ConsumerState<MarketPage>
                 child: TabBarView(
                   controller: _tabController,
                   children: const [
-                    _ListingGrid(),
-                    _ListingGrid(),
-                    _ListingGrid(),
+                    _ListingGrid(MarketBucket.all),
+                    _ListingGrid(MarketBucket.listing),
+                    _ListingGrid(MarketBucket.buylist),
                     _StoreDirectory(),
                   ],
                 ),
@@ -379,7 +379,10 @@ class _SortRow extends StatelessWidget {
 }
 
 class _ListingGrid extends ConsumerStatefulWidget {
-  const _ListingGrid();
+  const _ListingGrid(this.bucket);
+
+  /// Which tab's feed this draws — its own, not whichever tab is current.
+  final MarketBucket bucket;
 
   @override
   ConsumerState<_ListingGrid> createState() => _ListingGridState();
@@ -409,10 +412,10 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
           curve: Curves.easeOutCubic,
         );
       }
-      ref.read(marketListingsProvider.notifier).retry();
+      ref.read(marketListingsProvider(widget.bucket).notifier).retry();
     });
 
-    final state = ref.watch(marketListingsProvider);
+    final state = ref.watch(marketListingsProvider(widget.bucket));
 
     if (state.loading) return const PikachuLoader();
     if (state.error) {
@@ -420,7 +423,8 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
         icon: LucideIcons.circleAlert,
         title: 'Gagal memuat listing',
         action: OutlinedButton(
-          onPressed: () => ref.read(marketListingsProvider.notifier).retry(),
+          onPressed: () =>
+              ref.read(marketListingsProvider(widget.bucket).notifier).retry(),
           child: const Text('Coba lagi'),
         ),
       );
@@ -442,7 +446,7 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
         final metrics = notification.metrics;
         if (metrics.axis != Axis.vertical) return false;
         if (metrics.extentAfter < 600) {
-          ref.read(marketListingsProvider.notifier).loadMore();
+          ref.read(marketListingsProvider(widget.bucket).notifier).loadMore();
         }
         return false;
       },

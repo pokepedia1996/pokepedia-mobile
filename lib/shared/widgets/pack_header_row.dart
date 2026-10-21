@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../models/card_model.dart';
 import '../models/pack_model.dart';
+import 'app_network_image.dart';
 
 /// The expansion row above a card's artwork, ported from the header block of
 /// `card-detail.tsx`: the pack image + name link back to the expansion on the
@@ -33,7 +34,7 @@ class PackHeaderRow extends StatelessWidget {
                   width: 80,
                   height: 80,
                   child: pack?.image != null
-                      ? Image.network(
+                      ? cachedNetworkImage(
                           pack!.image!,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) =>

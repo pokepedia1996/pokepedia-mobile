@@ -32,6 +32,7 @@ import '../repository/models/pending_checkout.dart';
 import '../usecase/orders_notifier.dart';
 import '../utils/order_status_display.dart';
 import 'widgets/order_thumbnail.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/orders/components/orders-page.tsx` — the buyer's orders
 /// behind a search box and the seven-tab filter strip, each order drawn as
@@ -1134,7 +1135,7 @@ class _PendingItem extends StatelessWidget {
                       size: 18,
                       color: context.mutedForeground,
                     )
-                  : Image.network(
+                  : cachedNetworkImage(
                       proxyImageUrl(first!.imageUrl)!,
                       fit: BoxFit.cover,
                       // Cards are portrait and the crop is square, so the

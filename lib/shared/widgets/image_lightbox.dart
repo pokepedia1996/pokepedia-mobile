@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../shared/widgets/shimmer_box.dart';
+import 'app_network_image.dart';
 
 /// Ports `components/ui/image-lightbox.tsx` — a fullscreen dark overlay
 /// showing [imageUrl] pinch-zoomable via [InteractiveViewer], dismissible
@@ -39,7 +40,7 @@ class _ImageLightbox extends StatelessWidget {
   Widget build(BuildContext context) {
     final image = imageUrl == null
         ? Image.asset('assets/images/backcard.webp', fit: BoxFit.contain)
-        : Image.network(
+        : cachedNetworkImage(
             imageUrl!,
             fit: BoxFit.contain,
             // Full-size art over a slow connection is the longest wait in

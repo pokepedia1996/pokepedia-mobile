@@ -82,14 +82,20 @@ class MarketListingsState {
 ///
 /// It used to be a `FutureProvider` fetching a single hardcoded page of 40
 /// with `p_offset: 0`, and nothing could reach row 41. Rebuilt on every
-/// bucket/sort/filter/query change, because each of those is a different
-/// feed and the cursor from the old one means nothing in the new.
-class MarketListingsNotifier extends Notifier<MarketListingsState> {
+/// sort/filter/query change, because each of those is a different feed and
+/// the cursor from the old one means nothing in the new.
+///
+/// One per tab. It used to follow [bucketProvider], which only changes once
+/// a swipe settles — so all three tabs drew the one feed, and the tab being
+/// swiped into showed the old tab's cards until it landed, then swapped
+/// them out. Keyed by bucket, each tab draws its own rows (or its own
+/// loader) throughout the swipe, and still has them on the way back.
+class MarketListingsNotifier
+    extends FamilyNotifier<MarketListingsState, MarketBucket> {
   @override
-  MarketListingsState build() {
+  MarketListingsState build(MarketBucket bucket) {
     // Watched, so changing any of them tears this notifier down and rebuilds
     // it — which is exactly the reset the old provider got for free.
-    final bucket = ref.watch(bucketProvider);
     final query = ref.watch(marketQueryProvider);
     final sort = ref.watch(marketSortProvider);
     final filters = ref.watch(marketFiltersProvider);
@@ -138,7 +144,7 @@ class MarketListingsNotifier extends Notifier<MarketListingsState> {
       final page = await ref
           .read(marketRepositoryProvider)
           .fetchListings(
-            bucket: ref.read(bucketProvider),
+            bucket: arg,
             query: ref.read(marketQueryProvider),
             sort: ref.read(marketSortProvider),
             filters: ref.read(marketFiltersProvider),
@@ -165,9 +171,11 @@ class MarketListingsNotifier extends Notifier<MarketListingsState> {
 }
 
 final marketListingsProvider =
-    NotifierProvider<MarketListingsNotifier, MarketListingsState>(
-      MarketListingsNotifier.new,
-    );
+    NotifierProvider.family<
+      MarketListingsNotifier,
+      MarketListingsState,
+      MarketBucket
+    >(MarketListingsNotifier.new);
 
 final marketStoresProvider = FutureProvider<List<StoreModel>>((ref) {
   final query = ref.watch(marketQueryProvider);

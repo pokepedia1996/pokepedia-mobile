@@ -22,6 +22,8 @@ import '../../account/usecase/address_notifier.dart';
 import '../repository/models/store_profile.dart';
 import '../repository/store_profile_repository.dart';
 import '../usecase/store_profile_notifier.dart';
+import '../../../shared/widgets/app_network_image.dart';
+import '../../../core/utils/image_url.dart';
 
 /// Ports `/seller/settings` — web's Profil Toko, section for section, with
 /// its copy.
@@ -313,7 +315,7 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
             fit: StackFit.expand,
             children: [
               if (profile.storeBannerUrl != null)
-                Image.network(profile.storeBannerUrl!, fit: BoxFit.cover)
+                cachedNetworkImage(profile.storeBannerUrl!, fit: BoxFit.cover)
               else
                 Container(
                   color: colors.secondary,
@@ -373,8 +375,9 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
                         border: Border.all(color: context.borderColor),
                       ),
                       child: profile.storeLogoUrl != null
-                          ? Image.network(
+                          ? cachedNetworkImage(
                               profile.storeLogoUrl!,
+                              size: ImageSize.half,
                               fit: BoxFit.cover,
                             )
                           : Center(

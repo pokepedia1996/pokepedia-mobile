@@ -25,6 +25,7 @@ import '../../moderation/presentation/user_safety_menu.dart';
 import '../../moderation/usecase/moderation_notifier.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
+import '../../../core/utils/image_url.dart';
 
 /// How many cards each expansion shows before "Lihat Semua", matching web's
 /// `CARDS_PER_EXPANSION`.
@@ -771,6 +772,7 @@ class _ContributionsSectionState extends State<_ContributionsSection> {
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: CardArt(
                   imageUrl: card.imageUrl,
+                  size: ImageSize.half,
                   borderRadius: AppRadius.sm,
                 ),
               );

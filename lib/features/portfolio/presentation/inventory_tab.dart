@@ -23,6 +23,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../repository/models/inventory_entry.dart';
 import '../usecase/portfolio_notifier.dart';
+import '../../../core/utils/image_url.dart';
 
 enum _InventorySection { database, add, remove, activity }
 
@@ -320,6 +321,7 @@ class _RecordTable extends StatelessWidget {
                 height: 32,
                 child: CardArt(
                   imageUrl: group.card.imageUrl,
+                  size: ImageSize.half,
                   aspectRatio: 44 / 32,
                   alignment: const Alignment(0, -0.55),
                 ),
@@ -763,7 +765,7 @@ class _AddResultCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.md),
-                  child: CardArt(imageUrl: card.imageUrl),
+                  child: CardArt(imageUrl: card.imageUrl, size: ImageSize.half),
                 ),
                 if (drafted > 0)
                   Positioned(
@@ -1261,6 +1263,7 @@ class _DraftRowState extends ConsumerState<_DraftRow> {
             // The artwork, cropped the way the seller table crops it.
             child: CardArt(
               imageUrl: card.imageUrl,
+              size: ImageSize.half,
               aspectRatio: 44 / 32,
               alignment: const Alignment(0, -0.55),
             ),
@@ -1461,6 +1464,7 @@ class _AddDraftSheetState extends State<_AddDraftSheet> {
                 width: 48,
                 child: CardArt(
                   imageUrl: widget.card.imageUrl,
+                  size: ImageSize.half,
                   borderRadius: AppRadius.sm,
                 ),
               ),
@@ -1735,6 +1739,7 @@ class _RemoveGroupTile extends StatelessWidget {
                   width: 40,
                   child: CardArt(
                     imageUrl: group.card.imageUrl,
+                    size: ImageSize.half,
                     borderRadius: AppRadius.sm,
                   ),
                 ),

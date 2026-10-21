@@ -46,6 +46,8 @@ import '../../proposals/usecase/proposals_notifier.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/market_notifier.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../shared/widgets/app_network_image.dart';
+import '../../../core/utils/image_url.dart';
 
 const _monthNamesIdFull = [
   'Januari',
@@ -565,8 +567,9 @@ class _PackRow extends StatelessWidget {
                   width: 80,
                   height: 80,
                   child: pack?.image != null
-                      ? Image.network(
+                      ? cachedNetworkImage(
                           pack!.image!,
+                          size: ImageSize.half,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) =>
                               _PackFallback(pack: pack),
@@ -661,8 +664,9 @@ class _PhotoThumb extends StatelessWidget {
           ),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.network(
+        child: cachedNetworkImage(
           url,
+          size: ImageSize.half,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => const SizedBox.shrink(),
         ),

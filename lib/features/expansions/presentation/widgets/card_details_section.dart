@@ -11,6 +11,7 @@ import '../../../../shared/utils/evolution_chain.dart';
 import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/type_icon.dart';
 import '../../usecase/expansions_notifier.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// A small rounded label pill — rarity, category, evolution stage, etc.
 class CardInfoChip extends StatelessWidget {
@@ -435,7 +436,7 @@ class EvolutionStageChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (spriteUrl != null) ...[
-                Image.network(
+                cachedNetworkImage(
                   spriteUrl,
                   width: 40,
                   height: 40,

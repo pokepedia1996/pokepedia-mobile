@@ -29,6 +29,7 @@ import '../../portfolio/usecase/portfolio_counter.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `app/expansions/[packSlug]/pack-detail-client.tsx` — the pack
 /// header (image, title, meta) plus the search/filter bar and card grid
@@ -426,7 +427,7 @@ class _PackHeader extends ConsumerWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.md),
             child: pack.image != null
-                ? Image.network(
+                ? cachedNetworkImage(
                     pack.image!,
                     width: double.infinity,
                     height: 120,

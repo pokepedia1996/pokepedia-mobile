@@ -30,6 +30,7 @@ import 'widgets/store_share_sheet.dart';
 import '../../moderation/presentation/blocked_user_notice.dart';
 import '../../moderation/presentation/user_safety_menu.dart';
 import '../../moderation/usecase/moderation_notifier.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/market/store/components/storefront/storefront-view.tsx` —
 /// a seller's storefront: banner and identity, the stats strip, the actions,
@@ -429,7 +430,7 @@ class _Header extends StatelessWidget {
           width: double.infinity,
           child: banner == null || banner.isEmpty
               ? ColoredBox(color: colors.secondary)
-              : Image.network(
+              : cachedNetworkImage(
                   banner,
                   fit: BoxFit.cover,
                   // Decoded at the width it is drawn at. Banners are uploaded
