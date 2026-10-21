@@ -83,7 +83,10 @@ class _FakeQuick implements QuickSearchRepository {
   final queries = <String>[];
 
   @override
-  Future<QuickSearchResults> search(String query) async {
+  Future<QuickSearchResults> search(
+    String query, {
+    required CardLanguage language,
+  }) async {
     queries.add(query);
     return QuickSearchResults.empty;
   }

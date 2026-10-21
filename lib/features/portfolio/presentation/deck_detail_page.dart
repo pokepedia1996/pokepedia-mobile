@@ -49,6 +49,14 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
   bool _duplicating = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Web reads the allowed marks on every deck-page mount; doing the same
+    // keeps a failed or stale read from sticking for the whole session.
+    ref.invalidate(deckAllowedRegulationsProvider);
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
