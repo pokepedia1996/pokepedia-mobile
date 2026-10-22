@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -6,6 +8,8 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/widgets/confirm_dialog.dart';
+import '../../../market/presentation/widgets/share_store_prompt.dart';
+import '../../../market/presentation/widgets/store_poster.dart';
 import '../../repository/seller_listings_repository.dart';
 import '../../usecase/seller_listings_notifier.dart';
 
@@ -80,6 +84,9 @@ class _DraftSelectionBarState extends ConsumerState<DraftSelectionBar> {
           persist: false,
         ),
       );
+    if (posted > 0) {
+      unawaited(promptShareStorePoster(context, side: PosterSide.wts));
+    }
   }
 
   Future<void> _delete() async {

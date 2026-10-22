@@ -22,7 +22,9 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../../shared/utils/csv_export.dart';
 import '../usecase/collection_page_notifier.dart';
+import '../usecase/portfolio_export.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'widgets/portfolio_picker_sheet.dart';
 import 'widgets/selection_sheet.dart';
@@ -111,6 +113,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
   final Set<int> _selected = {};
   bool _saving = false;
   bool _working = false;
+  bool _exporting = false;
 
   /// Asks for the next page once the end of the loaded rows is within a
   /// screenful. Returns false so the notification carries on bubbling.
@@ -257,6 +260,8 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                   onManage: () => setState(() => _editMode = true),
                   onDone: _save,
                   onCancel: _exitEdit,
+                  exporting: _exporting,
+                  onExport: _export,
                 ),
               ),
               if (hasCards)
@@ -584,6 +589,40 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     );
   }
 
+  /// Every portfolio — Utama and each list — as one CSV, a Portofolio
+  /// column saying which each card is on, handed to the share sheet.
+  Future<void> _export(Rect? origin) async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null || _exporting) return;
+    setState(() => _exporting = true);
+    String? message;
+    try {
+      final rows = await ref
+          .read(portfolioRepositoryProvider)
+          .fetchPortfolioExport(user.id);
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        message = 'Portofolio masih kosong.';
+      } else {
+        await ref.read(csvSharerProvider)(
+          portfolioExportFileName(),
+          portfolioCsv(rows),
+          origin,
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[portfolio] export failed: $e\n$st');
+      message = 'Gagal mengekspor portofolio.';
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _openAddSheet() async {
     final added = await showCollectionAddSheet(context);
     if (added != true || !mounted) return;
@@ -605,6 +644,8 @@ class _CollectionHeader extends StatelessWidget {
     required this.onManage,
     required this.onDone,
     required this.onCancel,
+    required this.exporting,
+    required this.onExport,
   });
 
   final int totalValue;
@@ -616,6 +657,10 @@ class _CollectionHeader extends StatelessWidget {
   final VoidCallback onManage;
   final VoidCallback onDone;
   final VoidCallback onCancel;
+  final bool exporting;
+
+  /// Exports every portfolio, the share sheet anchored on the button.
+  final ValueChanged<Rect?> onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -686,6 +731,27 @@ class _CollectionHeader extends StatelessWidget {
                       minimumSize: const Size(0, 36),
                     ),
                   ),
+                if (hasCards) const SizedBox(width: 8),
+                // Every portfolio goes in the file, not only the one on
+                // screen — so it's here even when this one is empty.
+                Builder(
+                  builder: (button) => OutlinedButton.icon(
+                    onPressed: exporting
+                        ? null
+                        : () => onExport(shareOriginOf(button)),
+                    icon: exporting
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.download, size: 15),
+                    label: const Text('Ekspor'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                ),
               ],
             ),
         ],
