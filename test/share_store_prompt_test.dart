@@ -11,8 +11,8 @@ import 'package:pokepedia_mobile/features/seller/usecase/seller_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/listing_model.dart';
 import 'package:pokepedia_mobile/shared/models/store_model.dart';
 
-/// Right after a listing goes up, the app offers to share the store's
-/// poster, on the side just listed.
+/// Right after a listing goes up, the store's poster sheet opens on the
+/// side just listed — no "share?" step before it.
 const _store = StoreModel(
   handle: 'toko-ash',
   storeName: 'Toko Ash',
@@ -69,16 +69,13 @@ Future<void> _listed(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('after a WTS listing: share opens the WTS poster', (
+  testWidgets('after a WTS listing: the WTS poster opens straight away', (
     tester,
   ) async {
     await _open(tester, side: PosterSide.wts);
     await _listed(tester);
 
-    expect(find.text('Listing sudah tayang!'), findsOneWidget);
-    await tester.tap(find.text('Bagikan Poster'));
-    await tester.pumpAndSettle();
-
+    expect(find.byType(AlertDialog), findsNothing);
     final sheet = tester.widget<StoreShareSheet>(find.byType(StoreShareSheet));
     expect(sheet.store.handle, 'toko-ash');
     expect(sheet.initialSide, PosterSide.wts);
@@ -88,24 +85,10 @@ void main() {
     await _open(tester, side: PosterSide.wtb);
     await _listed(tester);
 
-    expect(find.text('Bid sudah tayang!'), findsOneWidget);
-    await tester.tap(find.text('Bagikan Poster'));
-    await tester.pumpAndSettle();
-
     expect(
       tester.widget<StoreShareSheet>(find.byType(StoreShareSheet)).initialSide,
       PosterSide.wtb,
     );
-  });
-
-  testWidgets('Nanti closes it and shares nothing', (tester) async {
-    await _open(tester, side: PosterSide.wts);
-    await _listed(tester);
-
-    await tester.tap(find.text('Nanti'));
-    await tester.pumpAndSettle();
-    expect(find.text('Listing sudah tayang!'), findsNothing);
-    expect(find.byType(StoreShareSheet), findsNothing);
   });
 
   testWidgets('the poster has the listing just put up', (tester) async {
@@ -118,20 +101,18 @@ void main() {
     expect(open.listingReads(), 1);
 
     await _listed(tester);
-    await tester.tap(find.text('Bagikan Poster'));
-    await tester.pumpAndSettle();
     expect(open.listingReads(), 2);
   });
 
   testWidgets('no storefront, no prompt', (tester) async {
     await _open(tester, side: PosterSide.wtb, identity: const SellerIdentity());
     await _listed(tester);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(StoreShareSheet), findsNothing);
   });
 
   testWidgets('a store that cannot be found, no prompt', (tester) async {
     await _open(tester, side: PosterSide.wts, store: null);
     await _listed(tester);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(StoreShareSheet), findsNothing);
   });
 }

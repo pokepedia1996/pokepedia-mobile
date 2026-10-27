@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../../core/theme/app_radius.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/app_typography.dart';
 import '../../../seller/usecase/seller_notifier.dart';
 import '../../usecase/market_notifier.dart';
 import 'store_poster.dart';
 import 'store_share_sheet.dart';
 
-/// Right after a listing goes up, offers to share the store's poster — the
-/// moment a seller most wants the listing seen.
+/// Right after a listing goes up, opens the store's poster sheet — the
+/// moment a seller most wants the listing seen. Straight to the sheet, with
+/// no "share?" step before it: the sheet is itself the offer, and closing it
+/// is the way to decline.
 ///
 /// Opens on [side], the side just listed. Says nothing when the user has no
 /// storefront to put on a poster, or when it can't be loaded: the listing
@@ -37,60 +35,8 @@ Future<void> promptShareStorePoster(
     final store = await container.read(storeDetailProvider(handle).future);
     if (store == null || !context.mounted) return;
 
-    final share = await showDialog<bool>(
-      context: context,
-      builder: (_) => _SharePrompt(side: side),
-    );
-    if (share != true || !context.mounted) return;
     await showStoreShareSheet(context, store: store, initialSide: side);
   } catch (e) {
     debugPrint('[share] store poster prompt skipped: $e');
-  }
-}
-
-class _SharePrompt extends StatelessWidget {
-  const _SharePrompt({required this.side});
-
-  final PosterSide side;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final (title, body) = switch (side) {
-      PosterSide.wts => (
-        'Listing sudah tayang!',
-        'Bagikan poster tokomu supaya lebih banyak pembeli melihat kartu '
-            'yang kamu jual.',
-      ),
-      PosterSide.wtb => (
-        'Bid sudah tayang!',
-        'Bagikan poster tokomu supaya lebih banyak penjual tahu kartu yang '
-            'kamu cari.',
-      ),
-    };
-
-    return AlertDialog(
-      backgroundColor: Theme.of(context).cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      icon: Icon(LucideIcons.share2, color: colors.primary),
-      title: Text(title, textAlign: TextAlign.center),
-      content: Text(
-        body,
-        textAlign: TextAlign.center,
-        style: AppTypography.bodySm(context.mutedForeground),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Nanti'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Bagikan Poster'),
-        ),
-      ],
-    );
   }
 }
