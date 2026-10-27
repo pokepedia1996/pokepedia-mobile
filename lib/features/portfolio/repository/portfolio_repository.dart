@@ -341,9 +341,36 @@ class PortfolioRepository {
   /// The deck builder's "Cari Kartu" results: the picker search without
   /// sealed products, which `upsert_deck_card` refuses, priced like the deck
   /// rows. Web filters the same page after `searchCardsPicker` returns.
-  Future<List<CardModel>> searchDeckCards(String query) async {
-    final results = await searchCardsPicker(query);
+  ///
+  /// As on web: ID prints only, inside the allowed regulation marks, and the
+  /// one search that also matches attack/ability text.
+  Future<List<CardModel>> searchDeckCards(
+    String query, {
+    List<String> regulationMarks = const [],
+  }) async {
+    final results = await searchCardsPicker(
+      query,
+      language: CardLanguage.id,
+      regulationMarks: regulationMarks,
+      includeCardText: true,
+    );
     return priceCards(_client, excludeSealed(results));
+  }
+
+  /// Ports `fetchDeckAllowedRegulations` — the marks the admin allows in
+  /// decks, kept in `app_settings`. Empty means no restriction.
+  Future<List<String>> fetchDeckAllowedRegulations() async {
+    try {
+      final row = await _client
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'deck_allowed_regulations')
+          .maybeSingle();
+      final value = row?['value'];
+      return value is List ? value.whereType<String>().toList() : const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// `upsert_deck_card` refuses sealed products, so one only lands here from
@@ -764,6 +791,8 @@ class PortfolioRepository {
   Future<List<CardModel>> searchCardsPicker(
     String query, {
     CardLanguage? language,
+    List<String> regulationMarks = const [],
+    bool includeCardText = false,
     int offset = 0,
   }) async {
     if (query.trim().length < 2) return const [];
@@ -779,7 +808,12 @@ class PortfolioRepository {
                 // answer "Pikachu in EN" with whatever few English prints
                 // happened to make the mixed-language cut.
                 'p_languages': language == null ? null : [language.raw],
-                'p_regulation_marks': null,
+                'p_regulation_marks': regulationMarks.isEmpty
+                    ? null
+                    : regulationMarks,
+                // Attack/ability text only matches when asked — the deck
+                // builder is the one caller that does.
+                'p_include_text': includeCardText,
               },
             )
             as List;
