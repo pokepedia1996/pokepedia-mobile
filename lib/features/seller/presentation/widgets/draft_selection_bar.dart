@@ -131,6 +131,10 @@ class _DraftSelectionBarState extends ConsumerState<DraftSelectionBar> {
     final colors = context.appColors;
     final success = context.appSemantic.success;
     final postable = _postable(listen: true).length;
+    // The bar is dark, and Flutter's disabled colours are the dark ink at
+    // low opacity — on this background they vanished, leaving a gap where
+    // "Pasang 0 listing" should have said why nothing can post yet.
+    final onBar = Theme.of(context).cardColor;
 
     return Padding(
       // Close to the nav pill rather than floating above it: the bar and the
@@ -156,14 +160,13 @@ class _DraftSelectionBarState extends ConsumerState<DraftSelectionBar> {
                 '${selected.length} dipilih',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySmSemibold(
-                  Theme.of(context).cardColor,
-                ),
+                style: AppTypography.bodySmSemibold(onBar),
               ),
             ),
             IconButton(
               icon: const Icon(LucideIcons.trash2, size: 18),
-              color: Theme.of(context).cardColor,
+              color: onBar,
+              disabledColor: onBar.withValues(alpha: 0.4),
               tooltip: 'Hapus draft terpilih',
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
@@ -192,6 +195,8 @@ class _DraftSelectionBarState extends ConsumerState<DraftSelectionBar> {
                 style: FilledButton.styleFrom(
                   backgroundColor: success,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: onBar.withValues(alpha: 0.14),
+                  disabledForegroundColor: onBar.withValues(alpha: 0.55),
                   minimumSize: const Size(0, 38),
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   // A step tighter than the bar around it, so the two

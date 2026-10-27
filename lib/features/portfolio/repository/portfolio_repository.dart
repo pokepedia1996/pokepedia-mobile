@@ -109,6 +109,10 @@ Map<String, dynamic> collectionPageParams({
   };
 }
 
+/// Rows per `search_cards_picker` page — web's `SEARCH_LIMIT`. A page this
+/// full means there may be more behind it.
+const cardPickerPageSize = 40;
+
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
 /// `fetchUserDecks` / `lib/products/wishlist.ts` / the web's collection API.
@@ -755,10 +759,12 @@ class PortfolioRepository {
   }
 
   /// Ports `searchCardsPicker` — the catalog search used by "Tambahkan" to
-  /// find a card to stage into inventory.
+  /// find a card to stage into inventory. [offset] pages past the first
+  /// [cardPickerPageSize]; a common name matches hundreds of prints.
   Future<List<CardModel>> searchCardsPicker(
     String query, {
     CardLanguage? language,
+    int offset = 0,
   }) async {
     if (query.trim().length < 2) return const [];
     final rows =
@@ -766,7 +772,8 @@ class PortfolioRepository {
               'search_cards_picker',
               params: {
                 'search_query': query,
-                'p_limit': 40,
+                'p_limit': cardPickerPageSize,
+                'p_offset': offset,
                 // Narrowed in SQL rather than after the fact: the RPC
                 // returns one capped page, so filtering the page here would
                 // answer "Pikachu in EN" with whatever few English prints

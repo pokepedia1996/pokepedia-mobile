@@ -560,7 +560,7 @@ class _PackRow extends StatelessWidget {
       children: [
         Expanded(
           child: InkWell(
-            onTap: () => context.push(Routes.packDetail(card.packSlug)),
+            onTap: () => context.go(Routes.packDetail(card.packSlug)),
             child: Row(
               children: [
                 SizedBox(
@@ -1130,7 +1130,8 @@ class _ConditionPill extends StatelessWidget {
 }
 
 /// The seller strip inside the purchase panel — avatar, name + reputation,
-/// feedback line and city, then the follow/contact buttons.
+/// the completion and shipping line, the feedback line and city, then the
+/// follow/contact buttons.
 class _SellerStrip extends StatelessWidget {
   const _SellerStrip({
     required this.store,
@@ -1164,6 +1165,12 @@ class _SellerStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    // How reliably the seller follows through — each part only once there
+    // are enough orders behind it to publish.
+    final reliability = [
+      if (store.completionPct != null) '${store.completionPct}% selesai',
+      ?store.shipTimeLabel,
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
@@ -1207,6 +1214,15 @@ class _SellerStrip extends StatelessWidget {
                           ReputationStar(score: feedbackScore, size: 13),
                         ],
                       ),
+                      if (reliability.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          reliability.join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ],
                       const SizedBox(height: 2),
                       Text(
                         positivePct == null

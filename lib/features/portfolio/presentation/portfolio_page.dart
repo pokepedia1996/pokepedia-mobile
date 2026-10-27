@@ -30,6 +30,7 @@ import 'widgets/portfolio_picker_sheet.dart';
 import 'widgets/selection_sheet.dart';
 import 'wishlist_page.dart';
 import 'widgets/collection_add_sheet.dart';
+import 'widgets/portfolio_empty_state.dart';
 
 /// Ports `app/portfolio/collection/page.tsx`.
 ///
@@ -253,6 +254,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                 child: _CollectionHeader(
                   totalValue: summary?.totalValue ?? 0,
                   hasCards: hasCards,
+                  empty: collectionEmpty,
                   editMode: _editMode,
                   pendingEdits: _edits.length,
                   saving: _saving,
@@ -335,9 +337,14 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       if (page.error) return [_retry()];
       if (collectionEmpty) {
         return [
-          _message(
-            'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
-            'ekspansi!',
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              22,
+              16,
+              AppBottomNav.reservedSpace(context) + 16,
+            ),
+            sliver: const SliverToBoxAdapter(child: PortfolioEmptyState()),
           ),
         ];
       }
@@ -637,6 +644,7 @@ class _CollectionHeader extends StatelessWidget {
   const _CollectionHeader({
     required this.totalValue,
     required this.hasCards,
+    required this.empty,
     required this.editMode,
     required this.pendingEdits,
     required this.saving,
@@ -650,6 +658,9 @@ class _CollectionHeader extends StatelessWidget {
 
   final int totalValue;
   final bool hasCards;
+
+  /// Nothing on this portfolio at all — not a filter matching nothing.
+  final bool empty;
   final bool editMode;
   final int pendingEdits;
   final bool saving;
@@ -671,89 +682,104 @@ class _CollectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            // Web shows "Rp–" rather than Rp0 when nothing is priced yet, so
-            // a missing price never reads as a zero valuation.
-            totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
-            // Plain foreground, not the brand red: red on a portfolio total
-            // reads as a loss rather than as a headline.
-            style: AppTypography.h2(colors.onSurface),
-          ),
-          const SizedBox(height: 6),
-          const _MarketTrend(),
-          const SizedBox(height: 6),
-          if (editMode)
-            Row(
-              // Batch deletion moved to the selection bar's menu, so this row
-              // is only about the staged quantity edits now.
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: saving ? null : onDone,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                  ),
-                  child: saving
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          pendingEdits > 0
-                              ? 'Selesai ($pendingEdits)'
-                              : 'Selesai',
-                        ),
-                ),
-                const SizedBox(width: 6),
-                TextButton(
-                  onPressed: saving ? null : onCancel,
-                  child: const Text('Batal'),
-                ),
-              ],
+          // An empty portfolio is worth exactly nothing, so it says Rp0, and
+          // it has no trend, nothing to manage and nothing to export: the
+          // empty state under it carries the page.
+          if (empty)
+            Text(
+              'Rp0',
+              style: TextStyle(
+                fontFamily: 'CalSans',
+                fontSize: 30,
+                color: context.mutedForeground,
+              ),
             )
-          else
-            Row(
-              // Centred under the centred title, rather than hanging off the
-              // left edge on its own.
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // const SizedBox(width: 8),
-                if (hasCards)
-                  OutlinedButton.icon(
-                    onPressed: onManage,
-                    icon: const Icon(LucideIcons.pencil, size: 15),
-                    label: const Text('Kelola'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                    ),
-                  ),
-                if (hasCards) const SizedBox(width: 8),
-                // Every portfolio goes in the file, not only the one on
-                // screen — so it's here even when this one is empty.
-                Builder(
-                  builder: (button) => OutlinedButton.icon(
-                    onPressed: exporting
-                        ? null
-                        : () => onExport(shareOriginOf(button)),
-                    icon: exporting
-                        ? const SizedBox(
-                            width: 15,
-                            height: 15,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.download, size: 15),
-                    label: const Text('Ekspor'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 36),
-                    ),
-                  ),
-                ),
-              ],
+          else ...[
+            Text(
+              // Web shows "Rp–" rather than Rp0 when nothing is priced yet, so
+              // a missing price never reads as a zero valuation.
+              totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
+              // Plain foreground, not the brand red: red on a portfolio total
+              // reads as a loss rather than as a headline.
+              style: AppTypography.h2(colors.onSurface),
             ),
+            const SizedBox(height: 6),
+            const _MarketTrend(),
+            const SizedBox(height: 6),
+            if (editMode)
+              Row(
+                // Batch deletion moved to the selection bar's menu, so this row
+                // is only about the staged quantity edits now.
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: saving ? null : onDone,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                    ),
+                    child: saving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            pendingEdits > 0
+                                ? 'Selesai ($pendingEdits)'
+                                : 'Selesai',
+                          ),
+                  ),
+                  const SizedBox(width: 6),
+                  TextButton(
+                    onPressed: saving ? null : onCancel,
+                    child: const Text('Batal'),
+                  ),
+                ],
+              )
+            else
+              Row(
+                // Centred under the centred title, rather than hanging off the
+                // left edge on its own.
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // const SizedBox(width: 8),
+                  if (hasCards)
+                    OutlinedButton.icon(
+                      onPressed: onManage,
+                      icon: const Icon(LucideIcons.pencil, size: 15),
+                      label: const Text('Kelola'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                    ),
+                  if (hasCards) const SizedBox(width: 8),
+                  // Every portfolio goes in the file, not only the one on
+                  // screen — so it's here whenever this one has cards, even
+                  // with a filter matching none of them.
+                  Builder(
+                    builder: (button) => OutlinedButton.icon(
+                      onPressed: exporting
+                          ? null
+                          : () => onExport(shareOriginOf(button)),
+                      icon: exporting
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(LucideIcons.download, size: 15),
+                      label: const Text('Ekspor'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
         ],
       ),
     );

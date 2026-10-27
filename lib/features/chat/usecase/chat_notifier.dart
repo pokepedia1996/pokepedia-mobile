@@ -34,7 +34,10 @@ class ChatThreadsNotifier extends AsyncNotifier<List<ChatThread>> {
 
   @override
   Future<List<ChatThread>> build() async {
-    final user = ref.watch(authProvider).valueOrNull;
+    // Who is signed in, not the whole user: the profile fills in a moment
+    // after launch, and rebuilding on that tore the live channel down for
+    // nothing.
+    final userId = ref.watch(authProvider.select((a) => a.valueOrNull?.id));
     // Held rather than read again inside `onDispose`: when the whole
     // container goes down, the repository provider may already be gone by
     // the time this runs, and reading it there throws.
@@ -44,9 +47,13 @@ class ChatThreadsNotifier extends AsyncNotifier<List<ChatThread>> {
       _timer?.cancel();
       final channel = _channel;
       if (channel != null) repo.unsubscribe(channel);
+      // Forgotten with it. Left set, the `??=` below took the dead channel
+      // for a live one on the next build and never subscribed again — the
+      // inbox stopped updating until the app was restarted.
+      _channel = null;
     });
 
-    if (user == null) {
+    if (userId == null) {
       _hasMore = false;
       return const [];
     }
@@ -270,7 +277,7 @@ class ChatThreadState {
 }
 
 class ChatThreadNotifier
-    extends FamilyAsyncNotifier<ChatThreadState, ChatThreadArg> {
+    extends AutoDisposeFamilyAsyncNotifier<ChatThreadState, ChatThreadArg> {
   RealtimeChannel? _channel;
 
   /// Optimistic bubbles get descending negative ids so they sort last and
@@ -294,6 +301,8 @@ class ChatThreadNotifier
     ref.onDispose(() {
       final channel = _channel;
       if (channel != null) repo.unsubscribe(channel);
+      // So a rebuild subscribes afresh rather than keeping the dead one.
+      _channel = null;
     });
 
     // Which listing this was opened about, when it was opened from one. The
@@ -672,12 +681,14 @@ class ChatThreadNotifier
   }
 }
 
-final chatThreadProvider =
-    AsyncNotifierProvider.family<
-      ChatThreadNotifier,
-      ChatThreadState,
-      ChatThreadArg
-    >(ChatThreadNotifier.new);
+/// Auto-disposed so leaving a thread closes its socket. Kept alive, every
+/// thread opened this session went on hearing its room after the page was
+/// gone and marked each new message read on arrival — so the inbox and the
+/// Pesan tile never showed an unread count for anyone already talked to.
+final chatThreadProvider = AsyncNotifierProvider.autoDispose
+    .family<ChatThreadNotifier, ChatThreadState, ChatThreadArg>(
+      ChatThreadNotifier.new,
+    );
 
 /// Opens a conversation with a user, reusing their existing room when there
 /// is one. Returns the argument the thread page should be built with.

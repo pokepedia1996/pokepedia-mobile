@@ -17,8 +17,11 @@ import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/simple_markdown.dart';
+import '../../../shared/widgets/store_card.dart'
+    show TopSellerBadge, VerifiedBadge;
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../chat/repository/models/chat_models.dart';
 import '../../chat/usecase/chat_notifier.dart';
@@ -33,8 +36,9 @@ import '../../moderation/usecase/moderation_notifier.dart';
 import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/market/store/components/storefront/storefront-view.tsx` —
-/// a seller's storefront: banner and identity, the stats strip, the actions,
-/// and the Listing / Buylist / Tentang tabs over their listings.
+/// a seller's storefront: banner and identity with follow and chat beside
+/// it, the stat chips, and the WTS / WTB / Tentang / Penilaian tabs over
+/// their listings.
 class StoreDetailPage extends ConsumerStatefulWidget {
   const StoreDetailPage({super.key, required this.handle});
 
@@ -49,14 +53,12 @@ enum _StoreTab { shop, buylist, about, feedback }
 
 extension _StoreTabX on _StoreTab {
   String get label => switch (this) {
-    _StoreTab.shop => 'Listing',
-    _StoreTab.buylist => 'Buylist',
+    // The trade shorthand the design uses: want to sell, want to buy.
+    _StoreTab.shop => 'WTS',
+    _StoreTab.buylist => 'WTB',
     _StoreTab.about => 'Tentang',
     _StoreTab.feedback => 'Penilaian',
   };
-
-  /// The two that list cards; the others take the whole width instead.
-  bool get isListing => this == _StoreTab.shop || this == _StoreTab.buylist;
 }
 
 class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
@@ -294,42 +296,42 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
     final storeAsync = ref.watch(storeDetailProvider(widget.handle));
     final viewerId = ref.watch(authProvider).valueOrNull?.id;
     final shown = storeAsync.valueOrNull;
-    // Web's storefront safety menu: signed in, and not your own shop.
-    final safetyUserId =
-        viewerId == null || shown?.userId == null || shown!.userId == viewerId
+    // Web's storefront safety menu: not your own shop. A signed-out tap
+    // goes to login from inside the menu.
+    final safetyUserId = shown?.userId == null || shown!.userId == viewerId
         ? null
         : shown.userId;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: TransparentAppBar(
-        // Beside the back button rather than above the grid: it's the
-        // control people reach for first on a storefront, and this keeps it
-        // reachable while the listings scroll.
-        title: _StoreSearchField(
-          controller: _searchController,
-          enabled: _tab.isListing,
-          onChanged: _onSearchChanged,
-        ),
         actions: [
-          _FilterToggle(
-            count: _activeFilters,
-            onPressed: _tab.isListing ? _openFilters : null,
-          ),
-          // Last, as on every other page that carries it — a storefront is
-          // where a basket fills up, so the way to it belongs in reach.
+          if (shown != null)
+            _BarButton(
+              icon: LucideIcons.share2,
+              tooltip: 'Bagikan toko',
+              onPressed: () => showStoreShareSheet(context, store: shown),
+            ),
+          // A storefront is where a basket fills up, so the way to it
+          // belongs in reach.
           const CartAppBarButton(),
           if (safetyUserId != null)
-            UserSafetyButton(
-              userId: safetyUserId,
-              username: shown!.handle,
-              reportContext: UserReportContext.store,
-              // Blocking hides the store from both sides; reloading lands on
-              // the unblock notice below.
-              onBlockChanged: (_) =>
-                  ref.invalidate(storeDetailProvider(widget.handle)),
+            _BarButton(
+              icon: LucideIcons.ellipsisVertical,
+              tooltip: 'Opsi pengguna',
+              onPressed: () => openUserSafetyMenu(
+                context,
+                ref,
+                userId: safetyUserId,
+                username: shown!.handle,
+                reportContext: UserReportContext.store,
+                // Blocking hides the store from both sides; reloading lands
+                // on the unblock notice below.
+                onBlockChanged: (_) =>
+                    ref.invalidate(storeDetailProvider(widget.handle)),
+              ),
             ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
         ],
       ),
       body: storeAsync.when(
@@ -351,8 +353,13 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
           final sellerId = store.userId;
           final feedKey = sellerId == null ? null : _feedKey(sellerId);
 
+          // Following yourself is refused by `follow_shop`, and
+          // `ensure_direct_room` has nobody to open a room with — so on your
+          // own storefront neither button is offered.
+          final isOwnStore = sellerId != null && sellerId == viewerId;
+
           return AppBarOverlayBody(
-            reserveToolbar: false,
+            reserveToolbar: true,
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) => _onScroll(n, feedKey),
               child: CustomScrollView(
@@ -363,21 +370,17 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                 // the reader had not scrolled to.
                 cacheExtent: 0,
                 slivers: [
-                  SliverToBoxAdapter(child: _Header(store: store)),
                   SliverToBoxAdapter(
-                    child: _Actions(
-                      // Following yourself is refused by `follow_shop`, and
-                      // `ensure_direct_room` has nobody to open a room with —
-                      // so on your own storefront neither button is offered.
-                      isOwnStore:
-                          store.userId != null &&
-                          store.userId ==
-                              ref.watch(authProvider).valueOrNull?.id,
-                      following: _following,
-                      busy: _followBusy,
-                      onToggleFollow: () => _toggleFollow(store),
-                      onContact: () => _contact(store),
-                      onShare: () => showStoreShareSheet(context, store: store),
+                    child: _Header(
+                      store: store,
+                      actions: isOwnStore
+                          ? null
+                          : _IdentityActions(
+                              following: _following,
+                              busy: _followBusy,
+                              onToggleFollow: () => _toggleFollow(store),
+                              onContact: () => _contact(store),
+                            ),
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -391,6 +394,31 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
                   else if (_tab == _StoreTab.feedback)
                     SliverToBoxAdapter(child: _Feedback(store: store))
                   else ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                        child: Row(
+                          spacing: 8,
+                          children: [
+                            Expanded(
+                              child: AppSearchField(
+                                hintText: _tab == _StoreTab.shop
+                                    ? 'Cari dari '
+                                          '${formatCountId(store.activeListingCount)}'
+                                          ' listing'
+                                    : 'Cari di WTB toko ini',
+                                controller: _searchController,
+                                onChanged: _onSearchChanged,
+                              ),
+                            ),
+                            _FilterToggle(
+                              count: _activeFilters,
+                              onPressed: _openFilters,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     ..._listingSlivers(feedKey),
                   ],
                 ],
@@ -408,29 +436,36 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
   }
 }
 
-/// Banner, avatar, name and the stats strip — web's storefront header.
+/// Banner, then the identity row — avatar, name and rating, with follow and
+/// chat beside it — the vacation notice, and the stat chips.
 class _Header extends StatelessWidget {
-  const _Header({required this.store});
+  const _Header({required this.store, this.actions});
 
   final StoreModel store;
+
+  /// Follow and chat; null on the viewer's own store.
+  final Widget? actions;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final banner = store.bannerUrl;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // The banner runs under the transparent app bar, like the artwork on
-        // a card page; stores without one get a plain band so the avatar
-        // below still has something to sit against.
-        SizedBox(
-          height: 132,
-          width: double.infinity,
-          child: banner == null || banner.isEmpty
-              ? ColoredBox(color: colors.secondary)
-              : cachedNetworkImage(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Inset and rounded rather than bled under the bar: the buttons
+          // up there no longer sit on whatever the banner is doing. A store
+          // without one goes straight to its name, as on web.
+          if (banner != null && banner.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              child: SizedBox(
+                height: 112,
+                width: double.infinity,
+                child: cachedNetworkImage(
                   banner,
                   fit: BoxFit.cover,
                   // Decoded at the width it is drawn at. Banners are uploaded
@@ -445,29 +480,25 @@ class _Header extends StatelessWidget {
                   errorBuilder: (_, __, ___) =>
                       ColoredBox(color: colors.secondary),
                 ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          Row(
             children: [
-              Transform.translate(
-                offset: const Offset(0, -28),
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: SellerAvatar(
-                    name: store.storeName,
-                    imageUrl: store.logoUrl,
-                    size: 64,
-                  ),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.borderColor),
+                ),
+                child: SellerAvatar(
+                  name: store.storeName,
+                  imageUrl: store.logoUrl,
+                  size: 56,
                 ),
               ),
-              Transform.translate(
-                offset: const Offset(0, -16),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -483,34 +514,221 @@ class _Header extends StatelessWidget {
                         ),
                         if (store.isVerified) ...[
                           const SizedBox(width: 4),
-                          Icon(
-                            LucideIcons.badgeCheck,
-                            size: 18,
-                            color: colors.primary,
-                          ),
+                          const VerifiedBadge(size: 17),
                         ],
+                        if (store.topRated) ...[
+                          const SizedBox(width: 4),
+                          const TopSellerBadge(),
+                        ],
+                        const SizedBox(width: 6),
+                        ReputationStar(
+                          score: store.feedbackScore ?? 0,
+                          size: 15,
+                        ),
                       ],
                     ),
-                    if (store.tagline.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        store.tagline,
-                        style: AppTypography.bodySm(context.mutedForeground),
-                      ),
-                    ],
-                    if (store.onVacation) ...[
-                      const SizedBox(height: 8),
-                      _VacationPill(store: store),
-                    ],
-                    const SizedBox(height: 10),
-                    _Stats(store: store),
+                    const SizedBox(height: 3),
+                    _Rates(store: store),
                   ],
                 ),
               ),
+              if (actions != null) ...[const SizedBox(width: 8), actions!],
             ],
+          ),
+          if (store.tagline.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              store.tagline,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+          ],
+          if (store.onVacation) ...[
+            const SizedBox(height: 10),
+            _VacationPill(store: store),
+          ],
+          const SizedBox(height: 14),
+          _StatChips(store: store),
+        ],
+      ),
+    );
+  }
+}
+
+/// "100% positif · 80% selesai" — the two rates a shop is judged on, the
+/// figures in the foreground. A store nobody has rated, or one with too few
+/// orders for a completion rate, says so instead of showing a 0.
+class _Rates extends StatelessWidget {
+  const _Rates({required this.store});
+
+  final StoreModel store;
+
+  @override
+  Widget build(BuildContext context) {
+    final strong = AppTypography.bodySmSemibold(context.appColors.onSurface);
+    final muted = AppTypography.bodySm(context.mutedForeground);
+    final positive = store.positivePct;
+    final completion = store.completionPct;
+
+    return Text.rich(
+      TextSpan(
+        style: muted,
+        children: [
+          if (positive == null)
+            const TextSpan(text: 'Belum dinilai')
+          else ...[
+            TextSpan(
+              text: '${positive.toStringAsFixed(positive % 1 == 0 ? 0 : 1)}%',
+              style: strong,
+            ),
+            const TextSpan(text: ' positif'),
+          ],
+          const TextSpan(text: ' · '),
+          if (completion == null)
+            const TextSpan(text: 'Penjual baru')
+          else ...[
+            TextSpan(text: '$completion%', style: strong),
+            const TextSpan(text: ' selesai'),
+          ],
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
+/// Follow over chat, as two round buttons beside the name — follow filled
+/// so it reads as the one being asked for.
+class _IdentityActions extends StatelessWidget {
+  const _IdentityActions({
+    required this.following,
+    required this.busy,
+    required this.onToggleFollow,
+    required this.onContact,
+  });
+
+  final bool following;
+  final bool busy;
+  final VoidCallback onToggleFollow;
+  final VoidCallback onContact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final filled = !following;
+    final followFg = filled ? colors.surface : colors.onSurface;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 8,
+      children: [
+        _RoundButton(
+          tooltip: following ? 'Berhenti mengikuti' : 'Ikuti',
+          background: filled ? colors.onSurface : Theme.of(context).cardColor,
+          bordered: !filled,
+          onPressed: busy ? null : onToggleFollow,
+          child: busy
+              ? SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: followFg,
+                  ),
+                )
+              : Icon(
+                  following ? LucideIcons.userCheck : LucideIcons.userPlus,
+                  size: 17,
+                  color: followFg,
+                ),
+        ),
+        _RoundButton(
+          tooltip: 'Chat',
+          background: Theme.of(context).cardColor,
+          bordered: true,
+          onPressed: onContact,
+          child: Icon(
+            LucideIcons.messageCircle,
+            size: 17,
+            color: colors.onSurface,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({
+    required this.tooltip,
+    required this.background,
+    required this.bordered,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final Color background;
+  final bool bordered;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: background,
+        shape: CircleBorder(
+          side: bordered
+              ? BorderSide(color: context.borderColor)
+              : BorderSide.none,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(width: 38, height: 38, child: Center(child: child)),
+        ),
+      ),
+    );
+  }
+}
+
+/// The circular, bordered treatment of `CircularBackButton`, for the bar's
+/// share and options buttons.
+class _BarButton extends StatelessWidget {
+  const _BarButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Tooltip(
+          message: tooltip,
+          child: Material(
+            color: Theme.of(context).cardColor.withValues(alpha: 0.9),
+            shape: CircleBorder(side: BorderSide(color: context.borderColor)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onPressed,
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(icon, size: 19, color: context.appColors.onSurface),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -550,153 +768,59 @@ class _VacationPill extends StatelessWidget {
   }
 }
 
-/// Ports `storefront-stats-strip.tsx`.
-class _Stats extends StatelessWidget {
-  const _Stats({required this.store});
+/// Sold, followers and how fast it ships, as outlined chips — the facts a
+/// buyer weighs after the two rates beside the name.
+class _StatChips extends StatelessWidget {
+  const _StatChips({required this.store});
 
   final StoreModel store;
 
   @override
   Widget build(BuildContext context) {
-    // Two deliberate lines instead of one Wrap of six icon-and-label chips.
-    // That wrapped wherever it happened to run out — the city stranded at
-    // the end of one line, "Bergabung" alone on the next — and the icons on
-    // the counts were noise around figures that already carry their unit.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final shipTime = store.shipTimeLabel;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        // The numbers, which are what a shop gets compared on.
-        Wrap(
-          spacing: 8,
-          runSpacing: 2,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _Count(value: store.activeListingCount, label: 'listing'),
-            const _Dot(),
-            _Count(value: store.itemsSoldCount, label: 'terjual'),
-            const _Dot(),
-            _Count(value: store.followersCount, label: 'pengikut'),
-          ],
-        ),
-        const SizedBox(height: 5),
-        // Then what it is: where, since when, and whether it's rated.
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: [
-            if (store.cityName.isNotEmpty)
-              _Stat(icon: LucideIcons.mapPin, label: store.cityName),
-            if (store.memberSince != null)
-              _Stat(
-                icon: LucideIcons.calendar,
-                label: formatJoinedId(store.memberSince!),
-              ),
-            if (store.topRated)
-              _Stat(icon: LucideIcons.star, label: 'Top Rated'),
-          ],
-        ),
+        _Chip(value: formatCountId(store.itemsSoldCount), label: 'terjual'),
+        _Chip(value: formatCountId(store.followersCount), label: 'pengikut'),
+        if (shipTime != null) _Chip(icon: LucideIcons.truck, label: shipTime),
       ],
     );
   }
 }
 
-/// Ports `storefront-action-buttons.tsx`.
-class _Actions extends StatelessWidget {
-  const _Actions({
-    required this.isOwnStore,
-    required this.following,
-    required this.busy,
-    required this.onToggleFollow,
-    required this.onContact,
-    required this.onShare,
-  });
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, this.value, this.icon});
 
-  /// The viewer is the seller. Follow and Chat are both about reaching
-  /// someone else, so they aren't drawn — sharing your own shop is the one
-  /// action that still means something.
-  final bool isOwnStore;
-
-  final bool following;
-  final bool busy;
-  final VoidCallback onToggleFollow;
-  final VoidCallback onContact;
-  final VoidCallback onShare;
+  final String label;
+  final String? value;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    if (isOwnStore) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-        child: SizedBox(
-          width: double.infinity,
-          // Full width and labelled, rather than the bare icon left behind
-          // when the two buttons beside it go.
-          child: OutlinedButton.icon(
-            onPressed: onShare,
-            icon: const Icon(LucideIcons.share, size: 16),
-            label: const Text('Bagikan toko'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(38),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+    final muted = context.mutedForeground;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: context.borderColor),
+      ),
       child: Row(
-        spacing: 8,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: following
-                ? OutlinedButton.icon(
-                    onPressed: busy ? null : onToggleFollow,
-                    icon: busy
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.check, size: 15),
-                    label: const Text('Diikuti'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(38),
-                    ),
-                  )
-                : ElevatedButton.icon(
-                    onPressed: busy ? null : onToggleFollow,
-                    icon: busy
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.plus, size: 15),
-                    label: const Text('Ikuti'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(38),
-                    ),
-                  ),
-          ),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: onContact,
-              icon: const Icon(LucideIcons.messageCircle, size: 15),
-              label: const Text('Chat'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(38),
-              ),
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: muted),
+            const SizedBox(width: 5),
+          ],
+          if (value != null) ...[
+            Text(
+              value!,
+              style: AppTypography.captionSemibold(context.appColors.onSurface),
             ),
-          ),
-          OutlinedButton(
-            onPressed: onShare,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(44, 38),
-              padding: EdgeInsets.zero,
-            ),
-            child: const Icon(LucideIcons.share, size: 16),
-          ),
+            const SizedBox(width: 4),
+          ],
+          Text(label, style: AppTypography.caption(muted)),
         ],
       ),
     );
@@ -716,7 +840,7 @@ class _TabBar extends StatelessWidget {
     final colors = context.appColors;
 
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: 16),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: context.borderColor)),
       ),
@@ -864,87 +988,6 @@ class _AboutRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// "1.696 listing" — the figure in the foreground, its unit muted beside it.
-class _Count extends StatelessWidget {
-  const _Count({required this.value, required this.label});
-
-  final int value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          formatCountId(value),
-          style: AppTypography.captionSemibold(context.appColors.onSurface),
-        ),
-        const SizedBox(width: 3),
-        Text(label, style: AppTypography.caption(context.mutedForeground)),
-      ],
-    );
-  }
-}
-
-/// The separator between the counts, so the line reads as one set of them.
-class _Dot extends StatelessWidget {
-  const _Dot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '·',
-      style: AppTypography.caption(
-        context.mutedForeground.withValues(alpha: 0.6),
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: context.mutedForeground),
-        const SizedBox(width: 4),
-        Text(label, style: AppTypography.caption(context.mutedForeground)),
-      ],
-    );
-  }
-}
-
-/// The search field as it sits in the app bar: short, rounded, and on its
-/// own surface so it reads against whatever the banner is doing behind it.
-class _StoreSearchField extends StatelessWidget {
-  const _StoreSearchField({
-    required this.controller,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppSearchField(
-      hintText: 'Cari di toko ini',
-      controller: controller,
-      enabled: enabled,
-      onChanged: onChanged,
     );
   }
 }

@@ -60,11 +60,13 @@ class _FakeAuth extends AuthNotifier {
 
 late final SupabaseClient _client;
 
-/// An empty collection on screen, and [export] for the export to read.
+/// A collection with [cards] on it — none of them on the page, which is
+/// all the header needs — and [export] for the export to read.
 class _FakeRepository extends PortfolioRepository {
-  _FakeRepository(this.export) : super(_client);
+  _FakeRepository(this.export, {this.cards = 3}) : super(_client);
 
   final Future<List<PortfolioExportRow>> Function() export;
+  final int cards;
 
   @override
   Future<List<PortfolioExportRow>> fetchPortfolioExport(String userId) =>
@@ -86,8 +88,8 @@ class _FakeRepository extends PortfolioRepository {
     String? collectionId,
   ) async => CollectionSummary(
     totalValue: 0,
-    uniqueCount: 0,
-    totalCount: 0,
+    uniqueCount: cards,
+    totalCount: cards,
     valueNow: 0,
     value7dAgo: 0,
   );
@@ -99,8 +101,9 @@ class _FakeRepository extends PortfolioRepository {
 
 Future<List<({String name, String csv})>> _open(
   WidgetTester tester,
-  Future<List<PortfolioExportRow>> Function() export,
-) async {
+  Future<List<PortfolioExportRow>> Function() export, {
+  int cards = 3,
+}) async {
   tester.view.physicalSize = const Size(500 * 3, 900 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -110,7 +113,9 @@ Future<List<({String name, String csv})>> _open(
     overrides: [
       authProvider.overrideWith(_FakeAuth.new),
       listsProvider.overrideWith((ref) async => const []),
-      portfolioRepositoryProvider.overrideWithValue(_FakeRepository(export)),
+      portfolioRepositoryProvider.overrideWithValue(
+        _FakeRepository(export, cards: cards),
+      ),
       portfolioValueSeriesProvider.overrideWith((ref) async => const []),
       csvSharerProvider.overrideWithValue(
         (name, csv, origin) async => shared.add((name: name, csv: csv)),
@@ -230,13 +235,19 @@ void main() {
           _row('Binder Merah', 1, name: 'Metapod'),
         ],
       );
-      // There even with the portfolio on screen empty: the others may not be.
-      expect(find.text('Kelola'), findsNothing);
       await _tapExport(tester);
 
       expect(shared.single.name, startsWith('pokepedia-portofolio-'));
       expect(shared.single.csv, contains('Utama,Caterpie'));
       expect(shared.single.csv, contains('Binder Merah,Metapod'));
+    });
+
+    testWidgets('an empty portfolio has no Ekspor, as designed', (
+      tester,
+    ) async {
+      await _open(tester, () async => const [], cards: 0);
+      expect(find.text('Ekspor'), findsNothing);
+      expect(find.text('Rp0'), findsOneWidget);
     });
 
     testWidgets('says so when there is nothing to export', (tester) async {

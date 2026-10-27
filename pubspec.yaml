@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+2
+version: 1.1.1+3
 
 environment:
   sdk: ^3.9.2
@@ -78,6 +78,9 @@ dependencies:
   # eviction. flutter_cache_manager is named for the store's own `Config`.
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.5
+  # "Pakai lokasiku" on Buka Toko's pickup step. Asked for only when tapped;
+  # searching and dragging the pin work without it.
+  geolocator: ^14.1.2
 dev_dependencies:
   # Generate the launcher icon and the splash from `branding/`, which
   # `tool/generate_branding.dart` derives from the website's own artwork.

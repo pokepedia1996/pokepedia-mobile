@@ -27,7 +27,7 @@ class PackHeaderRow extends StatelessWidget {
       children: [
         Expanded(
           child: InkWell(
-            onTap: () => context.push(Routes.packDetail(card.packSlug)),
+            onTap: () => context.go(Routes.packDetail(card.packSlug)),
             child: Row(
               children: [
                 SizedBox(

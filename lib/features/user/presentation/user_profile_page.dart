@@ -31,6 +31,11 @@ import '../../../core/utils/image_url.dart';
 /// `CARDS_PER_EXPANSION`.
 const _cardsPerExpansion = 20;
 
+/// How many of the collection's cards the profile shows — the top of it in
+/// the chosen sort, as a preview rather than the whole shelf. A collection
+/// of thousands drawn in full made the profile slow to open and to scroll.
+const _portfolioPreviewSize = 20;
+
 /// Ports `app/user/[username]/page.tsx` — a public collector profile: the
 /// identity header with socials, the owner's privacy toggles, the
 /// expansion-grouped collection, and the contributed-artwork grid.
@@ -158,6 +163,10 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
               (sum, card) => sum + (card.marketPrice ?? 0) * card.owned,
             );
             final contributions = contributionsAsync.valueOrNull ?? const [];
+            // Filtered and sorted over everything first, so the 20 shown are
+            // the top 20 of what was asked for — not 20 picked at random and
+            // then sorted.
+            final preview = visible.take(_portfolioPreviewSize).toList();
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -221,17 +230,17 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                     )
                   else if (_viewMode == CardViewMode.grid)
                     CardGridRows(
-                      hasVariant: (i) => visible[i].variantLabel != null,
-                      itemCount: visible.length,
+                      hasVariant: (i) => preview[i].variantLabel != null,
+                      itemCount: preview.length,
                       itemBuilder: (context, i) => CardGridItem(
-                        card: visible[i],
+                        card: preview[i],
                         onTap: () => context.push(
-                          Routes.cardDetail(visible[i].packSlug, visible[i].id),
+                          Routes.cardDetail(preview[i].packSlug, preview[i].id),
                         ),
                       ),
                     )
                   else
-                    for (final card in visible)
+                    for (final card in preview)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: CardListItem(
@@ -241,6 +250,24 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                           ),
                         ),
                       ),
+                  if (visible.length > preview.length) ...[
+                    const SizedBox(height: 6),
+                    Center(
+                      child: Text(
+                        'Menampilkan ${preview.length} dari '
+                        '${formatCountId(visible.length)} kartu',
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
+                    ),
+                    // The owner has the whole collection a tap away.
+                    if (isOwner)
+                      Center(
+                        child: TextButton(
+                          onPressed: () => context.push(Routes.portfolio),
+                          child: const Text('Lihat semua di Portofolio'),
+                        ),
+                      ),
+                  ],
                 ],
                 if (contributions.isNotEmpty) ...[
                   const SizedBox(height: 12),

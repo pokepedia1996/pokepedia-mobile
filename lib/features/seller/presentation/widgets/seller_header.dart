@@ -37,7 +37,7 @@ class SellerHeader extends ConsumerWidget {
             children: [
               Image.asset(logoAsset, height: 28),
               const Spacer(),
-              const _NotificationBell(),
+              const SellerNotificationBell(),
             ],
           ),
         ),
@@ -50,8 +50,12 @@ class SellerHeader extends ConsumerWidget {
   }
 }
 
-class _NotificationBell extends ConsumerWidget {
-  const _NotificationBell();
+/// The notification bell with its unread count. [framed] draws it in the
+/// Jual dashboard's white circle; bare, it sits beside the wordmark.
+class SellerNotificationBell extends ConsumerWidget {
+  const SellerNotificationBell({super.key, this.framed = false});
+
+  final bool framed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,16 +68,30 @@ class _NotificationBell extends ConsumerWidget {
       child: InkWell(
         onTap: () => context.push(Routes.notifications),
         customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
+        child: Container(
+          width: framed ? 44 : null,
+          height: framed ? 44 : null,
+          padding: framed ? null : const EdgeInsets.all(6),
+          alignment: framed ? Alignment.center : null,
+          decoration: framed
+              ? BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: context.borderColor),
+                )
+              : null,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(LucideIcons.bell, size: 22, color: colors.onSurface),
+              Icon(
+                LucideIcons.bell,
+                size: framed ? 20 : 22,
+                color: colors.onSurface,
+              ),
               if (unread > 0)
                 Positioned(
-                  right: -6,
-                  top: -6,
+                  right: framed ? -12 : -6,
+                  top: framed ? -15 : -6,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 5,

@@ -8,7 +8,9 @@ import 'package:pokepedia_mobile/features/portfolio/presentation/portfolio_page.
 import 'package:pokepedia_mobile/features/portfolio/repository/models/collection_page.dart';
 import 'package:pokepedia_mobile/features/portfolio/repository/portfolio_repository.dart';
 import 'package:pokepedia_mobile/features/portfolio/usecase/portfolio_notifier.dart';
+import 'package:pokepedia_mobile/features/home/usecase/home_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
+import 'package:pokepedia_mobile/shared/models/pack_model.dart';
 import 'package:pokepedia_mobile/shared/utils/card_filtering.dart';
 import 'package:pokepedia_mobile/shared/widgets/card_grid_item.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -87,6 +89,28 @@ class _FakeRepository extends PortfolioRepository {
       const CollectionFacets();
 }
 
+PackModel _pack(String code, String name, int cards, {String? type}) =>
+    PackModel(
+      slug: code.toLowerCase(),
+      name: name,
+      mark: code,
+      series: 'Mega',
+      releaseDate: '2026-01-01',
+      cardCount: cards,
+      productType: type ?? 'Expansion',
+    );
+
+/// The catalog newest first, as `fetchPacks` returns it: decks among the
+/// boosters, which the empty state's "set populer" passes over.
+final _catalog = [
+  _pack('MA6', '30th Celebration', 203),
+  _pack('MATH', 'Deck Taktik Mega Sharpedo ex', 21),
+  _pack('MA5', 'Ancaman Bayangan', 238, type: 'booster'),
+  _pack('MAAL', 'Starter Deck ex Mega Lucario', 22, type: 'starter_deck'),
+  _pack('MA4', 'Ledakan Peniada', 181, type: 'booster'),
+  _pack('MA3', 'Evolusi Mega Impian ex', 486, type: 'booster'),
+];
+
 Future<_FakeRepository> _open(WidgetTester tester, {required int cards}) async {
   // A tall, narrowish surface, so a grid row is a few hundred pixels rather
   // than the ~600 the default 800x600 gives — the point here is how many
@@ -104,6 +128,7 @@ Future<_FakeRepository> _open(WidgetTester tester, {required int cards}) async {
       listsProvider.overrideWith((ref) async => const []),
       portfolioRepositoryProvider.overrideWithValue(repository),
       portfolioValueSeriesProvider.overrideWith((ref) async => const []),
+      explorePacksProvider.overrideWith((ref) async => _catalog),
     ],
   );
   addTearDown(container.dispose);
@@ -161,5 +186,40 @@ void main() {
     // The second request continues from the first page's last row.
     expect(repository.requests.length, greaterThanOrEqualTo(2));
     expect(repository.requests[1]?.collectionCardId, 'cc-$collectionPageSize');
+  });
+
+  testWidgets('an empty collection offers the two ways in', (tester) async {
+    // Onboarding's "Catat & pantau koleksi" lands here on a new account.
+    await _open(tester, cards: 0);
+    expect(find.text('Rp0'), findsOneWidget);
+    expect(find.text('Portofoliomu masih kosong'), findsOneWidget);
+    expect(find.text('Tambah kartu pertamamu sekarang!'), findsOneWidget);
+    expect(find.text('Scan kartu'), findsOneWidget);
+    expect(find.text('Pilih dari set'), findsOneWidget);
+    // Nothing to manage or export yet.
+    expect(find.text('Kelola'), findsNothing);
+    expect(find.text('Ekspor'), findsNothing);
+  });
+
+  testWidgets('and the three newest sets that are not decks', (tester) async {
+    await _open(tester, cards: 0);
+    await tester.dragUntilVisible(
+      find.text('Mulai dari set populer'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Semua ekspansi'), findsOneWidget);
+    for (final name in [
+      '30th Celebration',
+      'Ancaman Bayangan',
+      'Ledakan Peniada',
+    ]) {
+      expect(find.text(name), findsOneWidget, reason: name);
+    }
+    expect(find.text('203 kartu'), findsOneWidget);
+    expect(find.textContaining('Deck'), findsNothing);
+    expect(find.text('Evolusi Mega Impian ex'), findsNothing);
   });
 }
