@@ -16,6 +16,7 @@ import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/portfolio_notifier.dart';
 import 'add_destination_sheet.dart';
+import '../../../../core/utils/image_url.dart';
 
 /// Minimum query length before the picker searches, matching
 /// `searchCardsPicker`'s own guard on the web.
@@ -246,6 +247,7 @@ class _ResultTile extends StatelessWidget {
               width: 34,
               child: CardArt(
                 imageUrl: card.imageUrl,
+                size: ImageSize.half,
                 borderRadius: AppRadius.xs,
               ),
             ),

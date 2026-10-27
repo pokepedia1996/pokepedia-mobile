@@ -9,6 +9,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../usecase/expansions_notifier.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// Ports `RelatedCardsSection` from
 /// `features/card-detail/components/catalog/card-detail.tsx` — a horizontal
@@ -124,7 +125,7 @@ class _RelatedCardThumb extends ConsumerWidget {
                     // The symbol image when there is one, else the
                     // expansion code — web's own fallback.
                     if (symbolUrl != null)
-                      Image.network(
+                      cachedNetworkImage(
                         symbolUrl,
                         height: 16,
                         fit: BoxFit.contain,

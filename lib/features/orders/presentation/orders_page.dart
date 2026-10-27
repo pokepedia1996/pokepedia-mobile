@@ -32,6 +32,7 @@ import '../repository/models/pending_checkout.dart';
 import '../usecase/orders_notifier.dart';
 import '../utils/order_status_display.dart';
 import 'widgets/order_thumbnail.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/orders/components/orders-page.tsx` — the buyer's orders
 /// behind a search box and the seven-tab filter strip, each order drawn as
@@ -310,22 +311,19 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
             child: visible.isEmpty && visiblePending.isEmpty
                 // Still a scroll view, so pull-to-refresh works from the
                 // empty state too.
-                ? ListView(
-                    children: [
-                      const SizedBox(height: 48),
-                      // Per-tab copy and icon, as web's `ORDER_EMPTY_COPY`
-                      // and `TAB_ICON` do — a search that matched nothing
-                      // keeps its own message, since that's about the query
-                      // rather than the shelf.
-                      EmptyState(
-                        icon: _query.isEmpty
-                            ? _tabIcon(_tab)
-                            : LucideIcons.searchX,
-                        title: _query.isEmpty
-                            ? _tab.emptyHeadline
-                            : 'Tidak ada pesanan yang cocok',
-                      ),
-                    ],
+                ? ScrollableEmptyState(
+                    // Per-tab copy and icon, as web's `ORDER_EMPTY_COPY` and
+                    // `TAB_ICON` do — a search that matched nothing keeps its
+                    // own message, since that's about the query rather than
+                    // the shelf.
+                    child: EmptyState(
+                      icon: _query.isEmpty
+                          ? _tabIcon(_tab)
+                          : LucideIcons.searchX,
+                      title: _query.isEmpty
+                          ? _tab.emptyHeadline
+                          : 'Tidak ada pesanan yang cocok',
+                    ),
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -1134,7 +1132,7 @@ class _PendingItem extends StatelessWidget {
                       size: 18,
                       color: context.mutedForeground,
                     )
-                  : Image.network(
+                  : cachedNetworkImage(
                       proxyImageUrl(first!.imageUrl)!,
                       fit: BoxFit.cover,
                       // Cards are portrait and the crop is square, so the

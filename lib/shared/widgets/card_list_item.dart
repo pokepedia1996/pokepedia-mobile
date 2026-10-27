@@ -8,6 +8,7 @@ import '../models/card_model.dart';
 import 'card_art.dart';
 import 'card_price_note.dart';
 import 'selection_mark.dart';
+import '../../core/utils/image_url.dart';
 
 /// Ports the list-mode branch of `components/card/card-item.tsx` — a
 /// compact row (thumbnail, name/number, price and the quantity held) used
@@ -63,6 +64,7 @@ class CardListItem extends StatelessWidget {
               width: 48,
               child: CardArt(
                 imageUrl: card.imageUrl,
+                size: ImageSize.half,
                 borderRadius: AppRadius.sm,
               ),
             ),

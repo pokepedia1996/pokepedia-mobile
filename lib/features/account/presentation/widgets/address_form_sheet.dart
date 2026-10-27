@@ -21,6 +21,9 @@ Future<bool?> showAddressFormSheet(
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    // A long form grows the sheet to full height; this keeps its top below
+    // the status bar and the Dynamic Island.
+    useSafeArea: true,
     backgroundColor: Theme.of(context).cardColor,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
@@ -234,7 +237,7 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _AreaField(
+                    AreaField(
                       label: 'Provinsi',
                       value: _province,
                       options: catalog.provinces,
@@ -245,7 +248,7 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
                       }),
                     ),
                     const SizedBox(height: 12),
-                    _AreaField(
+                    AreaField(
                       label: 'Kota / Kabupaten',
                       value: _city,
                       enabled: _province != null,
@@ -258,7 +261,7 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
                       }),
                     ),
                     const SizedBox(height: 12),
-                    _AreaField(
+                    AreaField(
                       label: 'Kecamatan',
                       value: _district,
                       enabled: _city != null,
@@ -352,9 +355,11 @@ class _AddressFormSheetState extends ConsumerState<_AddressFormSheet> {
 }
 
 /// One cascading picker. Opens a searchable list — the district level has
-/// ~7,000 entries, so search isn't optional.
-class _AreaField extends StatelessWidget {
-  const _AreaField({
+/// ~7,000 entries, so search isn't optional. Shared with Buka Toko's pickup
+/// step.
+class AreaField extends StatelessWidget {
+  const AreaField({
+    super.key,
     required this.label,
     required this.value,
     required this.options,

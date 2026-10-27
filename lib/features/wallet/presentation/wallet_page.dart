@@ -45,9 +45,8 @@ class WalletPage extends ConsumerWidget {
             // refresh that did nothing.
             await ref.read(walletBalanceProvider.future);
           },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            children: [
+          child: () {
+            final header = [
               Row(
                 children: [
                   Icon(LucideIcons.wallet, size: 20, color: colors.onSurface),
@@ -56,8 +55,14 @@ class WalletPage extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              if (!signedIn)
-                EmptyState(
+            ];
+            const padding = EdgeInsets.fromLTRB(16, 8, 16, 32);
+            if (!signedIn) {
+              // Centred in the room under the title, like every empty page.
+              return ScrollableEmptyState(
+                padding: padding,
+                header: header,
+                child: EmptyState(
                   icon: LucideIcons.wallet,
                   title: 'Masuk untuk melihat saldo',
                   description: 'Silakan masuk untuk melihat saldo kamu.',
@@ -65,16 +70,21 @@ class WalletPage extends ConsumerWidget {
                     onPressed: () => context.push(Routes.login),
                     child: const Text('Masuk'),
                   ),
-                )
-              else ...[
+                ),
+              );
+            }
+            return ListView(
+              padding: padding,
+              children: [
+                ...header,
                 const _SaldoCard(),
                 const SizedBox(height: 16),
                 const _BankListCard(),
                 const SizedBox(height: 16),
                 const _ActivityFeedCard(),
               ],
-            ],
-          ),
+            );
+          }(),
         ),
       ),
     );

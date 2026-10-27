@@ -74,6 +74,15 @@ class _MarketPageState extends ConsumerState<MarketPage>
         if (wantsStores) _tabController.index = _buckets.length - 1;
       });
     }
+    // Arrived from onboarding's "Tawar kartu incaran": open on the bids.
+    if (ref.read(marketWtbTipProvider)) {
+      _tabController.index = _buckets.indexOf(MarketBucket.buylist);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(bucketProvider.notifier).state = MarketBucket.buylist;
+        }
+      });
+    }
     _tabController.addListener(() {
       final next = _buckets[_tabController.index];
       if (ref.read(bucketProvider) != next) {
@@ -119,6 +128,14 @@ class _MarketPageState extends ConsumerState<MarketPage>
   Widget build(BuildContext context) {
     final bucket = ref.watch(bucketProvider);
     final colors = context.appColors;
+    final showWtbTip = ref.watch(marketWtbTipProvider);
+    // Market may already be built when onboarding sends someone here; the
+    // tab moves when the tip is asked for, not only on first build.
+    ref.listen(marketWtbTipProvider, (_, show) {
+      if (show) {
+        _tabController.animateTo(_buckets.indexOf(MarketBucket.buylist));
+      }
+    });
 
     return Scaffold(
       // No AppBar: the shared top bar's logo row collapses and hands its
@@ -189,6 +206,13 @@ class _MarketPageState extends ConsumerState<MarketPage>
                             ],
                           ),
                   ),
+                  // WTB explains the bids, so it belongs to Buying only. The
+                  // flag stays set on other tabs: coming back shows it again
+                  // until it is dismissed.
+                  if (showWtbTip &&
+                      bucket == MarketBucket.buylist &&
+                      !_scrolled)
+                    const _WtbTip(),
                   if (bucket != MarketBucket.toko) const _SortFilterBar(),
                   const SizedBox(height: 8),
                 ],
@@ -200,9 +224,9 @@ class _MarketPageState extends ConsumerState<MarketPage>
                 child: TabBarView(
                   controller: _tabController,
                   children: const [
-                    _ListingGrid(),
-                    _ListingGrid(),
-                    _ListingGrid(),
+                    _ListingGrid(MarketBucket.all),
+                    _ListingGrid(MarketBucket.listing),
+                    _ListingGrid(MarketBucket.buylist),
                     _StoreDirectory(),
                   ],
                 ),
@@ -379,7 +403,10 @@ class _SortRow extends StatelessWidget {
 }
 
 class _ListingGrid extends ConsumerStatefulWidget {
-  const _ListingGrid();
+  const _ListingGrid(this.bucket);
+
+  /// Which tab's feed this draws — its own, not whichever tab is current.
+  final MarketBucket bucket;
 
   @override
   ConsumerState<_ListingGrid> createState() => _ListingGridState();
@@ -409,10 +436,10 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
           curve: Curves.easeOutCubic,
         );
       }
-      ref.read(marketListingsProvider.notifier).retry();
+      ref.read(marketListingsProvider(widget.bucket).notifier).retry();
     });
 
-    final state = ref.watch(marketListingsProvider);
+    final state = ref.watch(marketListingsProvider(widget.bucket));
 
     if (state.loading) return const PikachuLoader();
     if (state.error) {
@@ -420,7 +447,8 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
         icon: LucideIcons.circleAlert,
         title: 'Gagal memuat listing',
         action: OutlinedButton(
-          onPressed: () => ref.read(marketListingsProvider.notifier).retry(),
+          onPressed: () =>
+              ref.read(marketListingsProvider(widget.bucket).notifier).retry(),
           child: const Text('Coba lagi'),
         ),
       );
@@ -442,7 +470,7 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
         final metrics = notification.metrics;
         if (metrics.axis != Axis.vertical) return false;
         if (metrics.extentAfter < 600) {
-          ref.read(marketListingsProvider.notifier).loadMore();
+          ref.read(marketListingsProvider(widget.bucket).notifier).loadMore();
         }
         return false;
       },
@@ -544,6 +572,68 @@ class _StoreDirectoryState extends ConsumerState<_StoreDirectory> {
       },
       loading: () => const PikachuLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat toko')),
+    );
+  }
+}
+
+/// What a WTB is, for a new user who said they came to bid on cards: the
+/// Buying tab is a list of other collectors' bids, and theirs goes up from
+/// a card's own page. Shown until closed.
+class _WtbTip extends ConsumerWidget {
+  const _WtbTip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        decoration: BoxDecoration(
+          color: colors.primary.withValues(alpha: 0.08),
+          border: Border.all(color: colors.primary.withValues(alpha: 0.25)),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                LucideIcons.handCoins,
+                size: 18,
+                color: colors.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WTB = Want To Buy',
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Di sini bid kolektor yang mencari kartu. Mau pasang '
+                    'bid sendiri? Buka halaman kartunya, tekan Pasang Bid, '
+                    'biar penjual yang datang.',
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () =>
+                  ref.read(marketWtbTipProvider.notifier).state = false,
+              icon: const Icon(LucideIcons.x, size: 16),
+              tooltip: 'Tutup',
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

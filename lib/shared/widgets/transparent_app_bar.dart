@@ -63,6 +63,9 @@ class TransparentAppBar extends StatelessWidget implements PreferredSizeWidget {
             )
           : null,
       title: title,
+      // Beside the back button on both platforms — iOS would otherwise
+      // centre a short heading away from it.
+      centerTitle: false,
       titleSpacing: title == null ? null : 4,
       actions: actions,
       bottom: bottom,
@@ -91,6 +94,7 @@ class AppBarOverlayBody extends StatelessWidget {
     required this.child,
     this.reserveToolbar,
     this.appBarBottomHeight = 0,
+    this.extendBottom = false,
   });
 
   final Widget child;
@@ -109,6 +113,14 @@ class AppBarOverlayBody extends StatelessWidget {
   /// `bottom` has to declare its height here to be cleared too.
   final double appBarBottomHeight;
 
+  /// Let the content run to the screen's bottom edge instead of stopping at
+  /// the bottom inset. For a page under [AppShell]'s floating pill: the
+  /// shell reports the pill as that inset, so honouring it ended the scroll
+  /// view above the pill — a dead band at the foot, empty even once the
+  /// pill had slid away. Such a page pads its own last item clear of the
+  /// pill (`AppBottomNav.reservedSpace`), which still reads the inset.
+  final bool extendBottom;
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -126,7 +138,7 @@ class AppBarOverlayBody extends StatelessWidget {
       data: media.copyWith(padding: media.padding.copyWith(top: topInset)),
       // Consumes the corrected top inset, and keeps whatever bottom/side
       // insets the scaffold handed down (home indicator, notches).
-      child: SafeArea(child: child),
+      child: SafeArea(bottom: !extendBottom, child: child),
     );
   }
 }

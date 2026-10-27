@@ -22,6 +22,8 @@ import '../../account/usecase/address_notifier.dart';
 import '../repository/models/store_profile.dart';
 import '../repository/store_profile_repository.dart';
 import '../usecase/store_profile_notifier.dart';
+import '../../../shared/widgets/app_network_image.dart';
+import '../../../core/utils/image_url.dart';
 
 /// Ports `/seller/settings` — web's Profil Toko, section for section, with
 /// its copy.
@@ -198,17 +200,6 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
     super.dispose();
   }
 
-  /// Ports web's `SLUG_REGEX`.
-  static final _slugPattern = RegExp(r'^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$');
-
-  /// Ports `slugify`.
-  String _slugify(String value) => value
-      .toLowerCase()
-      .trim()
-      .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
-      .replaceAll(RegExp(r'[\s_-]+'), '-')
-      .replaceAll(RegExp(r'^-+|-+$'), '');
-
   Future<void> _commitName() async {
     final trimmed = _name.text.trim();
     if (trimmed == (widget.profile.storeName ?? '')) {
@@ -221,11 +212,11 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
     }
     // The URL follows the name, unless the name can't make a usable slug —
     // then whatever is already saved stands.
-    final slug = _slugify(trimmed);
+    final slug = slugify(trimmed);
     final finalSlug = slug.length >= 3
         ? slug
         : (widget.profile.storeSlug ?? '');
-    if (!_slugPattern.hasMatch(finalSlug)) {
+    if (!storeSlugPattern.hasMatch(finalSlug)) {
       toast('Nama toko harus mengandung huruf atau angka');
       return;
     }
@@ -313,7 +304,7 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
             fit: StackFit.expand,
             children: [
               if (profile.storeBannerUrl != null)
-                Image.network(profile.storeBannerUrl!, fit: BoxFit.cover)
+                cachedNetworkImage(profile.storeBannerUrl!, fit: BoxFit.cover)
               else
                 Container(
                   color: colors.secondary,
@@ -373,8 +364,9 @@ class _HeroSectionState extends ConsumerState<_HeroSection> with _SavesSection {
                         border: Border.all(color: context.borderColor),
                       ),
                       child: profile.storeLogoUrl != null
-                          ? Image.network(
+                          ? cachedNetworkImage(
                               profile.storeLogoUrl!,
+                              size: ImageSize.half,
                               fit: BoxFit.cover,
                             )
                           : Center(
@@ -630,16 +622,13 @@ class SellerPickupCard extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           profileAsync.when(
+            // No store yet is no reason to hide the form: web shows it too,
+            // and the first save creates the row the store opens on later.
             data: (profile) {
-              if (profile == null) {
-                return const _PickupNotice(
-                  'Masuk sebagai penjual untuk mengatur alamat pickup.',
-                );
-              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!profile.hasPickupAddress) ...[
+                  if (profile == null || !profile.hasPickupAddress) ...[
                     const _PickupNotice(
                       'Belum punya alamat pickup. Atur sekarang untuk mulai '
                       'jualan dan terima pesanan.',
@@ -711,7 +700,8 @@ class _PickupNotice extends StatelessWidget {
 class _PickupSection extends ConsumerStatefulWidget {
   const _PickupSection({required this.profile});
 
-  final StoreProfile profile;
+  /// Null before any store exists; the form then starts empty.
+  final StoreProfile? profile;
 
   @override
   ConsumerState<_PickupSection> createState() => _PickupSectionState();
@@ -720,18 +710,18 @@ class _PickupSection extends ConsumerStatefulWidget {
 class _PickupSectionState extends ConsumerState<_PickupSection>
     with _SavesSection {
   late final _name = TextEditingController(
-    text: widget.profile.contactName ?? '',
+    text: widget.profile?.contactName ?? '',
   );
   late final _phone = TextEditingController(
-    text: widget.profile.contactPhone ?? '',
+    text: widget.profile?.contactPhone ?? '',
   );
   late final _postal = TextEditingController(
-    text: widget.profile.postalCode ?? '',
+    text: widget.profile?.postalCode ?? '',
   );
   late final _address = TextEditingController(
-    text: widget.profile.fullAddress ?? '',
+    text: widget.profile?.fullAddress ?? '',
   );
-  late final _notes = TextEditingController(text: widget.profile.notes ?? '');
+  late final _notes = TextEditingController(text: widget.profile?.notes ?? '');
 
   AreaOption? _province;
   AreaOption? _city;
@@ -756,6 +746,7 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
     if (_seeded) return;
     _seeded = true;
     final profile = widget.profile;
+    if (profile == null) return;
     if (profile.provinceId != null) {
       _province = catalog.findProvince(profile.provinceId!);
     }
@@ -774,8 +765,8 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
   Future<void> _pickOnMap(AreaCatalog catalog) async {
     final picked = await showMapPicker(
       context,
-      initialLatitude: _latitude ?? widget.profile.pickupLat,
-      initialLongitude: _longitude ?? widget.profile.pickupLng,
+      initialLatitude: _latitude ?? widget.profile?.pickupLat,
+      initialLongitude: _longitude ?? widget.profile?.pickupLng,
     );
     if (picked == null || !mounted) return;
 
@@ -786,30 +777,25 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
       final result = picked.result;
       if (result == null) return;
 
-      final province = _match(catalog.provinces, result.province);
+      final area = resolveArea(catalog, result);
+      final province = area.province;
       if (province != null && province.code != _province?.code) {
         _province = province;
         _city = null;
         _district = null;
       }
-      final activeProvince = _province;
-      if (activeProvince != null) {
-        final city = _match(
-          catalog.regenciesOf(activeProvince.code),
-          result.city,
-        );
-        if (city != null && city.code != _city?.code) {
-          _city = city;
-          _district = null;
-        }
+      // Each level only once the one above it is the province/city it was
+      // resolved under: a city from another province is no city here.
+      final city = area.city;
+      if (city != null &&
+          city.parentCode == _province?.code &&
+          city.code != _city?.code) {
+        _city = city;
+        _district = null;
       }
-      final activeCity = _city;
-      if (activeCity != null) {
-        final district = _match(
-          catalog.districtsOf(activeCity.code),
-          result.district,
-        );
-        if (district != null) _district = district;
+      final district = area.district;
+      if (district != null && district.parentCode == _city?.code) {
+        _district = district;
       }
 
       if (result.postalCode != null && _postal.text.trim().isEmpty) {
@@ -819,40 +805,6 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
         _address.text = result.displayName!;
       }
     });
-  }
-
-  /// Compares on the significant part of the name: OSM says "Kota Bandung"
-  /// where the catalog says "Bandung", and "Daerah Khusus Ibukota Jakarta"
-  /// where it says "DKI Jakarta", so the administrative words are dropped
-  /// before comparing.
-  static AreaOption? _match(List<AreaOption> options, String? name) {
-    if (name == null || name.isEmpty) return null;
-
-    String normalise(String value) => value
-        .toLowerCase()
-        .replaceAll(
-          RegExp(
-            r'\b(kota|kabupaten|kab\.?|provinsi|prov\.?|daerah|khusus|'
-            r'ibukota|istimewa|administrasi|adm\.?|kecamatan|kec\.?)\b',
-          ),
-          '',
-        )
-        .replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-    final needle = normalise(name);
-    if (needle.isEmpty) return null;
-
-    for (final option in options) {
-      if (normalise(option.name) == needle) return option;
-    }
-    for (final option in options) {
-      final candidate = normalise(option.name);
-      if (candidate.isNotEmpty &&
-          (candidate.contains(needle) || needle.contains(candidate))) {
-        return option;
-      }
-    }
-    return null;
   }
 
   void _save() {
@@ -888,8 +840,8 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
             postalCode: _postal.text,
             fullAddress: _address.text,
             notes: _notes.text,
-            latitude: _latitude ?? widget.profile.pickupLat,
-            longitude: _longitude ?? widget.profile.pickupLng,
+            latitude: _latitude ?? widget.profile?.pickupLat,
+            longitude: _longitude ?? widget.profile?.pickupLng,
           ),
     );
   }
@@ -898,8 +850,8 @@ class _PickupSectionState extends ConsumerState<_PickupSection>
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final catalogAsync = ref.watch(areaCatalogProvider);
-    final lat = _latitude ?? widget.profile.pickupLat;
-    final lng = _longitude ?? widget.profile.pickupLng;
+    final lat = _latitude ?? widget.profile?.pickupLat;
+    final lng = _longitude ?? widget.profile?.pickupLng;
 
     return _Card(
       title: 'Alamat Pengirim',

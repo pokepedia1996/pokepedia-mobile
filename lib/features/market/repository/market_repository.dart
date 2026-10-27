@@ -5,6 +5,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/repository/models/store_identity.dart';
+import '../../seller/repository/models/my_reliability.dart';
 import '../usecase/market_filters.dart';
 import 'models/listing_facets.dart';
 import 'models/market_page.dart';
@@ -186,32 +187,77 @@ class MarketRepository {
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
     final sellerId = row['user_id'] as String?;
-    // `get_seller_storefront_by_slug` doesn't return a listing count; reuse
-    // the listings RPC's own `total_count` instead of a separate query.
-    var activeListingCount = 0;
-    if (sellerId != null) {
-      final listingRows =
-          await _client.rpc(
-                'get_recent_marketplace_listings',
-                params: {
-                  'p_seller_user_id': sellerId,
-                  'p_window_hours': 0,
-                  'p_limit': 1,
-                  'p_offset': 0,
-                },
-              )
-              as List;
-      if (listingRows.isNotEmpty) {
-        activeListingCount =
-            ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
-                ?.toInt() ??
-            0;
-      }
+    if (sellerId == null) {
+      return StoreModel.fromDetailRow(row, activeListingCount: 0);
     }
+    // The header's figures, side by side: the listing count, the feedback
+    // rate and the shipping record — web's storefront page reads the same
+    // three alongside the profile.
+    final (activeListingCount, reputation, reliability) = await (
+      _storeListingCount(sellerId),
+      // Like the reliability read, a missing rate shouldn't cost the page.
+      fetchReputation(
+        sellerId,
+      ).catchError((_) => (positivePct: null, feedbackScore: 0)),
+      _publicReliability(sellerId),
+    ).wait;
     return StoreModel.fromDetailRow(
       row,
       activeListingCount: activeListingCount,
+      positivePct: reputation.positivePct,
+      feedbackScore: reputation.feedbackScore,
+      completionPct: reliability.completionPct,
+      shipHours: reliability.shipHours,
     );
+  }
+
+  /// `get_seller_storefront_by_slug` doesn't return a listing count; reuse
+  /// the listings RPC's own `total_count` instead of a separate query.
+  Future<int> _storeListingCount(String sellerId) async {
+    final listingRows =
+        await _client.rpc(
+              'get_recent_marketplace_listings',
+              params: {
+                'p_seller_user_id': sellerId,
+                'p_window_hours': 0,
+                'p_limit': 1,
+                'p_offset': 0,
+              },
+            )
+            as List;
+    if (listingRows.isEmpty) return 0;
+    return ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
+            ?.toInt() ??
+        0;
+  }
+
+  /// Ports `fetchSellerReliability` + `describeReliability` for one seller:
+  /// the completion rate and median ship time, each held back until there
+  /// are enough orders behind it. `seller_reliability_stats` is publicly
+  /// readable. A failed read only costs the header two figures, so it
+  /// answers nulls rather than failing the storefront.
+  Future<({int? completionPct, int? shipHours})> _publicReliability(
+    String sellerId,
+  ) async {
+    const none = (completionPct: null, shipHours: null);
+    try {
+      final row = await _client
+          .from('seller_reliability_stats')
+          .select(
+            'paid_orders, completed_orders, seller_cancels, disputes_lost, '
+            'shipped_orders, median_ship_hours',
+          )
+          .eq('seller_id', sellerId)
+          .maybeSingle();
+      if (row == null) return none;
+      final w = ReliabilityWindow.fromJson(row);
+      return (
+        completionPct: w.publicCompletionPct,
+        shipHours: w.publicShipHours,
+      );
+    } catch (_) {
+      return none;
+    }
   }
 
   Future<List<ListingModel>> fetchStoreListings(String handle) async {

@@ -11,6 +11,7 @@ import 'widgets/marketplace_feed_section.dart';
 import 'widgets/portfolio_value_section.dart';
 import 'widgets/home_ad_slot.dart';
 import 'widgets/home_tasks_section.dart';
+import 'widgets/onboarding_shortcuts_section.dart';
 import 'widgets/top_holdings_section.dart';
 
 /// The buyer home tab, built around what the collection is worth: the
@@ -53,6 +54,9 @@ class HomePage extends ConsumerWidget {
                         bottom: AppBottomNav.reservedSpace(context) + 12,
                       ),
                       children: const [
+                        // A new account's own picks from onboarding come
+                        // first: it has no value or holdings to show yet.
+                        OnboardingShortcutsSection(),
                         PortfolioValueSection(),
                         TopHoldingsSection(),
                         // What needs answering, then whatever is being

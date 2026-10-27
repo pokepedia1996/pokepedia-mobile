@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../shared/utils/geocode.dart';
 import 'models/address_model.dart';
 
 const _addressColumns =
@@ -240,4 +241,178 @@ class AreaCatalog {
     }
     return null;
   }
+}
+
+String _normaliseArea(String value) => value
+    .toLowerCase()
+    .replaceAll(
+      RegExp(
+        r'\b(kota|kabupaten|kab\.?|provinsi|prov\.?|daerah|khusus|'
+        r'ibukota|istimewa|administrasi|adm\.?|kecamatan|kec\.?)\b',
+      ),
+      '',
+    )
+    .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+/// The catalog entry Nominatim's [name] for an area means, or null.
+///
+/// Compares on the significant part of the name: OSM says "Kota Bandung"
+/// where the catalog says "Bandung", and "Daerah Khusus Ibukota Jakarta"
+/// where it says "DKI Jakarta", so the administrative words are dropped
+/// before comparing — after an exact match has had its chance, since
+/// "Kota Malang" and "Kabupaten Malang" are both in the catalog and only
+/// the full name tells them apart.
+AreaOption? matchAreaOption(List<AreaOption> options, String? name) {
+  final matches = matchAreaOptions(options, name);
+  return matches.isEmpty ? null : matches.first;
+}
+
+/// Every catalog entry [name] could mean, best first: an exact name, then
+/// the same significant name, then one containing the other.
+List<AreaOption> matchAreaOptions(List<AreaOption> options, String? name) {
+  if (name == null || name.trim().isEmpty) return const [];
+
+  final exact = name.trim().toLowerCase();
+  final needle = _normaliseArea(name);
+  if (needle.isEmpty) return const [];
+
+  final result = <AreaOption>[
+    for (final option in options)
+      if (option.name.toLowerCase() == exact) option,
+  ];
+  for (final option in options) {
+    if (!result.contains(option) && _normaliseArea(option.name) == needle) {
+      result.add(option);
+    }
+  }
+  for (final option in options) {
+    final candidate = _normaliseArea(option.name);
+    if (!result.contains(option) &&
+        candidate.isNotEmpty &&
+        (candidate.contains(needle) || needle.contains(candidate))) {
+      result.add(option);
+    }
+  }
+  return result;
+}
+
+/// The city Nominatim means, with the district settling a tie: "Malang" is
+/// both Kota and Kabupaten Malang, and only one of them has Klojen.
+AreaOption? matchCity(
+  AreaCatalog catalog,
+  String provinceCode,
+  String? city,
+  String? district,
+) {
+  final candidates = matchAreaOptions(catalog.regenciesOf(provinceCode), city);
+  if (candidates.length > 1 && district != null) {
+    for (final candidate in candidates) {
+      if (matchAreaOption(catalog.districtsOf(candidate.code), district) !=
+          null) {
+        return candidate;
+      }
+    }
+  }
+  return candidates.isEmpty ? null : candidates.first;
+}
+
+/// ISO 3166-2 province suffixes, by catalog code. OSM leaves the province's
+/// name out across Jakarta but always sends this.
+const _provinceCodeByIso = {
+  'AC': '11',
+  'SU': '12',
+  'SB': '13',
+  'RI': '14',
+  'JA': '15',
+  'SS': '16',
+  'BE': '17',
+  'LA': '18',
+  'BB': '19',
+  'KR': '21',
+  'JK': '31',
+  'JB': '32',
+  'JT': '33',
+  'YO': '34',
+  'JI': '35',
+  'BT': '36',
+  'BA': '51',
+  'NB': '52',
+  'NT': '53',
+  'KB': '61',
+  'KT': '62',
+  'KS': '63',
+  'KI': '64',
+  'KU': '65',
+  'SA': '71',
+  'ST': '72',
+  'SN': '73',
+  'SG': '74',
+  'GO': '75',
+  'SR': '76',
+  'MA': '81',
+  'MU': '82',
+  'PA': '91',
+  'PB': '92',
+  'PS': '93',
+  'PT': '94',
+  'PE': '95',
+  'PD': '96',
+};
+
+/// The province, kota/kabupaten and kecamatan a geocoder [result] lands
+/// in, each null where the catalog can't be sure. A level left null goes to
+/// "Ubah" rather than being guessed: a wrong district code sends the courier
+/// to the wrong place.
+({AreaOption? province, AreaOption? city, AreaOption? district}) resolveArea(
+  AreaCatalog catalog,
+  GeocodeResult result,
+) {
+  final iso = _provinceCodeByIso[result.provinceIso];
+  final province =
+      matchAreaOption(catalog.provinces, result.province) ??
+      (iso == null ? null : catalog.findProvince(iso));
+  if (province == null) return (province: null, city: null, district: null);
+
+  // The single best guesses lead, for a result built by hand.
+  final cityNames = {?result.city, ...result.cityNames};
+  final districtNames = {?result.district, ...result.districtNames};
+
+  final provinceName = _normaliseArea(province.name);
+  AreaOption? city;
+  for (final name in cityNames) {
+    // Jakarta's `city` can be the province itself, which would otherwise
+    // contain-match every kota in it and pick the first.
+    if (_normaliseArea(name) == provinceName) continue;
+    final candidates = matchAreaOptions(
+      catalog.regenciesOf(province.code),
+      name,
+    );
+    if (candidates.isEmpty) continue;
+    // "Malang" is both Kota and Kabupaten Malang; the kecamatan settles it.
+    city = candidates.firstWhere(
+      (c) => districtNames.any(
+        (d) => matchAreaOption(catalog.districtsOf(c.code), d) != null,
+      ),
+      orElse: () => candidates.first,
+    );
+    break;
+  }
+  if (city == null) return (province: province, city: null, district: null);
+
+  final districts = catalog.districtsOf(city.code);
+  AreaOption? district;
+  for (final name in districtNames) {
+    district = matchAreaOption(districts, name);
+    if (district != null) break;
+  }
+  final village = result.village;
+  if (district == null && village != null) {
+    // A kelurahan often shares its kecamatan's name ("Gambir" in Gambir),
+    // but only an exact match is safe: "Menteng Atas" is not in Menteng.
+    final needle = _normaliseArea(village);
+    for (final option in districts) {
+      if (_normaliseArea(option.name) == needle) district = option;
+    }
+  }
+  return (province: province, city: city, district: district);
 }
