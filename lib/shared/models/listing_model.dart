@@ -46,16 +46,21 @@ class SellerRating {
     this.positiveCount = 0,
     this.neutralCount = 0,
     this.negativeCount = 0,
+    this.completionPct,
   });
 
   /// `positive_pct` is null until the seller has reviews to average;
   /// `successful_trades` is web's `totalSales`.
-  factory SellerRating.fromRow(Map<String, dynamic> row) => SellerRating(
+  factory SellerRating.fromRow(
+    Map<String, dynamic> row, {
+    int? completionPct,
+  }) => SellerRating(
     positivePct: (row['positive_pct'] as num?)?.toDouble(),
     totalSales: (row['successful_trades'] as num?)?.toInt() ?? 0,
     positiveCount: (row['positive_count_total'] as num?)?.toInt() ?? 0,
     neutralCount: (row['neutral_count_12mo'] as num?)?.toInt() ?? 0,
     negativeCount: (row['negative_count_total'] as num?)?.toInt() ?? 0,
+    completionPct: completionPct,
   );
 
   final double? positivePct;
@@ -63,6 +68,10 @@ class SellerRating {
   final int positiveCount;
   final int neutralCount;
   final int negativeCount;
+
+  /// Share of finished orders the seller completed, from
+  /// `seller_reliability_stats` — null until there are enough to publish.
+  final int? completionPct;
 }
 
 /// A marketplace listing (ask = for sale / WTS, bid = wanted / WTB),

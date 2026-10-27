@@ -45,7 +45,7 @@ class ExploreExpansionsSection extends ConsumerWidget {
                 final pack = packs[i];
                 return PackCard(
                   pack: pack,
-                  onTap: () => context.push(Routes.packDetail(pack.slug)),
+                  onTap: () => context.go(Routes.packDetail(pack.slug)),
                 );
               },
             ),

@@ -29,6 +29,7 @@ import '../../portfolio/usecase/portfolio_counter.dart';
 import '../../portfolio/usecase/portfolio_notifier.dart';
 import '../usecase/expansions_notifier.dart';
 import '../usecase/recently_viewed_provider.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `app/expansions/[packSlug]/pack-detail-client.tsx` — the pack
 /// header (image, title, meta) plus the search/filter bar and card grid
@@ -186,24 +187,14 @@ class _PackDetailPageState extends ConsumerState<PackDetailPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      // The nav floats over the grid, the same way it does on the tab roots.
-      extendBody: true,
+      // No nav of its own: the page sits in the Pencarian branch, and
+      // [AppShell] keeps its pill over it, so opening a set slides only the
+      // content. The grid's foot still clears the pill (reservedSpace).
       appBar: const TransparentAppBar(actions: [CartAppBarButton()]),
-      // Kept rather than hidden: browsing a set is still browsing, so the
-      // tabs stay reachable without walking back to the expansions list.
-      //
-      // The page is pushed on the root navigator, above [AppShell], so there
-      // is no `StatefulNavigationShell` here to call `goBranch` on — `go` to
-      // the tab's own path switches the branch and drops this page, which is
-      // what tapping a tab means anyway. The pill also doesn't shrink on
-      // scroll here; that animation is driven by the shell's listener.
-      bottomNavigationBar: AppBottomNav(
-        // Pencarian, not Ekspansi: the expansions browser lives inside the
-        // search tab now, so that is the tab a pack page belongs to.
-        currentIndex: AppBottomNav.tabPaths.indexOf(Routes.search),
-        onTap: (index) => context.go(AppBottomNav.tabPaths[index]),
-      ),
       body: AppBarOverlayBody(
+        // Scrolls under the pill to the screen's edge; the grid's padding
+        // below keeps its last row clear of it.
+        extendBottom: true,
         child: cardsAsync.when(
           data: (cards) {
             final pack = packAsync.valueOrNull;
@@ -426,7 +417,7 @@ class _PackHeader extends ConsumerWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.md),
             child: pack.image != null
-                ? Image.network(
+                ? cachedNetworkImage(
                     pack.image!,
                     width: double.infinity,
                     height: 120,

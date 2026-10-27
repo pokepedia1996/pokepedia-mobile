@@ -15,21 +15,40 @@ class NotificationsRepository {
   static const _columns =
       'id, slug, type, category, title, body, is_read, action_url, created_at';
 
+  /// The inbox, plus the unread chat rows.
+  ///
+  /// Chat is not shown in the inbox (the chat tab has its own badge), so it
+  /// is kept out of [limit]: one row is written per message, and an active
+  /// conversation would otherwise crowd everything else out of the page.
+  /// The unread chat rows still come along because opening a thread marks
+  /// them read (`markChatRoomRead`), and that needs them in the list.
   Future<List<NotificationModel>> fetchNotifications({int limit = 50}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const [];
 
-    final rows =
-        await _client
-                .from('notifications')
-                .select(_columns)
-                .eq('user_id', userId)
-                .order('created_at', ascending: false)
-                .limit(limit)
-            as List;
-    return rows
-        .map((r) => NotificationModel.fromRow(r as Map<String, dynamic>))
-        .toList();
+    final chat = NotificationType.chatMessage.raw;
+    final results = await Future.wait([
+      _client
+          .from('notifications')
+          .select(_columns)
+          .eq('user_id', userId)
+          .neq('type', chat)
+          .order('created_at', ascending: false)
+          .limit(limit),
+      _client
+          .from('notifications')
+          .select(_columns)
+          .eq('user_id', userId)
+          .eq('type', chat)
+          .eq('is_read', false)
+          .order('created_at', ascending: false)
+          .limit(200),
+    ]);
+    return [
+      for (final rows in results)
+        for (final r in rows as List)
+          NotificationModel.fromRow(r as Map<String, dynamic>),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   /// Takes the row's uuid slug, not its `id`: that is the argument the

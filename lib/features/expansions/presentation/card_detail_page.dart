@@ -175,7 +175,7 @@ class _Breadcrumb extends ConsumerWidget {
           // The one segment that goes anywhere: back to the expansion this
           // card belongs to.
           InkWell(
-            onTap: () => context.push(Routes.packDetail(card.packSlug)),
+            onTap: () => context.go(Routes.packDetail(card.packSlug)),
             borderRadius: BorderRadius.circular(AppRadius.xs),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),

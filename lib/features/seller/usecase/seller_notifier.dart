@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/auth_provider.dart';
+import '../repository/models/my_reliability.dart';
 import '../repository/models/seller_dashboard.dart';
 import '../repository/seller_repository.dart';
 
@@ -20,6 +21,19 @@ final hasStoreProvider = FutureProvider<bool>((ref) {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return false;
   return ref.read(sellerRepositoryProvider).hasStore();
+});
+
+/// The seller's reliability over 90/30 days and the road to Top Seller.
+/// Null when it can't be read; the dashboard then leaves the section out,
+/// as web does, rather than drawing zeros that would read as a verdict.
+final myReliabilityProvider = FutureProvider<MyReliability?>((ref) async {
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return null;
+  try {
+    return await ref.read(sellerRepositoryProvider).fetchMyReliability();
+  } catch (_) {
+    return null;
+  }
 });
 
 /// The dashboard payload for the selected window.

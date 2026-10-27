@@ -6,6 +6,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/collector_number.dart';
 import '../../../shared/utils/primary_collection.dart';
+import '../../seller/repository/models/my_reliability.dart';
 import 'models/market_models.dart';
 import 'models/store_identity.dart';
 import '../../../core/errors/user_message.dart';
@@ -39,6 +40,7 @@ ListingModel cardListingFromRow(
   StoreIdentity? store,
   Map<String, dynamic>? profile,
   Map<String, dynamic>? reputation,
+  int? completionPct,
 }) {
   return ListingModel.fromRow(
     row,
@@ -53,7 +55,9 @@ ListingModel cardListingFromRow(
     sellerFeedbackScore:
         ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
         ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),
-    sellerRating: reputation == null ? null : SellerRating.fromRow(reputation),
+    sellerRating: reputation == null
+        ? null
+        : SellerRating.fromRow(reputation, completionPct: completionPct),
   );
 }
 
@@ -424,6 +428,28 @@ class ExpansionsRepository {
       // Swallowed — rows fall back to a 0 reputation score.
     }
 
+    // The "x% selesai" beside each seller's sales, from the publicly
+    // readable `seller_reliability_stats`. Best effort like the rest: a
+    // failure only drops that figure.
+    var completionByUser = <String, int?>{};
+    try {
+      final reliabilityRows = await _client
+          .from('seller_reliability_stats')
+          .select(
+            'seller_id, paid_orders, completed_orders, seller_cancels, '
+            'disputes_lost, shipped_orders, median_ship_hours',
+          )
+          .inFilter('seller_id', userIds);
+      completionByUser = {
+        for (final r in reliabilityRows)
+          r['seller_id'] as String: ReliabilityWindow.fromJson(
+            r,
+          ).publicCompletionPct,
+      };
+    } catch (_) {
+      // Swallowed — rows show sales without a completion rate.
+    }
+
     final storesByUser = await storesFuture;
     return [
       for (final row in rows)
@@ -433,6 +459,7 @@ class ExpansionsRepository {
           store: storesByUser[row['user_id']],
           profile: profilesByUser[row['user_id']],
           reputation: reputationByUser[row['user_id']],
+          completionPct: completionByUser[row['user_id']],
         ),
     ];
   }

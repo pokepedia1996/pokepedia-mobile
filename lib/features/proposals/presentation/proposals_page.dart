@@ -8,6 +8,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/app_pagination.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -45,36 +46,36 @@ class _ProposalsPageState extends ConsumerState<ProposalsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: TransparentAppBar(),
-      body: AppBarOverlayBody(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Proposal Saya',
-                    style: AppTypography.h1(colors.onSurface),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Aktivitas bid dan proposal kamu, dikelompokkan per kartu.',
-                    style: AppTypography.bodySm(context.mutedForeground),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Expanded(child: _CardFeedTab()),
-          ],
-        ),
+      body: const AppBarOverlayBody(child: _CardFeedTab()),
+    );
+  }
+}
+
+/// "Proposal Saya" and what the page holds. Part of the feed's scroll, so
+/// it moves away with the cards instead of holding a band of the screen.
+class _Heading extends StatelessWidget {
+  const _Heading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Proposal Saya',
+            style: AppTypography.h1(context.appColors.onSurface),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Aktivitas bid dan proposal kamu, dikelompokkan per kartu.',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
+        ],
       ),
     );
   }
@@ -171,93 +172,245 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _CardFeedTab extends ConsumerWidget {
+/// Web's `PROPOSALS_PER_PAGE` and the sizes its selector offers here.
+const _defaultPageSize = 15;
+const _pageSizeOptions = [15, 25, 50, 100];
+
+/// Ports `card-feed-list.tsx`, paged as web pages it: the whole feed is
+/// loaded and grouped once, then shown a page at a time — the counts on the
+/// filter are over every card, not just the page on screen.
+class _CardFeedTab extends ConsumerStatefulWidget {
   const _CardFeedTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CardFeedTab> createState() => _CardFeedTabState();
+}
+
+class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
+  final _scroll = ScrollController();
+
+  /// 1-based, like web's.
+  int _page = 1;
+  int _pageSize = _defaultPageSize;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// The heading and count above the pinned filter — how far the list
+  /// scrolls before the filter sticks.
+  final _introKey = GlobalKey();
+
+  void _goTo(int page) {
+    setState(() => _page = page);
+    // A new page starts at its first card, not wherever the last one was
+    // left: scrolled just far enough that the filter is pinned over it.
+    // Already above that point, the reader is looking at the top anyway.
+    if (!_scroll.hasClients) return;
+    final intro = _introKey.currentContext?.size?.height ?? 0;
+    if (_scroll.offset > intro) _scroll.jumpTo(intro);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(proposalCardFeedProvider);
     final filter = ref.watch(proposalFeedFilterProvider);
+    // A new filter or a reload starts from the first page, as web's
+    // `setPage(1)` beside each does.
+    ref.listen(proposalFeedFilterProvider, (_, __) => _goTo(1));
+    ref.listen(proposalCardFeedProvider, (_, next) {
+      if (next.hasValue && !next.isLoading) _goTo(1);
+    });
+
+    // The states with nothing to scroll keep the heading above them.
+    Widget withHeading(Widget child) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Heading(),
+        Expanded(child: child),
+      ],
+    );
 
     return async.when(
-      loading: () => const PikachuLoader(),
-      error: (_, __) => Center(
-        child: Text(
-          'Gagal memuat proposal',
-          style: AppTypography.bodySm(context.mutedForeground),
+      loading: () => withHeading(const PikachuLoader()),
+      error: (_, __) => withHeading(
+        Center(
+          child: Text(
+            'Gagal memuat proposal',
+            style: AppTypography.bodySm(context.mutedForeground),
+          ),
         ),
       ),
       data: (groups) {
         if (groups.isEmpty) {
-          return const EmptyState(
-            icon: LucideIcons.inbox,
-            title: 'Belum ada aktivitas',
-            description:
-                'Pasang bid (WTB) atau kirim proposal untuk mulai bernegosiasi.',
+          return withHeading(
+            const EmptyState(
+              icon: LucideIcons.inbox,
+              title: 'Belum ada aktivitas',
+              description:
+                  'Pasang bid (WTB) atau kirim proposal untuk mulai '
+                  'bernegosiasi.',
+            ),
           );
         }
 
         final visible = groups.where(filter.matches).toList();
+        final pageCount = (visible.length / _pageSize).ceil();
+        // A page that no longer exists — the feed shrank under it — shows
+        // the last one there is, as web's `safePage` does.
+        final page = _page.clamp(1, pageCount < 1 ? 1 : pageCount);
+        final shown = visible
+            .skip((page - 1) * _pageSize)
+            .take(_pageSize)
+            .toList();
 
-        return Column(
-          children: [
-            // Web states the size of the feed above the filter, so the
-            // count on "Semua" has something to be a share of.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${groups.length} kartu dengan aktivitas',
-                  style: AppTypography.bodySm(context.mutedForeground),
-                ),
-              ),
-            ),
-            _FilterTrack(
-              children: [
-                for (final option in ProposalFeedFilter.values)
-                  // Web drops a chip with nothing behind it; "Semua"
-                  // always stands so there is a way back.
-                  if (option == ProposalFeedFilter.all ||
-                      groups.any(option.matches))
-                    _FilterChip(
-                      label:
-                          '${option.label} '
-                          '(${groups.where(option.matches).length})',
-                      selected: filter == option,
-                      onTap: () =>
-                          ref.read(proposalFeedFilterProvider.notifier).state =
-                              option,
-                    ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: visible.isEmpty
-                  ? const EmptyState(
-                      icon: LucideIcons.filterX,
-                      title: 'Tidak ada kartu untuk filter ini',
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        ref.invalidate(myBidsProvider);
-                        ref.invalidate(sentProposalsProvider);
-                        await ref.read(proposalCardFeedProvider.future);
-                      },
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, i) =>
-                            _CardGroupRow(group: visible[i]),
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(myBidsProvider);
+            ref.invalidate(sentProposalsProvider);
+            await ref.read(proposalCardFeedProvider.future);
+          },
+          // One scroll for the whole page: the heading and the count go up
+          // with the cards, and the filter pins to the top once they have,
+          // so changing it never means scrolling back.
+          child: CustomScrollView(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  key: _introKey,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _Heading(),
+                    // Web states the size of the feed above the filter, so
+                    // the count on "Semua" has something to be a share of.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+                      child: Text(
+                        '${groups.length} kartu dengan aktivitas',
+                        style: AppTypography.bodySm(context.mutedForeground),
                       ),
                     ),
-            ),
-          ],
+                  ],
+                ),
+              ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _PinnedFilter(
+                  textScaler: MediaQuery.textScalerOf(context),
+                  child: _FilterTrack(
+                    children: [
+                      for (final option in ProposalFeedFilter.values)
+                        // Web drops a chip with nothing behind it; "Semua"
+                        // always stands so there is a way back.
+                        if (option == ProposalFeedFilter.all ||
+                            groups.any(option.matches))
+                          _FilterChip(
+                            label:
+                                '${option.label} '
+                                '(${groups.where(option.matches).length})',
+                            selected: filter == option,
+                            onTap: () =>
+                                ref
+                                        .read(
+                                          proposalFeedFilterProvider.notifier,
+                                        )
+                                        .state =
+                                    option,
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+              if (visible.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 24),
+                    child: EmptyState(
+                      icon: LucideIcons.filterX,
+                      title: 'Tidak ada kartu untuk filter ini',
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                  sliver: SliverList.list(
+                    children: [
+                      for (final (i, group) in shown.indexed) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        _CardGroupRow(group: group),
+                      ],
+                      const SizedBox(height: 20),
+                      Center(
+                        child: AppPagination(
+                          page: page,
+                          pageCount: pageCount,
+                          onPage: _goTo,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Center(
+                        child: PageSizeSelector(
+                          value: _pageSize,
+                          options: _pageSizeOptions,
+                          onChanged: (size) {
+                            _pageSize = size;
+                            _goTo(1);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
   }
+}
+
+/// Holds the filter track at the top of the scroll once the heading has
+/// gone. Drawn on the page's own background so cards passing beneath it
+/// don't show through between the chips.
+class _PinnedFilter extends SliverPersistentHeaderDelegate {
+  const _PinnedFilter({required this.child, required this.textScaler});
+
+  final Widget child;
+
+  /// The reader's text size: a pinned header can't size itself to its
+  /// content, so the height is worked out from the chip's line instead.
+  final TextScaler textScaler;
+
+  /// The track — two 7dp chip paddings and the 4dp inset each side around
+  /// one caption line (12sp at 1.4) — with 8dp of air above and below.
+  double get _extent => 22 + 16 + textScaler.scale(12 * 1.4);
+
+  @override
+  double get minExtent => _extent;
+
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return ColoredBox(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Center(child: child),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_PinnedFilter oldDelegate) =>
+      oldDelegate.child != child || oldDelegate.textScaler != textScaler;
 }
 
 class _CardGroupRow extends StatelessWidget {

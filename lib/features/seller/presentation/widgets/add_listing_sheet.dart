@@ -12,6 +12,8 @@ import '../../../../shared/utils/card_filtering.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/card_language_badge.dart';
 import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../portfolio/repository/portfolio_repository.dart'
+    show cardPickerPageSize;
 import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../repository/seller_listings_repository.dart';
 
@@ -98,6 +100,48 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
   /// exactly one of them: without this, finding the Japanese print of a
   /// common Pikachu means scrolling past every other print of it.
   CardLanguage? _language;
+
+  /// Pages fetched past the first, for the search they belong to — web's
+  /// "Muat lebih banyak". The first page stays in the provider; a name like
+  /// Pikachu matches hundreds of prints, more than one page can carry.
+  ({String key, List<CardModel> cards, bool hasMore})? _more;
+  bool _loadingMore = false;
+
+  String get _searchKey => '${_language?.raw ?? ''}|$_query';
+
+  Future<void> _loadMore(List<CardModel> loaded) async {
+    if (_loadingMore) return;
+    final key = _searchKey;
+    setState(() => _loadingMore = true);
+    List<CardModel> next = const [];
+    try {
+      next = await ref
+          .read(portfolioRepositoryProvider)
+          .searchCardsPicker(
+            _query,
+            language: _language,
+            offset: loaded.length,
+          );
+    } catch (_) {
+      // Left as it was; the button stays for another try.
+    }
+    if (!mounted) return;
+    setState(() {
+      _loadingMore = false;
+      // Typed something else meanwhile: this page answers an old search.
+      if (key != _searchKey) return;
+      final seen = {for (final c in loaded) c.id};
+      _more = (
+        key: key,
+        cards: [
+          ...?(_more?.key == key ? _more!.cards : null),
+          for (final c in next)
+            if (seen.add(c.id)) c,
+        ],
+        hasMore: next.length == cardPickerPageSize,
+      );
+    });
+  }
 
   /// The pick, in the order it was made, so the strip at the top reads as a
   /// history of what was tapped rather than reshuffling on every addition.
@@ -281,10 +325,13 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
     return async.when(
       loading: () => const PikachuLoader(),
       error: (_, __) => _hint(context, 'Gagal mencari kartu.'),
-      data: (cards) {
-        if (cards.isEmpty) {
+      data: (firstPage) {
+        if (firstPage.isEmpty) {
           return _hint(context, 'Tidak ada kartu yang cocok.');
         }
+        final more = _more?.key == _searchKey ? _more : null;
+        final cards = [...firstPage, ...?more?.cards];
+        final hasMore = more?.hasMore ?? firstPage.length == cardPickerPageSize;
         final sorted = sortCards(cards, _sort);
 
         return Column(
@@ -294,7 +341,8 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
               child: Row(
                 children: [
                   Text(
-                    '${sorted.length} kartu cocok',
+                    // "40+": what is loaded, and that there is more behind.
+                    '${sorted.length}${hasMore ? '+' : ''} kartu cocok',
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
                   const Spacer(),
@@ -306,19 +354,48 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
               ),
             ),
             Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                gridDelegate: _tileGrid(context),
-                itemCount: sorted.length,
-                itemBuilder: (context, i) {
-                  final card = sorted[i];
-                  return _PickTile(
-                    card: card,
-                    quantity: _quantityOf(card),
-                    onAdd: () => _add(card),
-                    onRemove: () => _removeOne(card),
-                  );
-                },
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    sliver: SliverGrid.builder(
+                      gridDelegate: _tileGrid(context),
+                      itemCount: sorted.length,
+                      itemBuilder: (context, i) {
+                        final card = sorted[i];
+                        return _PickTile(
+                          card: card,
+                          quantity: _quantityOf(card),
+                          onAdd: () => _add(card),
+                          onRemove: () => _removeOne(card),
+                        );
+                      },
+                    ),
+                  ),
+                  if (hasMore)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _loadingMore
+                                ? null
+                                : () => _loadMore(cards),
+                            child: _loadingMore
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Muat lebih banyak'),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -986,7 +1063,14 @@ class _AddBar extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: success,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(52),
+                  // The outlined theme's 44, so it stands as tall as
+                  // "Muat lebih banyak" above it.
+                  minimumSize: const Size.fromHeight(44),
+                  // The outlined theme's corner too, so the two read as a
+                  // pair rather than a pill under a box.
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
                 ),
               ),
             ),

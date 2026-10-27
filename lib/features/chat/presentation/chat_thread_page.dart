@@ -26,6 +26,7 @@ import 'widgets/chat_party_colors.dart';
 import 'widgets/chat_context_banner.dart';
 import 'widgets/chat_event_cards.dart';
 import '../../../core/errors/user_message.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `components/chat/chat-room.tsx`, backed by `chat_messages` with a
 /// realtime subscription for the other side's replies.
@@ -964,7 +965,7 @@ class _ImageAttachment extends StatelessWidget {
         errorBuilder: (_, __, ___) => _unavailable(context),
       );
     } else if (url != null && url.isNotEmpty) {
-      picture = Image.network(
+      picture = cachedNetworkImage(
         url,
         fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => _unavailable(context),

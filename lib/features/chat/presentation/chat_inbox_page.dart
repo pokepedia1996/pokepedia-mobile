@@ -148,111 +148,122 @@ class _ThreadTile extends StatelessWidget {
     final colors = context.appColors;
     final unread = thread.unread > 0;
 
-    return InkWell(
-      // The name rides along so the thread's bar can show it immediately,
-      // instead of "Percakapan" until the room resolves.
-      onTap: () => context.push(
-        Routes.chatThread(thread.slug),
-        extra: thread.displayName,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            UserAvatar(
-              username: thread.displayName,
-              imageUrl: thread.otherAvatarUrl,
-              size: 44,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          thread.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySmSemibold(colors.onSurface),
-                        ),
-                      ),
-                      // A shop's own handle, beside its name.
-                      if (thread.secondaryName case final handle?) ...[
-                        const SizedBox(width: 6),
+    // An unread row is tinted as a whole, not just bolder in its preview —
+    // a semibold line alone was too quiet to pick out while scrolling.
+    return Material(
+      color: unread
+          ? colors.primary.withValues(alpha: 0.06)
+          : Colors.transparent,
+      child: InkWell(
+        // The name rides along so the thread's bar can show it immediately,
+        // instead of "Percakapan" until the room resolves.
+        onTap: () => context.push(
+          Routes.chatThread(thread.slug),
+          extra: thread.displayName,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              UserAvatar(
+                username: thread.displayName,
+                imageUrl: thread.otherAvatarUrl,
+                size: 44,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
                         Flexible(
                           child: Text(
-                            handle,
+                            thread.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption(
-                              context.mutedForeground,
+                            style: AppTypography.bodySmSemibold(
+                              colors.onSurface,
                             ),
                           ),
                         ),
+                        // A shop's own handle, beside its name.
+                        if (thread.secondaryName case final handle?) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              handle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption(
+                                context.mutedForeground,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        // The little glyph web puts in front of a photo or an
+                        // order line, so the row reads without the words.
+                        if (thread.previewIsPhoto || thread.previewIsOrder) ...[
+                          Icon(
+                            thread.previewIsPhoto
+                                ? LucideIcons.image
+                                : LucideIcons.package,
+                            size: 13,
+                            color: context.mutedForeground,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            thread.preview,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: unread
+                                ? AppTypography.bodySmSemibold(colors.onSurface)
+                                : AppTypography.bodySm(context.mutedForeground),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    thread.lastAt,
+                    style: unread
+                        ? AppTypography.captionSemibold(colors.primary)
+                        : AppTypography.caption(context.mutedForeground),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      // The little glyph web puts in front of a photo or an
-                      // order line, so the row reads without the words.
-                      if (thread.previewIsPhoto || thread.previewIsOrder) ...[
-                        Icon(
-                          thread.previewIsPhoto
-                              ? LucideIcons.image
-                              : LucideIcons.package,
-                          size: 13,
-                          color: context.mutedForeground,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      Expanded(
-                        child: Text(
-                          thread.preview,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: unread
-                              ? AppTypography.bodySmSemibold(colors.onSurface)
-                              : AppTypography.bodySm(context.mutedForeground),
-                        ),
+                  if (unread) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      constraints: const BoxConstraints(minWidth: 18),
+                      height: 18,
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      decoration: BoxDecoration(
+                        color: colors.primary,
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                    ],
-                  ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        thread.unread > 99 ? '99+' : '${thread.unread}',
+                        style: AppTypography.badge(colors.onPrimary),
+                      ),
+                    ),
+                  ],
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  thread.lastAt,
-                  style: AppTypography.caption(context.mutedForeground),
-                ),
-                if (unread) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 18),
-                    height: 18,
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      thread.unread > 99 ? '99+' : '${thread.unread}',
-                      style: AppTypography.badge(colors.onPrimary),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

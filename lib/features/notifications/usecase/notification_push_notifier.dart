@@ -7,6 +7,7 @@ import '../../../app/router/app_router.dart';
 import '../../../core/notifications/local_push.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
+import '../../chat/usecase/chat_notifier.dart';
 import '../repository/models/notification_model.dart';
 import 'notification_route.dart';
 import 'notifications_notifier.dart';
@@ -29,15 +30,18 @@ class NotificationPushNotifier extends Notifier<void> {
 
   @override
   void build() {
-    final user = ref.watch(authProvider).valueOrNull;
+    // Who is signed in, not the whole user: the profile filling in after
+    // launch would otherwise tear the channel down and rejoin it on the same
+    // topic for nothing.
+    final userId = ref.watch(authProvider.select((a) => a.valueOrNull?.id));
 
     ref.onDispose(_teardown);
-    if (user == null) {
+    if (userId == null) {
       _teardown();
       return;
     }
 
-    unawaited(_start(user.id));
+    unawaited(_start(userId));
   }
 
   Future<void> _start(String userId) async {
@@ -75,6 +79,12 @@ class NotificationPushNotifier extends Notifier<void> {
     // The list and its badge first: the bell should be right whether or not
     // the OS lets us post anything.
     ref.read(notificationsProvider.notifier).refresh();
+    // A chat message also moves the chat counters (Akun, the inbox). The
+    // inbox has its own channel, but this row is the signal that reliably
+    // arrives, so it is not left to that channel alone.
+    if (notification.type == NotificationType.chatMessage) {
+      unawaited(ref.read(chatThreadsProvider.notifier).refresh());
+    }
 
     // Already read means it was raised for something the user is looking at.
     if (notification.isRead) return;

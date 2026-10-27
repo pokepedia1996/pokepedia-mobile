@@ -22,6 +22,11 @@ final marketRepositoryProvider = Provider(
 
 final bucketProvider = StateProvider<MarketBucket>((ref) => MarketBucket.all);
 final marketQueryProvider = StateProvider<String>((ref) => '');
+
+/// Set when a new user lands on Market from onboarding's "Tawar kartu
+/// incaran": Market opens on Buying, where the bids are, with a short note
+/// on what a WTB is. Closing the note clears it.
+final marketWtbTipProvider = StateProvider<bool>((ref) => false);
 final marketSortProvider = StateProvider<MarketSort>(
   (ref) => MarketSort.createdDesc,
 );
@@ -82,14 +87,20 @@ class MarketListingsState {
 ///
 /// It used to be a `FutureProvider` fetching a single hardcoded page of 40
 /// with `p_offset: 0`, and nothing could reach row 41. Rebuilt on every
-/// bucket/sort/filter/query change, because each of those is a different
-/// feed and the cursor from the old one means nothing in the new.
-class MarketListingsNotifier extends Notifier<MarketListingsState> {
+/// sort/filter/query change, because each of those is a different feed and
+/// the cursor from the old one means nothing in the new.
+///
+/// One per tab. It used to follow [bucketProvider], which only changes once
+/// a swipe settles — so all three tabs drew the one feed, and the tab being
+/// swiped into showed the old tab's cards until it landed, then swapped
+/// them out. Keyed by bucket, each tab draws its own rows (or its own
+/// loader) throughout the swipe, and still has them on the way back.
+class MarketListingsNotifier
+    extends FamilyNotifier<MarketListingsState, MarketBucket> {
   @override
-  MarketListingsState build() {
+  MarketListingsState build(MarketBucket bucket) {
     // Watched, so changing any of them tears this notifier down and rebuilds
     // it — which is exactly the reset the old provider got for free.
-    final bucket = ref.watch(bucketProvider);
     final query = ref.watch(marketQueryProvider);
     final sort = ref.watch(marketSortProvider);
     final filters = ref.watch(marketFiltersProvider);
@@ -138,7 +149,7 @@ class MarketListingsNotifier extends Notifier<MarketListingsState> {
       final page = await ref
           .read(marketRepositoryProvider)
           .fetchListings(
-            bucket: ref.read(bucketProvider),
+            bucket: arg,
             query: ref.read(marketQueryProvider),
             sort: ref.read(marketSortProvider),
             filters: ref.read(marketFiltersProvider),
@@ -165,9 +176,11 @@ class MarketListingsNotifier extends Notifier<MarketListingsState> {
 }
 
 final marketListingsProvider =
-    NotifierProvider<MarketListingsNotifier, MarketListingsState>(
-      MarketListingsNotifier.new,
-    );
+    NotifierProvider.family<
+      MarketListingsNotifier,
+      MarketListingsState,
+      MarketBucket
+    >(MarketListingsNotifier.new);
 
 final marketStoresProvider = FutureProvider<List<StoreModel>>((ref) {
   final query = ref.watch(marketQueryProvider);
@@ -274,23 +287,18 @@ final storeCardListingsProvider =
       final card = await ref.watch(cardDetailProvider(key.cardId).future);
       if (store == null || card == null) return null;
       final repo = ref.read(marketRepositoryProvider);
-      final listingsFuture = repo.fetchCardListingsForSeller(
+      final listingsResult = await repo.fetchCardListingsForSeller(
         cardId: key.cardId,
         card: card,
         store: store,
       );
-      final Future<({double? positivePct, int feedbackScore})>
-      reputationFuture = store.userId == null
-          ? Future.value((positivePct: null, feedbackScore: 0))
-          : repo.fetchReputation(store.userId!);
-      final listingsResult = await listingsFuture;
-      final reputation = await reputationFuture;
+      // The store fetch already carries the seller's reputation.
       return (
         store: store,
         listings: listingsResult.listings,
         otherSellersCount: listingsResult.otherSellersCount,
-        positivePct: reputation.positivePct,
-        feedbackScore: reputation.feedbackScore,
+        positivePct: store.positivePct,
+        feedbackScore: store.feedbackScore ?? 0,
       );
     });
 

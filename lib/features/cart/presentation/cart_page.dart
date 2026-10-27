@@ -11,8 +11,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
-import '../../../shared/widgets/quantity_selector.dart';
+import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
+import '../../market/usecase/market_notifier.dart';
 import 'checkout_page.dart';
 import 'widgets/empty_cart_card.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -50,7 +51,14 @@ class _CartPageState extends ConsumerState<CartPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const TransparentAppBar(),
+      // The heading rides beside the back button, as the design has it,
+      // rather than taking a row of its own above the list.
+      appBar: TransparentAppBar(
+        title: Text(
+          'Keranjang',
+          style: AppTypography.h2(context.appColors.onSurface),
+        ),
+      ),
       body: AppBarOverlayBody(
         child: items.isEmpty && deals.isEmpty
             ? const EmptyCartCard()
@@ -110,10 +118,14 @@ class _CartBody extends ConsumerWidget {
       groups.putIfAbsent(deal.sellerId, () => []);
     }
 
-    final dealLineCount = selectedDeals.fold(
-      0,
-      (sum, deal) => sum + deal.lines.length,
-    );
+    // Copies, not lines: two of one card count as two, as "3 barang" reads.
+    final pieceCount =
+        selectedItems.fold<int>(0, (sum, item) => sum + item.quantity) +
+        selectedDeals.fold<int>(
+          0,
+          (sum, deal) =>
+              sum + deal.lines.fold<int>(0, (n, line) => n + line.quantity),
+        );
     final dealSubtotal = selectedDeals.fold(
       0,
       (sum, deal) => sum + deal.subtotal,
@@ -125,11 +137,6 @@ class _CartBody extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
-              Text(
-                'Keranjang',
-                style: AppTypography.h2(context.appColors.onSurface),
-              ),
-              const SizedBox(height: 12),
               _SelectAllBar(
                 total: selectableCount,
                 allSelected: allSelected,
@@ -157,7 +164,7 @@ class _CartBody extends ConsumerWidget {
           ),
         ),
         _CheckoutBar(
-          itemCount: selectedItems.length + dealLineCount,
+          itemCount: pieceCount,
           subtotal: subtotal + dealSubtotal,
           // Ports the web's `hasSoldOutSelected` guard. Selection excludes
           // unavailable lines, so this only trips if one went out of stock
@@ -274,8 +281,19 @@ class _SellerGroup extends ConsumerWidget {
         selectable.isNotEmpty &&
         selectable.every((i) => selected.contains(i.cartItemId));
 
+    // The store's rating and record, from the same fetch the storefront
+    // uses — a deal-only group has no slug to look it up by.
+    final slug = first?.storeSlug ?? '';
+    final store = slug.isEmpty
+        ? null
+        : ref.watch(storeDetailProvider(slug)).valueOrNull;
+    final record = [
+      if (store?.completionPct != null) '${store!.completionPct}% selesai',
+      ?store?.shipTimeLabel,
+    ];
+
     final header = Padding(
-      padding: EdgeInsets.fromLTRB(items.isEmpty ? 14 : 8, 8, 12, 8),
+      padding: EdgeInsets.fromLTRB(items.isEmpty ? 14 : 8, 10, 12, 10),
       child: Row(
         children: [
           // Web's seller checkbox covers cart lines only; a deal is ticked
@@ -290,14 +308,38 @@ class _SellerGroup extends ConsumerWidget {
                         .toggleSeller(sellerId, selected: v ?? false),
               visualDensity: VisualDensity.compact,
             ),
-          SellerAvatar(imageUrl: storeImageUrl, name: storeName, size: 22),
-          const SizedBox(width: 8),
+          SellerAvatar(imageUrl: storeImageUrl, name: storeName, size: 30),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              storeName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodySmSemibold(context.appColors.onSurface),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        storeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodySmSemibold(
+                          context.appColors.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (store?.feedbackScore case final score?) ...[
+                      const SizedBox(width: 6),
+                      ReputationStar(score: score),
+                    ],
+                  ],
+                ),
+                if (record.isNotEmpty)
+                  Text(
+                    record.join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+              ],
             ),
           ),
           if (first != null)
@@ -558,71 +600,72 @@ class _CartLine extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${card.collectorNumber} · ${card.expansionCode.toUpperCase()}',
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Row(
                     children: [
-                      if (!card.isSealed)
+                      Flexible(
+                        child: Text(
+                          '${card.collectorNumber} · ${card.expansionCode.toUpperCase()}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                      ),
+                      if (!card.isSealed) ...[
+                        const SizedBox(width: 6),
                         ConditionBadge(
                           condition: listing.condition,
                           dense: true,
                         ),
-                      if (!available) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          listing.status == ListingStatus.open
-                              ? 'Stok habis'
-                              : 'Tidak tersedia',
-                          style: AppTypography.caption(colors.error),
-                        ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  if (!available) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      listing.status == ListingStatus.open
+                          ? 'Stok habis'
+                          : 'Tidak tersedia',
+                      style: AppTypography.caption(colors.error),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (available)
-                        QuantitySelector(
-                          value: item.quantity,
-                          min: 1,
-                          max: listing.available,
-                          onChanged: (q) => ref
-                              .read(cartProvider.notifier)
-                              .updateQuantity(item, q),
-                        ),
-                      const Spacer(),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            formatRupiah(item.subtotal),
-                            style: AppTypography.bodySmSemibold(
-                              colors.onSurface,
-                            ),
-                          ),
-                          // An accepted offer: the list price struck
-                          // through, as web's cart line shows it.
-                          if (item.hasOfferPrice)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              formatRupiah(listing.price * item.quantity),
-                              style:
-                                  AppTypography.caption(
-                                    context.mutedForeground,
-                                  ).copyWith(
-                                    decoration: TextDecoration.lineThrough,
-                                  ),
+                              formatRupiah(item.subtotal),
+                              style: AppTypography.bodySemibold(
+                                colors.onSurface,
+                              ),
                             ),
-                        ],
+                            // An accepted offer: the list price struck
+                            // through, as web's cart line shows it.
+                            if (item.hasOfferPrice)
+                              Text(
+                                formatRupiah(listing.price * item.quantity),
+                                style:
+                                    AppTypography.caption(
+                                      context.mutedForeground,
+                                    ).copyWith(
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                              ),
+                          ],
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(LucideIcons.trash2, size: 19),
-                        color: context.mutedForeground,
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => ref
+                      _LineStepper(
+                        quantity: item.quantity,
+                        // A sold-out line can only be removed.
+                        max: available ? listing.available : null,
+                        onChanged: (q) => ref
+                            .read(cartProvider.notifier)
+                            .updateQuantity(item, q),
+                        onRemove: () => ref
                             .read(cartProvider.notifier)
                             .remove(item.cartItemId),
                       ),
@@ -633,6 +676,85 @@ class _CartLine extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The cart's stepper: one bordered pill whose minus turns into a bin at a
+/// single copy, so removing a line is the same gesture as lowering it —
+/// there is no separate delete button to aim for. With no [max] (a line that
+/// sold out) only the bin is offered.
+class _LineStepper extends StatelessWidget {
+  const _LineStepper({
+    required this.quantity,
+    required this.max,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final int quantity;
+  final int? max;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final limit = max;
+    final atOne = quantity <= 1 || limit == null;
+
+    Widget step(IconData icon, String tooltip, VoidCallback? onTap) => Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(
+            icon,
+            size: 16,
+            color: onTap == null
+                ? context.mutedForeground.withValues(alpha: 0.4)
+                : colors.onSurface,
+          ),
+        ),
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          atOne
+              ? step(LucideIcons.trash2, 'Hapus', onRemove)
+              : step(
+                  LucideIcons.minus,
+                  'Kurangi',
+                  () => onChanged(quantity - 1),
+                ),
+          if (limit != null) ...[
+            SizedBox(
+              width: 22,
+              child: Text(
+                '$quantity',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
+            ),
+            step(
+              LucideIcons.plus,
+              'Tambah',
+              quantity < limit ? () => onChanged(quantity + 1) : null,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -672,39 +794,83 @@ class _CheckoutBar extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'Subtotal ($itemCount item)',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySm(context.mutedForeground),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total · $itemCount barang',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          formatRupiah(subtotal),
+                          style: AppTypography.h2(colors.onSurface),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  formatRupiah(subtotal),
-                  style: AppTypography.h3(colors.primary),
+                const SizedBox(width: 12),
+                // A soft red glow under the button rather than Material's
+                // grey elevation, so it reads as the one thing to press. A
+                // blocked checkout drops it along with its colour.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    boxShadow: blocked
+                        ? null
+                        : [
+                            BoxShadow(
+                              color: colors.primary.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: blocked ? null : onCheckout,
+                    style: ElevatedButton.styleFrom(
+                      elevation: 0,
+                      minimumSize: const Size(0, 50),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                      ),
+                      // The heading face, as the total beside it: Urbanist
+                      // with its weight raised by `copyWith` keeps the
+                      // regular font file and only fakes the bold, which
+                      // reads thin.
+                      textStyle: AppTypography.h3(
+                        colors.onPrimary,
+                      ).copyWith(fontSize: 15, height: 1.2),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 8,
+                      children: [
+                        Text('Checkout'),
+                        Icon(LucideIcons.arrowRight, size: 15),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: blocked ? null : onCheckout,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-              child: const Text('Lanjut ke Checkout'),
-            ),
             if (hasSoldOut) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 'Hapus item habis stok untuk lanjut',
-                textAlign: TextAlign.center,
                 style: AppTypography.caption(context.appSemantic.gold),
               ),
             ] else if (itemCount == 0) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 'Pilih kartu dulu untuk lanjut',
-                textAlign: TextAlign.center,
                 style: AppTypography.caption(context.mutedForeground),
               ),
             ],

@@ -9,6 +9,7 @@ import 'card_art.dart';
 import 'card_language_badge.dart';
 import 'card_price_note.dart';
 import 'selection_mark.dart';
+import '../../core/utils/image_url.dart';
 
 /// Everything in a tile that isn't artwork or the variant line: the name,
 /// expansion and price rows, the gaps between them, and the tile's vertical
@@ -255,11 +256,11 @@ class CardGridItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (selected == null)
-                  CardArt(imageUrl: card.imageUrl)
+                  CardArt(imageUrl: card.imageUrl, size: ImageSize.half)
                 else
                   Stack(
                     children: [
-                      CardArt(imageUrl: card.imageUrl),
+                      CardArt(imageUrl: card.imageUrl, size: ImageSize.half),
                       // Top-right: a Pokémon card's own art is busiest at the
                       // top-left, where the evolution box sits.
                       Positioned(

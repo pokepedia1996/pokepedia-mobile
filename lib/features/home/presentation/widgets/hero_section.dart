@@ -7,6 +7,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/widgets/marquee.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 const _cdn = 'https://cdn2.pokepedia.id';
 String _cardUrl(int i) => '$_cdn/hero/sm/$i.webp';
@@ -212,7 +213,7 @@ class _HeroSectionState extends State<HeroSection>
           for (final url in urls)
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: Image.network(
+              child: cachedNetworkImage(
                 url,
                 height: 100,
                 fit: BoxFit.cover,

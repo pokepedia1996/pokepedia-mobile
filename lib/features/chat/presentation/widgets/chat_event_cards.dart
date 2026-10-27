@@ -15,6 +15,7 @@ import '../../../proposals/repository/models/listing_offer_model.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../repository/models/chat_models.dart';
 import '../../../cart/usecase/cart_notifier.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// The system-authored bubbles, ported from `features/chat/components/events`.
 ///
@@ -364,7 +365,7 @@ class _Thumb extends StatelessWidget {
         color: context.appColors.secondary,
         child: url == null || url.isEmpty
             ? placeholder
-            : Image.network(
+            : cachedNetworkImage(
                 url,
                 fit: BoxFit.cover,
                 // `object-[center_15%]` on the web — card art reads best from
