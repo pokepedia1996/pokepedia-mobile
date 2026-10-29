@@ -73,6 +73,7 @@ dependencies:
   sign_in_with_apple: ^8.2.0
   crypto: ^3.0.7
   flutter_litert: ^3.9.1
+  wakelock_plus: ^1.8.0
 dev_dependencies:
   # Generate the launcher icon and the splash from `branding/`, which
   # `tool/generate_branding.dart` derives from the website's own artwork.
