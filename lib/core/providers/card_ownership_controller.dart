@@ -4,6 +4,7 @@ import '../../features/expansions/usecase/expansions_notifier.dart';
 import '../../features/portfolio/usecase/collection_page_notifier.dart';
 import '../../features/portfolio/usecase/portfolio_notifier.dart';
 import '../../features/portfolio/repository/models/inventory_entry.dart';
+import '../../shared/models/card_condition.dart';
 import '../../shared/models/deck_model.dart';
 
 /// Single choke point for every mutation that changes what a user owns or
@@ -34,18 +35,27 @@ class CardOwnershipController {
   /// The destination only applies on the way in. A negative [delta] is always
   /// the main collection's, since that's the count the card-detail stepper
   /// works against; a list gives cards back through `removeCardsFromList`.
+  ///
+  /// [condition] is the `collection_cards` row the copies are in. Left null,
+  /// an add files NM and a removal draws down across the card's conditions.
   Future<String?> adjustQuantity({
     required String userId,
     required int cardId,
     required int delta,
     String? listId,
+    CardCondition? condition,
   }) async {
     if (listId != null && delta > 0) {
-      return _storeInList(listId, {cardId: delta});
+      return _storeInList(listId, {cardId: delta}, condition: condition);
     }
     final error = await _ref
         .read(expansionsRepositoryProvider)
-        .upsertUserCard(userId: userId, cardId: cardId, delta: delta);
+        .upsertUserCard(
+          userId: userId,
+          cardId: cardId,
+          delta: delta,
+          condition: condition,
+        );
     if (error == null) _revalidateOwnership(cardId);
     return error;
   }
@@ -84,6 +94,7 @@ class CardOwnershipController {
     required String listId,
     required int cardId,
     required int quantity,
+    CardCondition? condition,
   }) async {
     final error = await _ref
         .read(portfolioRepositoryProvider)
@@ -91,8 +102,12 @@ class CardOwnershipController {
           listId: listId,
           cardId: cardId,
           quantity: quantity,
+          condition: condition,
         );
-    if (error == null) _revalidateList(listId);
+    if (error == null) {
+      _revalidateList(listId);
+      _ref.invalidate(conditionQuantitiesProvider);
+    }
     return error;
   }
 
@@ -124,12 +139,20 @@ class CardOwnershipController {
 
   Future<String?> _storeInList(
     String listId,
-    Map<int, int> quantityByCardId,
-  ) async {
+    Map<int, int> quantityByCardId, {
+    CardCondition? condition,
+  }) async {
     final error = await _ref
         .read(portfolioRepositoryProvider)
-        .addCopiesToList(listId: listId, quantityByCardId: quantityByCardId);
-    if (error == null) _revalidateList(listId);
+        .addCopiesToList(
+          listId: listId,
+          quantityByCardId: quantityByCardId,
+          condition: condition,
+        );
+    if (error == null) {
+      _revalidateList(listId);
+      _ref.invalidate(conditionQuantitiesProvider);
+    }
     return error;
   }
 
@@ -161,6 +184,7 @@ class CardOwnershipController {
     for (final cardId in cardIds) {
       _ref.invalidate(ownedQuantityProvider(cardId));
     }
+    _ref.invalidate(conditionQuantitiesProvider);
     _ref.invalidate(collectionProvider);
     invalidateCollectionViews(_ref.invalidate);
     // Family-wide: the controller doesn't know which pack slug the caller
@@ -301,6 +325,8 @@ class CardOwnershipController {
 
   void _revalidateOwnership(int cardId) {
     _ref.invalidate(ownedQuantityProvider(cardId));
+    // Family-wide: the same card is keyed once per portfolio.
+    _ref.invalidate(conditionQuantitiesProvider);
     _ref.invalidate(collectionProvider);
     invalidateCollectionViews(_ref.invalidate);
   }

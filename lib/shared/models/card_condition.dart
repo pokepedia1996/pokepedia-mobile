@@ -6,6 +6,11 @@ enum CardCondition {
   lp,
   mp,
   hp,
+
+  /// Damaged: collection-only. Listings and drafts take no DMG grade
+  /// (`listings_condition_check`), so it is never offered when selling;
+  /// price_history carries it for imported sales.
+  dmg,
   psa10,
   psa9,
   psa8,
@@ -46,6 +51,10 @@ const rawConditions = [
   CardCondition.hp,
 ];
 
+/// What a collection row can be filed under — `collection_cards_condition_check`:
+/// the raw grades plus [CardCondition.dmg].
+const collectionConditions = [...rawConditions, CardCondition.dmg];
+
 /// Company headings in `CONDITION_COMPANIES` order (`lib/orders/conditions.ts`),
 /// used to group condition pills. [CardCondition]'s declaration order matches
 /// each company's grade order, so sorting by `values.indexOf` reproduces the
@@ -67,6 +76,8 @@ extension CardConditionX on CardCondition {
         return 'MP';
       case CardCondition.hp:
         return 'HP';
+      case CardCondition.dmg:
+        return 'DMG';
       case CardCondition.psa10:
         return 'PSA10';
       case CardCondition.psa9:
@@ -126,6 +137,10 @@ extension CardConditionX on CardCondition {
   /// picker or filter.
   bool get isLegacy => this == CardCondition.psaLow;
 
+  /// A grade a collection holds but a listing never does — kept out of every
+  /// selling picker.
+  bool get isCollectionOnly => this == CardCondition.dmg;
+
   /// Mirrors `isGradedCondition` in `lib/orders/conditions.ts` (SQL twin
   /// `is_graded_condition`): anything outside NM/LP/MP/HP is a slab.
   bool get isGraded => !isRaw;
@@ -145,6 +160,8 @@ extension CardConditionX on CardCondition {
         return 'MP';
       case CardCondition.hp:
         return 'HP';
+      case CardCondition.dmg:
+        return 'DMG';
       case CardCondition.psa10:
         return 'PSA 10';
       case CardCondition.psa9:
@@ -208,6 +225,8 @@ extension CardConditionX on CardCondition {
         return 'Moderately Played';
       case CardCondition.hp:
         return 'Heavily Played';
+      case CardCondition.dmg:
+        return 'Damaged';
       default:
         return short;
     }
@@ -222,6 +241,7 @@ extension CardConditionX on CardCondition {
       case CardCondition.lp:
       case CardCondition.mp:
       case CardCondition.hp:
+      case CardCondition.dmg:
         return short;
       case CardCondition.psa10:
       case CardCondition.cgc10:

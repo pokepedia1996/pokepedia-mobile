@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/models/deck_model.dart';
 import '../../../shared/models/pokemon_type.dart';
@@ -994,6 +995,7 @@ class PortfolioRepository {
   Future<String?> addCopiesToList({
     required String listId,
     required Map<int, int> quantityByCardId,
+    CardCondition? condition,
   }) async {
     if (quantityByCardId.isEmpty) return null;
     try {
@@ -1005,6 +1007,7 @@ class PortfolioRepository {
             'p_collection_id': listId,
             'p_card_id': entry.key,
             'p_delta': entry.value,
+            'p_condition': ?condition?.raw,
           },
         );
       }
@@ -1022,19 +1025,28 @@ class PortfolioRepository {
   /// writing the absolute value straight to the table is what keeps the
   /// primary collection's inventory drawdown firing on a decrease; the read
   /// is the price of that.
+  ///
+  /// [condition] is the row being set. The card can be held in several, so
+  /// without one the quantity is the card's total across all of them, and a
+  /// decrease draws down whichever was touched last.
   Future<String?> setListCardQuantity({
     required String listId,
     required int cardId,
     required int quantity,
+    CardCondition? condition,
   }) async {
     try {
-      final row = await _client
+      var query = _client
           .from('collection_cards')
           .select('quantity')
           .eq('collection_id', listId)
-          .eq('card_id', cardId)
-          .maybeSingle();
-      final current = (row?['quantity'] as num?)?.toInt() ?? 0;
+          .eq('card_id', cardId);
+      if (condition != null) query = query.eq('condition', condition.raw);
+      final rows = await query;
+      final current = rows.fold<int>(
+        0,
+        (sum, r) => sum + ((r['quantity'] as num?)?.toInt() ?? 0),
+      );
       final target = quantity < 1 ? 0 : quantity;
       final delta = target - current;
       if (delta == 0) return null;
@@ -1045,6 +1057,7 @@ class PortfolioRepository {
           'p_collection_id': listId,
           'p_card_id': cardId,
           'p_delta': delta,
+          'p_condition': ?condition?.raw,
         },
       );
       return null;

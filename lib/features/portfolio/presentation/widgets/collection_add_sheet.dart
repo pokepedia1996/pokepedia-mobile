@@ -10,12 +10,14 @@ import '../../../../core/providers/card_ownership_controller.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/pikachu_loader.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/portfolio_notifier.dart';
 import 'add_destination_sheet.dart';
+import 'collection_condition_field.dart';
 import '../../../../core/utils/image_url.dart';
 
 /// Minimum query length before the picker searches, matching
@@ -73,7 +75,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
     final user = ref.read(authProvider).valueOrNull;
     if (user == null) return;
 
-    final quantity = await showModalBottomSheet<int>(
+    final picked = await showModalBottomSheet<_Picked>(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
@@ -81,12 +83,13 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
       ),
       builder: (_) => _QuantitySheet(card: card),
     );
-    if (quantity == null || quantity < 1 || !mounted) return;
+    if (picked == null || picked.quantity < 1 || !mounted) return;
+    final (:quantity, :condition) = picked;
 
     final destination = await showAddDestinationSheet(
       context,
       ref,
-      subtitle: '${card.name} ×$quantity',
+      subtitle: '${card.name} ${condition.short} ×$quantity',
     );
     if (destination == null || !mounted) return;
 
@@ -98,6 +101,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
           cardId: card.id,
           delta: quantity,
           listId: destination.listId,
+          condition: condition,
         );
     if (!mounted) return;
     setState(() => _addingCardId = null);
@@ -114,7 +118,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            '${card.name} ×$quantity ditambahkan ke '
+            '${card.name} ${condition.short} ×$quantity ditambahkan ke '
             '${portfolioDestinationLabel(destination)}',
           ),
           duration: const Duration(seconds: 2),
@@ -285,7 +289,11 @@ class _ResultTile extends StatelessWidget {
   }
 }
 
-/// How many copies to add — the quantity step of the web modal.
+/// What the quantity step hands back.
+typedef _Picked = ({int quantity, CardCondition condition});
+
+/// How many copies to add, and in what condition — the quantity step of the
+/// web modal.
 class _QuantitySheet extends StatefulWidget {
   const _QuantitySheet({required this.card});
 
@@ -297,6 +305,7 @@ class _QuantitySheet extends StatefulWidget {
 
 class _QuantitySheetState extends State<_QuantitySheet> {
   int _quantity = 1;
+  CardCondition _condition = CardCondition.nm;
 
   @override
   Widget build(BuildContext context) {
@@ -329,9 +338,17 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                 ),
               ],
             ),
+            const SizedBox(height: 14),
+            CollectionConditionField(
+              label: 'Kondisi',
+              value: _condition,
+              onChanged: (value) => setState(() => _condition = value),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(_quantity),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop((quantity: _quantity, condition: _condition)),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(46),
               ),

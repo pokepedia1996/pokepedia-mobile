@@ -23,6 +23,8 @@ import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
 import '../../../shared/utils/csv_export.dart';
+import '../../../shared/models/card_condition.dart';
+import '../repository/models/collection_page.dart';
 import '../usecase/collection_page_notifier.dart';
 import '../usecase/portfolio_export.dart';
 import '../usecase/portfolio_notifier.dart';
@@ -98,17 +100,20 @@ class _CollectionTab extends ConsumerStatefulWidget {
   ConsumerState<_CollectionTab> createState() => _CollectionTabState();
 }
 
-/// A staged quantity edit, remembering what the card held when it was
+/// A staged quantity edit, remembering what the row held when it was
 /// staged — the page under it can reload mid-edit, and the write is a delta.
-typedef _StagedEdit = ({int from, int to});
+/// The card and condition say which `collection_cards` row it writes to.
+typedef _StagedEdit = ({int cardId, CardCondition condition, int from, int to});
 
 class _CollectionTabState extends ConsumerState<_CollectionTab> {
   CardViewMode _viewMode = CardViewMode.grid;
 
   bool _editMode = false;
 
-  /// Staged quantities by card id — only the ones the user actually moved.
-  final Map<int, _StagedEdit> _edits = {};
+  /// Staged quantities by `collection_cards.id` — only the rows the user
+  /// actually moved. By row, not card: the same card held in NM and LP is
+  /// two tiles with two counts.
+  final Map<String, _StagedEdit> _edits = {};
 
   /// Cards ticked in Kelola mode, for the batch actions.
   final Set<int> _selected = {};
@@ -137,13 +142,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     });
   }
 
-  void _stage(CardModel card, int quantity) {
+  void _stage(CollectionCardRow row, int quantity) {
     setState(() {
-      final from = _edits[card.id]?.from ?? card.owned;
+      final key = row.collectionCardId;
+      final from = _edits[key]?.from ?? row.card.owned;
       if (quantity == from) {
-        _edits.remove(card.id);
+        _edits.remove(key);
       } else {
-        _edits[card.id] = (from: from, to: quantity);
+        _edits[key] = (
+          cardId: row.card.id,
+          condition: row.condition,
+          from: from,
+          to: quantity,
+        );
       }
     });
   }
@@ -186,18 +197,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     final target = ref.read(selectedPortfolioProvider);
     String? failure;
 
-    for (final entry in _edits.entries) {
-      final edit = entry.value;
+    for (final edit in _edits.values) {
       final error = target.isPrimary
           ? await controller.adjustQuantity(
               userId: user.id,
-              cardId: entry.key,
+              cardId: edit.cardId,
               delta: edit.to - edit.from,
+              condition: edit.condition,
             )
           : await controller.setListCardQuantity(
               listId: target.listId!,
-              cardId: entry.key,
+              cardId: edit.cardId,
               quantity: edit.to,
+              condition: edit.condition,
             );
       failure ??= error;
     }
@@ -288,7 +300,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                     ),
                   ),
                 ),
-              ..._body(page, cards, collectionEmpty),
+              ..._body(page, collectionEmpty),
               SliverToBoxAdapter(
                 child: SizedBox(
                   // Room for the nav pill, plus the batch bar when it's up.
@@ -320,12 +332,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     );
   }
 
-  List<Widget> _body(
-    CollectionPageState page,
-    List<CardModel> cards,
-    bool collectionEmpty,
-  ) {
-    if (cards.isEmpty) {
+  List<Widget> _body(CollectionPageState page, bool collectionEmpty) {
+    final rows = page.rows;
+    if (rows.isEmpty) {
       if (page.loading) {
         return const [
           SliverPadding(
@@ -358,9 +367,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
           sliver: SliverCardGrid(
             // The stepper row only exists while editing.
             extraChrome: _editMode ? cardGridItemFooterChrome : 0,
-            hasVariant: (i) => cards[i].variantLabel != null,
-            itemCount: cards.length,
-            itemBuilder: (context, i) => _collectionCard(cards[i]),
+            hasVariant: (i) => rows[i].card.variantLabel != null,
+            itemCount: rows.length,
+            itemBuilder: (context, i) => _collectionCard(rows[i]),
           ),
         )
       else
@@ -370,9 +379,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
             delegate: SliverChildBuilderDelegate(
               (context, i) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _collectionCard(cards[i], list: true),
+                child: _collectionCard(rows[i], list: true),
               ),
-              childCount: cards.length,
+              childCount: rows.length,
               addAutomaticKeepAlives: false,
             ),
           ),
@@ -519,13 +528,14 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       ..showSnackBar(SnackBar(content: Text(message), persist: false));
   }
 
-  Widget _collectionCard(CardModel card, {bool list = false}) {
+  Widget _collectionCard(CollectionCardRow row, {bool list = false}) {
+    final card = row.card;
     // Out of edit mode a tile is just a link to the card.
     if (!_editMode) {
       void open() => context.push(Routes.cardDetail(card.packSlug, card.id));
       return list
-          ? CardListItem(card: card, onTap: open)
-          : CardGridItem(card: card, onTap: open);
+          ? CardListItem(card: card, condition: row.condition, onTap: open)
+          : CardGridItem(card: card, condition: row.condition, onTap: open);
     }
 
     // In edit mode the tile stops being a link — it's a checkbox. Tapping
@@ -536,16 +546,18 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     // to cover the tile's text to sit anywhere, and its taps then had to be
     // carved back out of the tile underneath.
     final selected = _selected.contains(card.id);
-    final footer = _stepperRow(card);
+    final footer = _stepperRow(row);
     return list
         ? CardListItem(
             card: card,
+            condition: row.condition,
             selected: selected,
             onTap: () => _toggleSelected(card),
             footer: footer,
           )
         : CardGridItem(
             card: card,
+            condition: row.condition,
             selected: selected,
             onTap: () => _toggleSelected(card),
             footer: footer,
@@ -554,19 +566,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   /// The quantity stepper, and the trash that zeroes a card out in one tap
   /// instead of holding minus down — web's edit-mode row.
-  Widget _stepperRow(CardModel card) {
-    final quantity = _edits[card.id]?.to ?? card.owned;
+  Widget _stepperRow(CollectionCardRow row) {
+    final quantity = _edits[row.collectionCardId]?.to ?? row.card.owned;
     return Row(
       children: [
         QuantitySelector(
           value: quantity,
-          onChanged: (value) => _stage(card, value),
+          onChanged: (value) => _stage(row, value),
           size: QuantitySelectorSize.sm,
         ),
         const Spacer(),
         if (quantity > 0)
           InkWell(
-            onTap: () => _stage(card, 0),
+            onTap: () => _stage(row, 0),
             borderRadius: BorderRadius.circular(AppRadius.sm),
             child: Padding(
               padding: const EdgeInsets.all(4),

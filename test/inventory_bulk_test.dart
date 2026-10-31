@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pokepedia_mobile/shared/models/card_condition.dart';
 import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/providers/card_ownership_controller.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
@@ -90,6 +91,7 @@ class _FakeExpansions implements ExpansionsRepository {
     required String userId,
     required int cardId,
     required int delta,
+    CardCondition? condition,
   }) async {
     upserts.update(cardId, (q) => q + delta, ifAbsent: () => delta);
     return null;
