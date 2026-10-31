@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 
+import '../repository/disputes_repository.dart';
 import '../repository/models/dispute_model.dart';
 import '../repository/models/order_model.dart';
 import '../repository/models/order_rating.dart';
@@ -86,9 +87,32 @@ final orderRatingProvider = FutureProvider.family<OrderRating?, String>((
   return ref.read(ordersRepositoryProvider).fetchMyRating(order);
 });
 
-final orderDisputeProvider = FutureProvider.family<DisputeModel?, String>((
+/// Which dispute an order's "Lihat komplain" opens — the slug the detail
+/// page then loads by.
+final orderDisputeProvider = FutureProvider.family<String?, String>((
   ref,
   orderSlug,
 ) {
-  return ref.read(ordersRepositoryProvider).fetchDispute(orderSlug);
+  return ref.read(ordersRepositoryProvider).fetchDisputeSlug(orderSlug);
 });
+
+final disputesRepositoryProvider = Provider(
+  (ref) => DisputesRepository(
+    ref.read(supabaseClientProvider),
+    ref.read(pokepediaApiProvider),
+  ),
+);
+
+/// One dispute, by slug, as the signed-in buyer or seller sees it.
+final disputeDetailProvider = FutureProvider.autoDispose
+    .family<DisputeModel?, String>((ref, slug) {
+      return ref.read(disputesRepositoryProvider).fetchDispute(slug);
+    });
+
+/// The package's other unresolved disputes, beside the one on screen.
+final siblingDisputesProvider = FutureProvider.autoDispose
+    .family<List<SiblingDispute>, String>((ref, slug) async {
+      final dispute = await ref.watch(disputeDetailProvider(slug).future);
+      if (dispute == null) return const [];
+      return ref.read(disputesRepositoryProvider).fetchSiblings(dispute);
+    });

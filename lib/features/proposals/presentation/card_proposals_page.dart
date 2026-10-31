@@ -24,6 +24,7 @@ import '../repository/models/sent_proposal.dart';
 import '../usecase/proposals_notifier.dart';
 import 'widgets/bid_edit_sheet.dart';
 import 'widgets/sent_proposal_card.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `/proposals/card/[cardId]` — everything happening on one card:
 /// your bids for it, the proposals sellers made on those bids, and the
@@ -99,6 +100,11 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: async.when(
+          // The refresh invalidates the lists this is built from, which
+          // Riverpod reports as a reload rather than a refresh — without
+          // this the page dropped to the loader instead of keeping the
+          // proposals up until the new ones landed.
+          skipLoadingOnReload: true,
           loading: () => const PikachuLoader(),
           error: (_, __) => Center(
             child: Text(
@@ -124,6 +130,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
                 ref.invalidate(myBidsProvider);
                 ref.invalidate(receivedProposalsProvider);
                 ref.invalidate(sentProposalsProvider);
+                ref.invalidate(proposalCardFeedProvider);
                 await ref.read(cardProposalsProvider(widget.cardId).future);
               },
               child: ListView(
@@ -221,6 +228,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       ref.invalidate(receivedProposalsProvider);
       ref.invalidate(sentProposalsProvider);
       ref.invalidate(myBidsProvider);
+      ref.invalidate(proposalCardFeedProvider);
       ref.invalidate(proposalsSummaryProvider);
     }
   }
@@ -245,6 +253,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     ref.invalidate(receivedProposalsProvider);
     ref.invalidate(sentProposalsProvider);
     ref.invalidate(myBidsProvider);
+    ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(proposalsSummaryProvider);
     ref.invalidate(myPendingCheckoutsProvider);
     ref.invalidate(cartDealsProvider);
@@ -270,6 +279,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     await Navigator.of(context).push(dealCheckoutRoute([externalId]));
     if (!mounted) return;
     ref.invalidate(myBidsProvider);
+    ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(myPendingCheckoutsProvider);
     ref.invalidate(cartDealsProvider);
   }
@@ -791,7 +801,7 @@ class _ProposalPhotos extends StatelessWidget {
                 child: SizedBox(
                   width: 40,
                   height: 56,
-                  child: Image.network(
+                  child: cachedNetworkImage(
                     url,
                     fit: BoxFit.cover,
                     errorBuilder: (context, _, __) => ColoredBox(
@@ -823,7 +833,7 @@ class _ProposalPhotos extends StatelessWidget {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(16),
         child: InteractiveViewer(
-          child: Image.network(urls[index.clamp(0, urls.length - 1)]),
+          child: cachedNetworkImage(urls[index.clamp(0, urls.length - 1)]),
         ),
       ),
     );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'app_network_image.dart';
+import '../../core/utils/image_url.dart';
 
 /// Ports `components/auth/user-avatar.tsx` and the profile page's
 /// `ProfileAvatar` — a circular avatar falling back to the first two
@@ -51,8 +53,9 @@ class UserAvatar extends StatelessWidget {
                 color: context.mutedForeground,
               ),
             )
-          : Image.network(
+          : cachedNetworkImage(
               imageUrl!,
+              size: ImageSize.half,
               width: size,
               height: size,
               fit: BoxFit.cover,

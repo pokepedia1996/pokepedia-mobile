@@ -89,7 +89,7 @@ class MarketplaceFeedSection extends ConsumerWidget {
           // wants once these listings have run out, and that is where their
           // eye already is. Held back while loading, when there is not yet
           // anything to have finished looking at.
-          if (!async.isLoading)
+          if (!async.isLoading || async.isRefreshing)
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: SizedBox(

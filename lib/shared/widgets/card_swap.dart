@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_radius.dart';
+import 'app_network_image.dart';
 
 /// Ports `components/ui/card-swap.tsx` — a stack of cards where the front
 /// card periodically drops away and cycles to the back, promoting the rest.
@@ -182,7 +183,7 @@ class _DeckCard extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Image.network(
+          child: cachedNetworkImage(
             imageUrl,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) =>

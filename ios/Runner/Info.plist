@@ -33,7 +33,10 @@
 			<string>google-sign-in</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- <string>com.googleusercontent.apps.432953151230-apilpmrt9i10lgmeetth90qmr84c98g9</string> -->
+				<!-- Both environments' iOS client IDs, reversed: dev (env.json) and
+				     prod (env-prod.json). Google returns to whichever the build's
+				     GOOGLE_IOS_CLIENT_ID names, so one Info.plist serves both. -->
+				<string>com.googleusercontent.apps.432953151230-apilpmrt9i10lgmeetth90qmr84c98g9</string>
 				<string>com.googleusercontent.apps.413418907689-7l52s25r9rgaod1t02c65o2sl0rk14fm</string>
 			</array>
 		</dict>
@@ -52,6 +55,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Tandai lokasimu di peta sebagai titik jemput kurir untuk kiriman tokomu.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Pindai kartu untuk mengenalinya dan melihat harganya, atau ambil foto kartu untuk dilampirkan ke listing jualanmu.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

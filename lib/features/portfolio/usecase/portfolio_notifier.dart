@@ -87,12 +87,49 @@ final inventoryRecordsProvider = FutureProvider<List<InventoryEntry>>((ref) {
   return ref.read(portfolioRepositoryProvider).fetchInventoryRecords(user.id);
 });
 
-/// Staged-but-not-yet-confirmed rows from the "Tambahkan" flow.
-final inventoryDraftsProvider = FutureProvider<List<InventoryEntry>>((ref) {
+/// Which Database columns the user shows, and their own. A failure reads
+/// as "no settings", which shows every built-in column — the table is still
+/// usable without them.
+final inventoryColumnsProvider = FutureProvider<List<InventoryColumn>>((
+  ref,
+) async {
   final user = ref.watch(authProvider).valueOrNull;
-  if (user == null) return Future.value(const []);
-  return ref.read(portfolioRepositoryProvider).fetchDraftRecords(user.id);
+  if (user == null) return const [];
+  try {
+    return await ref
+        .read(portfolioRepositoryProvider)
+        .fetchInventoryColumns(user.id);
+  } catch (_) {
+    return const [];
+  }
 });
+
+/// Staged-but-not-yet-confirmed rows from the "Tambahkan" flow.
+///
+/// A notifier rather than a plain future so an edit can be written into the
+/// list it came from: a sync can stage thousands of drafts, and re-reading
+/// all of them after every price typed into one was most of what made the
+/// table crawl.
+class InventoryDraftsNotifier extends AsyncNotifier<List<InventoryEntry>> {
+  @override
+  Future<List<InventoryEntry>> build() {
+    final user = ref.watch(authProvider).valueOrNull;
+    if (user == null) return Future.value(const []);
+    return ref.read(portfolioRepositoryProvider).fetchDraftRecords(user.id);
+  }
+
+  /// Swaps in [entry] for the draft with its id, once its edit is saved.
+  void patch(InventoryEntry entry) {
+    final drafts = state.valueOrNull;
+    if (drafts == null) return;
+    state = AsyncData([for (final d in drafts) d.id == entry.id ? entry : d]);
+  }
+}
+
+final inventoryDraftsProvider =
+    AsyncNotifierProvider<InventoryDraftsNotifier, List<InventoryEntry>>(
+      InventoryDraftsNotifier.new,
+    );
 
 final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((
   ref,
@@ -106,10 +143,22 @@ final inventoryActivityProvider = FutureProvider<List<InventoryActivityEntry>>((
 /// language to stay inside.
 typedef CardPickerQuery = ({String query, CardLanguage? language});
 
-/// The deck builder's card search — sealed products left out, prices on.
-final deckCardSearchProvider = FutureProvider.family<List<CardModel>, String>(
-  (ref, query) => ref.read(portfolioRepositoryProvider).searchDeckCards(query),
+/// `app_settings.deck_allowed_regulations`, read once per session rather than
+/// on every keystroke of the deck search.
+final deckAllowedRegulationsProvider = FutureProvider<List<String>>(
+  (ref) => ref.read(portfolioRepositoryProvider).fetchDeckAllowedRegulations(),
 );
+
+/// The deck builder's card search — sealed products left out, prices on.
+final deckCardSearchProvider = FutureProvider.family<List<CardModel>, String>((
+  ref,
+  query,
+) async {
+  final marks = await ref.watch(deckAllowedRegulationsProvider.future);
+  return ref
+      .read(portfolioRepositoryProvider)
+      .searchDeckCards(query, regulationMarks: marks);
+});
 
 /// Catalog search for the "Tambahkan" tab's card picker.
 final cardSearchPickerProvider =

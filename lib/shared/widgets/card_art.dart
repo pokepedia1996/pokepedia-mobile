@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_radius.dart';
+import '../../core/utils/image_url.dart';
 import '../utils/sealed_image.dart';
 import 'shimmer_box.dart';
+import 'app_network_image.dart';
 
 /// Pokemon-card artwork (245:342 aspect ratio).
 ///
@@ -23,6 +25,7 @@ class CardArt extends StatelessWidget {
     this.aspectRatio = 245 / 342,
     this.alignment = Alignment.center,
     this.thumbnail = true,
+    this.size = ImageSize.full,
   });
 
   final String? imageUrl;
@@ -42,6 +45,10 @@ class CardArt extends StatelessWidget {
   /// wider than the thumbnail, which web loads at full size too.
   final bool thumbnail;
 
+  /// How large the artwork is fetched. [ImageSize.full] for anything drawn
+  /// wide; a tile in a grid or a row loads a thumbnail.
+  final ImageSize size;
+
   @override
   Widget build(BuildContext context) {
     final tile = cardTileImage(imageUrl);
@@ -56,8 +63,9 @@ class CardArt extends StatelessWidget {
           child: url == null
               ? _CardBack(alignment: alignment)
               : LayoutBuilder(
-                  builder: (context, constraints) => Image.network(
+                  builder: (context, constraints) => cachedNetworkImage(
                     url,
+                    size: size,
                     fit: tile.contain ? BoxFit.contain : BoxFit.cover,
                     alignment: alignment,
                     // Decoded at the size it is drawn at. A catalog scan is

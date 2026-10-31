@@ -25,10 +25,16 @@ import '../../moderation/presentation/user_safety_menu.dart';
 import '../../moderation/usecase/moderation_notifier.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
+import '../../../core/utils/image_url.dart';
 
 /// How many cards each expansion shows before "Lihat Semua", matching web's
 /// `CARDS_PER_EXPANSION`.
 const _cardsPerExpansion = 20;
+
+/// How many of the collection's cards the profile shows — the top of it in
+/// the chosen sort, as a preview rather than the whole shelf. A collection
+/// of thousands drawn in full made the profile slow to open and to scroll.
+const _portfolioPreviewSize = 20;
 
 /// Ports `app/user/[username]/page.tsx` — a public collector profile: the
 /// identity header with socials, the owner's privacy toggles, the
@@ -50,6 +56,26 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
   CardSortOption _sortBy = CardSortOption.priceDesc;
   CardViewMode _viewMode = CardViewMode.grid;
   bool _savingVisibility = false;
+
+  /// Pull-to-refresh: the profile and everything hung off it. Waits on the
+  /// profile and the shelf so the spinner stays until they're back.
+  Future<void> _refresh() async {
+    final username = widget.username;
+    ref.invalidate(userProfileProvider(username));
+    ref.invalidate(userCollectionProvider(username));
+    ref.invalidate(collectionVisibilityProvider(username));
+    ref.invalidate(userContributionsProvider(username));
+    ref.invalidate(profileShopProvider(username));
+    ref.invalidate(profileFollowStatsProvider(username));
+    try {
+      await Future.wait([
+        ref.read(userProfileProvider(username).future),
+        ref.read(userCollectionProvider(username).future),
+      ]);
+    } catch (_) {
+      // The page shows its own error state; the spinner just needs to stop.
+    }
+  }
 
   Future<void> _toggleProfileFlag({
     required String column,
@@ -102,6 +128,11 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
       ),
       body: AppBarOverlayBody(
         child: profileAsync.when(
+          // A pull-to-refresh keeps the old profile up, including when the
+          // reload comes from a provider this one depends on.
+          skipLoadingOnReload: true,
+          // A refresh that fails keeps what was there too.
+          skipError: true,
           data: (profile) {
             if (profile == null) {
               // `get_public_profile` is empty for a blocked pair too; the
@@ -157,102 +188,144 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
               (sum, card) => sum + (card.marketPrice ?? 0) * card.owned,
             );
             final contributions = contributionsAsync.valueOrNull ?? const [];
+            // Filtered and sorted over everything first, so the 20 shown are
+            // the top 20 of what was asked for — not 20 picked at random and
+            // then sorted.
+            final preview = visible.take(_portfolioPreviewSize).toList();
 
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              children: [
-                _ProfileHeader(profile: profile, isOwner: isOwner),
-                if (isOwner) ...[
-                  const SizedBox(height: 14),
-                  _PrivacyToggle(
-                    icon: isCollectionPublic
-                        ? LucideIcons.eye
-                        : LucideIcons.eyeOff,
-                    label: 'Koleksi Publik',
-                    value: isCollectionPublic,
-                    disabled: _savingVisibility,
-                    onChanged: (next) => _toggleProfileFlag(
-                      column: 'is_public',
-                      value: next,
-                      onLabel: 'Koleksi sekarang publik',
-                      offLabel: 'Koleksi sekarang privat',
-                      setSaving: (v) => _savingVisibility = v,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-
-                // The portfolio block: what the collection is worth, then
-                // the same browser and grid the Koleksi page uses, so one
-                // person's shelf reads the same wherever it is opened.
-                if (!isCollectionPublic && !isOwner)
-                  const _NoticeBox(
-                    icon: LucideIcons.lock,
-                    message: 'Koleksi pengguna ini bersifat privat',
-                  )
-                else if (collectionAsync.isLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: PikachuLoader(size: 120),
-                  )
-                else if (collection.isEmpty)
-                  const _NoticeBox(message: 'Pengguna ini belum memiliki kartu')
-                else ...[
-                  _PortfolioHeader(
-                    totalValue: totalValue,
-                    uniqueCards: collection.length,
-                    totalOwned: totalOwned,
-                  ),
-                  const SizedBox(height: 12),
-                  CardFilterBar(
-                    cards: collection,
-                    filters: _filters,
-                    onFiltersChanged: (f) => setState(() => _filters = f),
-                    sortBy: _sortBy,
-                    onSortChanged: (s) => setState(() => _sortBy = s),
-                    viewMode: _viewMode,
-                    onViewModeChanged: (v) => setState(() => _viewMode = v),
-                  ),
-                  const SizedBox(height: 16),
-                  if (visible.isEmpty)
-                    const _NoticeBox(
-                      message: 'Tidak ada kartu yang sesuai filter.',
-                    )
-                  else if (_viewMode == CardViewMode.grid)
-                    CardGridRows(
-                      hasVariant: (i) => visible[i].variantLabel != null,
-                      itemCount: visible.length,
-                      itemBuilder: (context, i) => CardGridItem(
-                        card: visible[i],
-                        onTap: () => context.push(
-                          Routes.cardDetail(visible[i].packSlug, visible[i].id),
-                        ),
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                children: [
+                  _ProfileHeader(profile: profile, isOwner: isOwner),
+                  if (isOwner) ...[
+                    const SizedBox(height: 14),
+                    _PrivacyToggle(
+                      icon: isCollectionPublic
+                          ? LucideIcons.eye
+                          : LucideIcons.eyeOff,
+                      label: 'Koleksi Publik',
+                      value: isCollectionPublic,
+                      disabled: _savingVisibility,
+                      onChanged: (next) => _toggleProfileFlag(
+                        column: 'is_public',
+                        value: next,
+                        onLabel: 'Koleksi sekarang publik',
+                        offLabel: 'Koleksi sekarang privat',
+                        setSaving: (v) => _savingVisibility = v,
                       ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+
+                  // The portfolio block: what the collection is worth, then
+                  // the same browser and grid the Koleksi page uses, so one
+                  // person's shelf reads the same wherever it is opened.
+                  if (!isCollectionPublic && !isOwner)
+                    const _NoticeBox(
+                      icon: LucideIcons.lock,
+                      message: 'Koleksi pengguna ini bersifat privat',
                     )
-                  else
-                    for (final card in visible)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: CardListItem(
-                          card: card,
+                  // Only the first load: a refresh keeps the shelf it has
+                  // on screen and swaps in the new one when it lands.
+                  else if (!collectionAsync.hasValue &&
+                      !collectionAsync.hasError)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: PikachuLoader(size: 120),
+                    )
+                  else if (collection.isEmpty)
+                    const _NoticeBox(
+                      message: 'Pengguna ini belum memiliki kartu',
+                    )
+                  else ...[
+                    _PortfolioHeader(
+                      totalValue: totalValue,
+                      uniqueCards: collection.length,
+                      totalOwned: totalOwned,
+                    ),
+                    const SizedBox(height: 12),
+                    CardFilterBar(
+                      cards: collection,
+                      filters: _filters,
+                      onFiltersChanged: (f) => setState(() => _filters = f),
+                      sortBy: _sortBy,
+                      onSortChanged: (s) => setState(() => _sortBy = s),
+                      viewMode: _viewMode,
+                      onViewModeChanged: (v) => setState(() => _viewMode = v),
+                    ),
+                    const SizedBox(height: 16),
+                    if (visible.isEmpty)
+                      const _NoticeBox(
+                        message: 'Tidak ada kartu yang sesuai filter.',
+                      )
+                    else if (_viewMode == CardViewMode.grid)
+                      CardGridRows(
+                        hasVariant: (i) => preview[i].variantLabel != null,
+                        itemCount: preview.length,
+                        itemBuilder: (context, i) => CardGridItem(
+                          card: preview[i],
                           onTap: () => context.push(
-                            Routes.cardDetail(card.packSlug, card.id),
+                            Routes.cardDetail(
+                              preview[i].packSlug,
+                              preview[i].id,
+                            ),
                           ),
                         ),
+                      )
+                    else
+                      for (final card in preview)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: CardListItem(
+                            card: card,
+                            onTap: () => context.push(
+                              Routes.cardDetail(card.packSlug, card.id),
+                            ),
+                          ),
+                        ),
+                    if (visible.length > preview.length) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: Text(
+                          'Menampilkan ${preview.length} dari '
+                          '${formatCountId(visible.length)} kartu',
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
                       ),
+                      // The owner has the whole collection a tap away.
+                      if (isOwner)
+                        Center(
+                          child: TextButton(
+                            // `go`, not `push`: Portofolio is a tab, and
+                            // pushing a tab's root from this page (which
+                            // sits outside the shell) stacked a second,
+                            // empty shell — a blank screen, and a tab bar
+                            // that then sent Portofolio taps to Akun.
+                            onPressed: () => context.go(Routes.portfolio),
+                            child: const Text('Lihat semua di Portofolio'),
+                          ),
+                        ),
+                    ],
+                  ],
+                  if (contributions.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Kontribusi',
+                      style: AppTypography.h3(colors.onSurface),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${contributions.length} kartu',
+                      style: AppTypography.bodySm(context.mutedForeground),
+                    ),
+                    const SizedBox(height: 12),
+                    _ContributionsSection(contributions: contributions),
+                  ],
                 ],
-                if (contributions.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('Kontribusi', style: AppTypography.h3(colors.onSurface)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${contributions.length} kartu',
-                    style: AppTypography.bodySm(context.mutedForeground),
-                  ),
-                  const SizedBox(height: 12),
-                  _ContributionsSection(contributions: contributions),
-                ],
-              ],
+              ),
             );
           },
           loading: () => const PikachuLoader(),
@@ -771,6 +844,7 @@ class _ContributionsSectionState extends State<_ContributionsSection> {
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: CardArt(
                   imageUrl: card.imageUrl,
+                  size: ImageSize.half,
                   borderRadius: AppRadius.sm,
                 ),
               );

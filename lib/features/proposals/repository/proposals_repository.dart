@@ -197,16 +197,36 @@ class ProposalsRepository {
     if (userId == null) return const [];
 
     final rows = await fetchAllPages<Map<String, dynamic>>(
-      (from, to) => _client
-          .from('bid_proposals')
-          .select(_sentProposalColumns)
-          .eq('seller_id', userId)
-          .isFilter('seller_archived_at', null)
-          .order('created_at', ascending: false)
-          .order('id', ascending: false)
-          .range(from, to),
+      (from, to) => _sentQuery(userId).range(from, to),
       keyOf: (row) => row['slug'] as String,
     );
+    return _sentModels(rows);
+  }
+
+  /// One slice of [fetchSentProposals], newest first — for the Proposal
+  /// feed, which shows the latest activity and loads older on request
+  /// rather than walking a busy seller's whole history at once.
+  Future<({List<SentProposalModel> rows, bool hasMore})>
+  fetchSentProposalsPage({required int offset, required int limit}) async {
+    final userId = _userId;
+    if (userId == null) {
+      return (rows: const <SentProposalModel>[], hasMore: false);
+    }
+    final rows = await _sentQuery(userId).range(offset, offset + limit - 1);
+    return (rows: await _sentModels(rows), hasMore: rows.length == limit);
+  }
+
+  PostgrestTransformBuilder<PostgrestList> _sentQuery(String userId) => _client
+      .from('bid_proposals')
+      .select(_sentProposalColumns)
+      .eq('seller_id', userId)
+      .isFilter('seller_archived_at', null)
+      .order('created_at', ascending: false)
+      .order('id', ascending: false);
+
+  Future<List<SentProposalModel>> _sentModels(
+    List<Map<String, dynamic>> rows,
+  ) async {
     if (rows.isEmpty) return const [];
 
     final usernames = await _usernames(
@@ -259,23 +279,46 @@ class ProposalsRepository {
     if (userId == null) return const [];
 
     final rows = await fetchAllPages<Map<String, dynamic>>(
-      (from, to) => _client
-          .from('listings')
-          .select(
-            'id, slug, price, condition, quantity, qty_locked,'
-            'created_at, expires_at, cards!inner($_cardColumns)',
-          )
-          .eq('user_id', userId)
-          .eq('side', 'bid')
-          .eq('status', 'open')
-          .order('created_at', ascending: false)
-          .order('id', ascending: false)
-          .range(from, to),
+      (from, to) => _bidsQuery(userId).range(from, to),
       keyOf: (row) => row['slug'] as String,
     );
     if (rows.isEmpty) return const [];
+    return _bidModels(rows, await _proposalCountsByBid());
+  }
 
-    final countsByBid = await _proposalCountsByBid();
+  /// One slice of [fetchMyBids], newest first, for the Proposal feed. The
+  /// proposal counts are read for these bids only, not for every proposal
+  /// the buyer ever received.
+  Future<({List<MyBidModel> rows, bool hasMore})> fetchMyBidsPage({
+    required int offset,
+    required int limit,
+  }) async {
+    final userId = _userId;
+    if (userId == null) return (rows: const <MyBidModel>[], hasMore: false);
+    final rows = await _bidsQuery(userId).range(offset, offset + limit - 1);
+    if (rows.isEmpty) return (rows: const <MyBidModel>[], hasMore: false);
+    final counts = await _proposalCountsByBid(
+      bidIds: [for (final row in rows) (row['id'] as num).toInt()],
+    );
+    return (rows: _bidModels(rows, counts), hasMore: rows.length == limit);
+  }
+
+  PostgrestTransformBuilder<PostgrestList> _bidsQuery(String userId) => _client
+      .from('listings')
+      .select(
+        'id, slug, price, condition, quantity, qty_locked,'
+        'created_at, expires_at, cards!inner($_cardColumns)',
+      )
+      .eq('user_id', userId)
+      .eq('side', 'bid')
+      .eq('status', 'open')
+      .order('created_at', ascending: false)
+      .order('id', ascending: false);
+
+  List<MyBidModel> _bidModels(
+    List<Map<String, dynamic>> rows,
+    Map<int, ({int pending, int total, DateTime? latest})> countsByBid,
+  ) {
     return rows.map((row) {
       final counts = countsByBid[(row['id'] as num).toInt()];
       return MyBidModel.fromRow(
@@ -291,14 +334,17 @@ class ProposalsRepository {
   ///
   /// Totals as well as pending, because the card feed reports both — and the
   /// newest proposal's timestamp, which is what orders that feed.
+  ///
+  /// [bidIds] narrows it to those bids; without it, every bid's.
   Future<Map<int, ({int pending, int total, DateTime? latest})>>
-  _proposalCountsByBid() async {
+  _proposalCountsByBid({List<int>? bidIds}) async {
     final userId = _userId;
     if (userId == null) return const {};
 
     final rows = await _fetchReceivedProposalRows(
       userId,
       'slug, bid_order_id, status, created_at, bid:listings!inner(user_id)',
+      bidIds: bidIds,
     );
 
     final counts = <int, ({int pending, int total, DateTime? latest})>{};
@@ -515,6 +561,7 @@ class ProposalsRepository {
     String userId,
     String columns, {
     bool openBidsOnly = false,
+    List<int>? bidIds,
   }) async {
     // Proposals from someone on either side of a block stay hidden, as
     // web's received-proposals route excludes them.
@@ -525,6 +572,7 @@ class ProposalsRepository {
           .select(columns)
           .eq('bid.user_id', userId);
       if (openBidsOnly) query = query.eq('bid.status', 'open');
+      if (bidIds != null) query = query.inFilter('bid_order_id', bidIds);
       if (blocked.isNotEmpty) {
         query = query.not('seller_id', 'in', '(${blocked.join(',')})');
       }

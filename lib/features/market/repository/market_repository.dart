@@ -5,6 +5,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/repository/models/store_identity.dart';
+import '../../seller/repository/models/my_reliability.dart';
 import '../usecase/market_filters.dart';
 import 'models/listing_facets.dart';
 import 'models/market_page.dart';
@@ -149,7 +150,9 @@ class MarketRepository {
                 'p_search': query.trim().isEmpty ? null : query.trim(),
                 'p_offset': 0,
                 'p_limit': 40,
-                'p_sort': 'listings_desc',
+                // Most recently listed toko first, ahead of the
+                // top-rated/verified pinning the other sorts keep.
+                'p_sort': 'recent_activity',
               },
             )
             as List;
@@ -186,32 +189,77 @@ class MarketRepository {
     if (rows.isEmpty) return null;
     final row = rows.first as Map<String, dynamic>;
     final sellerId = row['user_id'] as String?;
-    // `get_seller_storefront_by_slug` doesn't return a listing count; reuse
-    // the listings RPC's own `total_count` instead of a separate query.
-    var activeListingCount = 0;
-    if (sellerId != null) {
-      final listingRows =
-          await _client.rpc(
-                'get_recent_marketplace_listings',
-                params: {
-                  'p_seller_user_id': sellerId,
-                  'p_window_hours': 0,
-                  'p_limit': 1,
-                  'p_offset': 0,
-                },
-              )
-              as List;
-      if (listingRows.isNotEmpty) {
-        activeListingCount =
-            ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
-                ?.toInt() ??
-            0;
-      }
+    if (sellerId == null) {
+      return StoreModel.fromDetailRow(row, activeListingCount: 0);
     }
+    // The header's figures, side by side: the listing count, the feedback
+    // rate and the shipping record — web's storefront page reads the same
+    // three alongside the profile.
+    final (activeListingCount, reputation, reliability) = await (
+      _storeListingCount(sellerId),
+      // Like the reliability read, a missing rate shouldn't cost the page.
+      fetchReputation(
+        sellerId,
+      ).catchError((_) => (positivePct: null, feedbackScore: 0)),
+      _publicReliability(sellerId),
+    ).wait;
     return StoreModel.fromDetailRow(
       row,
       activeListingCount: activeListingCount,
+      positivePct: reputation.positivePct,
+      feedbackScore: reputation.feedbackScore,
+      completionPct: reliability.completionPct,
+      shipHours: reliability.shipHours,
     );
+  }
+
+  /// `get_seller_storefront_by_slug` doesn't return a listing count; reuse
+  /// the listings RPC's own `total_count` instead of a separate query.
+  Future<int> _storeListingCount(String sellerId) async {
+    final listingRows =
+        await _client.rpc(
+              'get_recent_marketplace_listings',
+              params: {
+                'p_seller_user_id': sellerId,
+                'p_window_hours': 0,
+                'p_limit': 1,
+                'p_offset': 0,
+              },
+            )
+            as List;
+    if (listingRows.isEmpty) return 0;
+    return ((listingRows.first as Map<String, dynamic>)['total_count'] as num?)
+            ?.toInt() ??
+        0;
+  }
+
+  /// Ports `fetchSellerReliability` + `describeReliability` for one seller:
+  /// the completion rate and median ship time, each held back until there
+  /// are enough orders behind it. `seller_reliability_stats` is publicly
+  /// readable. A failed read only costs the header two figures, so it
+  /// answers nulls rather than failing the storefront.
+  Future<({int? completionPct, int? shipHours})> _publicReliability(
+    String sellerId,
+  ) async {
+    const none = (completionPct: null, shipHours: null);
+    try {
+      final row = await _client
+          .from('seller_reliability_stats')
+          .select(
+            'paid_orders, completed_orders, seller_cancels, disputes_lost, '
+            'shipped_orders, median_ship_hours',
+          )
+          .eq('seller_id', sellerId)
+          .maybeSingle();
+      if (row == null) return none;
+      final w = ReliabilityWindow.fromJson(row);
+      return (
+        completionPct: w.publicCompletionPct,
+        shipHours: w.publicShipHours,
+      );
+    } catch (_) {
+      return none;
+    }
   }
 
   Future<List<ListingModel>> fetchStoreListings(String handle) async {
@@ -447,10 +495,16 @@ class MarketRepository {
   }
 
   /// The seller's feedback summary, bucketed by period server-side.
-  Future<StoreFeedbackSummary> fetchFeedbackSummary(String userId) async {
+  /// [role] narrows it to orders where they were the seller or the buyer.
+  Future<StoreFeedbackSummary> fetchFeedbackSummary(
+    String userId, {
+    FeedbackRole? role,
+  }) async {
     final result = await _client.rpc(
       'get_feedback_counts_matrix',
-      params: {'p_user_id': userId},
+      // Sent only when narrowing, so Semua still resolves on a database
+      // older than the role filter.
+      params: {'p_user_id': userId, 'p_role': ?role?.raw},
     );
     if (result is! Map) {
       return const StoreFeedbackSummary(positive: 0, neutral: 0, negative: 0);
@@ -465,9 +519,11 @@ class MarketRepository {
   /// included, all periods. The RPC groups sibling items of one order into a
   /// single review and joins the rater's username itself. [filter] is
   /// `positive` / `neutral` / `negative`; [period] is `1mo` / `6mo` / `12mo` /
-  /// `all`; [sort] is `recent` / `oldest`.
+  /// `all`; [sort] is `recent` / `oldest`; [role] keeps only the orders
+  /// where [userId] was the seller or the buyer.
   Future<List<StoreFeedback>> fetchFeedback(
     String userId, {
+    FeedbackRole? role,
     int limit = 20,
     int page = 1,
     String? filter,
@@ -491,6 +547,7 @@ class MarketRepository {
             : trimmedSearch,
         'p_page': page,
         'p_page_size': limit,
+        'p_role': ?role?.raw,
       },
     );
     return StoreFeedback.parseList(result);

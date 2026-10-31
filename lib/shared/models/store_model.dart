@@ -31,6 +31,7 @@ class StoreModel {
     this.vacationUntil,
     this.vacationMessage,
     this.userId,
+    this.username,
     this.logoUrl,
     this.bannerUrl,
     this.aboutMarkdown,
@@ -39,6 +40,8 @@ class StoreModel {
     this.avatarUrl,
     this.feedbackScore,
     this.positivePct,
+    this.completionPct,
+    this.shipHours,
   });
 
   final String handle;
@@ -56,6 +59,10 @@ class StoreModel {
 
   /// `seller_profiles.followers_count`.
   final int followersCount;
+
+  /// The owner's `profiles.username`, shown in the store's Info. Null where
+  /// the source row doesn't carry it.
+  final String? username;
 
   /// `seller_profiles.vacation_mode` ('soft' | 'hard' | null).
   final String? vacationMode;
@@ -81,6 +88,24 @@ class StoreModel {
   /// has rated yet, which is not the same as 0%.
   final double? positivePct;
 
+  /// Web's `describeReliability(...).completionPct` over
+  /// `seller_reliability_stats`: null until the seller has enough paid
+  /// orders for the share to mean anything.
+  final int? completionPct;
+
+  /// Median hours to ship, rounded up — the "Biasa dikirim dalam …" figure.
+  /// Null until enough orders have shipped to publish it.
+  final int? shipHours;
+
+  /// Web's `shipTimeLabel`: hours, or days from 48 hours on.
+  String? get shipTimeLabel {
+    final hours = shipHours;
+    if (hours == null) return null;
+    return hours >= 48
+        ? 'Biasa dikirim dalam ${(hours / 24).ceil()} hari'
+        : 'Biasa dikirim dalam $hours jam';
+  }
+
   /// Logo first, then the owner's avatar — web's `store_logo_url ??
   /// avatar_url`.
   String? get imageUrl => logoUrl ?? avatarUrl;
@@ -100,8 +125,8 @@ class StoreModel {
   bool get onVacation => vacationMode != null;
 
   /// Ports the `search_stores` RPC row (`lib/storefront/store-directory.ts`)
-  /// — the "Toko" directory tab. Doesn't return `top_rated`, so that badge
-  /// only ever shows on the detail page (`fromDetailRow`), same as web.
+  /// — the "Toko" directory tab. `top_rated` drives the card's Top Seller
+  /// badge; it reads false until the RPC returns that column.
   factory StoreModel.fromDirectoryRow(Map<String, dynamic> row) {
     return StoreModel(
       handle: _firstPresent([
@@ -112,11 +137,12 @@ class StoreModel {
         storeName: row['store_name'] as String?,
         username: row['username'] as String?,
       ),
+      username: row['username'] as String?,
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: (row['active_listing_count'] as num?)?.toInt() ?? 0,
       cityName: row['city_name'] as String? ?? '',
       isVerified: row['is_verified'] as bool? ?? false,
-      topRated: false,
+      topRated: row['top_rated'] as bool? ?? false,
       itemsSoldCount: row['items_sold_count'] as int? ?? 0,
       followersCount: row['followers_count'] as int? ?? 0,
       vacationMode: row['vacation_mode'] as String?,
@@ -134,6 +160,10 @@ class StoreModel {
   factory StoreModel.fromDetailRow(
     Map<String, dynamic> row, {
     required int activeListingCount,
+    double? positivePct,
+    int? feedbackScore,
+    int? completionPct,
+    int? shipHours,
   }) {
     return StoreModel(
       // Falls through to the username: a store resolved that way has no
@@ -147,6 +177,7 @@ class StoreModel {
         storeName: row['store_name'] as String?,
         username: row['username'] as String?,
       ),
+      username: row['username'] as String?,
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: activeListingCount,
       cityName: row['city_name'] as String? ?? '',
@@ -163,6 +194,10 @@ class StoreModel {
       aboutMarkdown: row['about_md'] as String?,
       memberSince: DateTime.tryParse(row['member_since'] as String? ?? ''),
       isFollowing: row['is_following'] as bool? ?? false,
+      positivePct: positivePct,
+      feedbackScore: feedbackScore,
+      completionPct: completionPct,
+      shipHours: shipHours,
     );
   }
 }

@@ -17,6 +17,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/view_mode_toggle.dart';
 import '../usecase/expansions_notifier.dart';
 import '../utils/pack_sort.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/expansions/components/expansions-list-client.tsx` — a
 /// sort + view toolbar over the expansions, grouped by series while sorted
@@ -326,7 +327,7 @@ class _SeriesHeader extends StatelessWidget {
           SizedBox(
             width: _seriesLogoWidth,
             height: _seriesLogoHeight,
-            child: Image.network(
+            child: cachedNetworkImage(
               image,
               fit: BoxFit.contain,
               alignment: Alignment.centerLeft,

@@ -15,6 +15,8 @@ import '../../../shared/widgets/user_avatar.dart';
 import '../repository/models/profile_models.dart';
 import '../usecase/user_notifier.dart';
 import '../../../shared/widgets/shimmer_box.dart';
+import '../../../shared/widgets/app_network_image.dart';
+import '../../../core/utils/image_url.dart';
 
 /// Ports `app/account/following/page.tsx` — the shops the signed-in user
 /// follows, each with its banner, seller line and four most recent listings.
@@ -111,7 +113,7 @@ class _FollowedShopCard extends StatelessWidget {
             if (shop.bannerUrl != null)
               AspectRatio(
                 aspectRatio: 4,
-                child: Image.network(
+                child: cachedNetworkImage(
                   shop.bannerUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) =>
@@ -205,8 +207,9 @@ class _ListingThumb extends StatelessWidget {
               if (listing.photoUrl == null)
                 Image.asset('assets/images/backcard.webp', fit: BoxFit.cover)
               else
-                Image.network(
+                cachedNetworkImage(
                   listing.photoUrl!,
+                  size: ImageSize.half,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) =>
                       progress == null ? child : const ShimmerBox(),

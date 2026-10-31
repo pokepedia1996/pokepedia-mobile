@@ -25,7 +25,8 @@ extension FeedbackKindX on FeedbackKind {
   };
 }
 
-/// A rating this buyer has already left on an order — web's `myFeedback`.
+/// A rating the signed-in user has already left on an order, as its buyer
+/// or its seller — web's `myFeedback`.
 class OrderRating {
   const OrderRating({
     required this.id,
@@ -35,6 +36,7 @@ class OrderRating {
     this.comment,
     this.reply,
     this.replyAt,
+    this.isAuto = false,
   });
 
   factory OrderRating.fromRow(Map<String, dynamic> row) {
@@ -48,6 +50,7 @@ class OrderRating {
       comment: row['comment'] as String?,
       reply: row['reply'] as String?,
       replyAt: DateTime.tryParse(row['reply_at'] as String? ?? '')?.toLocal(),
+      isAuto: row['is_auto'] as bool? ?? false,
     );
   }
 
@@ -57,7 +60,11 @@ class OrderRating {
   final DateTime createdAt;
   final String? comment;
 
-  /// The seller's answer, shown under the review once they leave one.
+  /// The other side's answer, shown under the review once they leave one.
   final String? reply;
   final DateTime? replyAt;
+
+  /// Left by `auto_apply_feedback` once the rating window lapsed, not by
+  /// the user — it still counts, so no second rating is offered.
+  final bool isAuto;
 }

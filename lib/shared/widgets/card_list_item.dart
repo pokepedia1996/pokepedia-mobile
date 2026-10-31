@@ -4,10 +4,13 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/formatters.dart';
+import '../models/card_condition.dart';
 import '../models/card_model.dart';
 import 'card_art.dart';
 import 'card_price_note.dart';
+import 'condition_badge.dart';
 import 'selection_mark.dart';
+import '../../core/utils/image_url.dart';
 
 /// Ports the list-mode branch of `components/card/card-item.tsx` — a
 /// compact row (thumbnail, name/number, price and the quantity held) used
@@ -19,10 +22,14 @@ class CardListItem extends StatelessWidget {
     required this.onTap,
     this.footer,
     this.selected,
+    this.condition,
   });
 
   final CardModel card;
   final VoidCallback onTap;
+
+  /// The condition these copies are held in, as [CardGridItem.condition].
+  final CardCondition? condition;
 
   /// An extra row under the price — where edit mode puts the quantity
   /// stepper, the same as [CardGridItem.footer].
@@ -63,6 +70,7 @@ class CardListItem extends StatelessWidget {
               width: 48,
               child: CardArt(
                 imageUrl: card.imageUrl,
+                size: ImageSize.half,
                 borderRadius: AppRadius.sm,
               ),
             ),
@@ -78,9 +86,21 @@ class CardListItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
-                  Text(
-                    card.collectorNumber,
-                    style: AppTypography.caption(context.mutedForeground),
+                  Row(
+                    children: [
+                      Text(
+                        card.collectorNumber,
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
+                      if (condition != null) ...[
+                        const SizedBox(width: 6),
+                        ConditionBadge(
+                          condition: condition!,
+                          dense: true,
+                          colored: true,
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   // Quantity on the left, price on the right — the same

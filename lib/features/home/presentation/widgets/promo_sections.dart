@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/widgets/card_swap.dart';
 import '../../../../shared/widgets/marquee.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 const _cdn = 'https://cdn2.pokepedia.id';
 
@@ -168,7 +169,7 @@ class DeckbuilderPromoSection extends StatelessWidget {
                   blendMode: BlendMode.dstIn,
                   child: Opacity(
                     opacity: 0.12,
-                    child: Image.network(
+                    child: cachedNetworkImage(
                       '$_cdn/tournament/tournament.webp',
                       fit: BoxFit.cover,
                       color: Colors.grey,
@@ -199,7 +200,7 @@ class DeckbuilderPromoSection extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           for (final slug in _tournamentSlugs)
-                            Image.network(
+                            cachedNetworkImage(
                               '$_cdn/tournament/$slug.webp',
                               height: 60,
                               errorBuilder: (context, error, stackTrace) =>
@@ -322,7 +323,7 @@ class CollectionPromoSection extends StatelessWidget {
                           decoration: BoxDecoration(
                             border: Border.all(color: context.borderColor),
                           ),
-                          child: Image.network(
+                          child: cachedNetworkImage(
                             url,
                             height: 140,
                             fit: BoxFit.cover,

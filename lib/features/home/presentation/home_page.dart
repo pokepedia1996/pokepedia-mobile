@@ -11,6 +11,7 @@ import 'widgets/marketplace_feed_section.dart';
 import 'widgets/portfolio_value_section.dart';
 import 'widgets/home_ad_slot.dart';
 import 'widgets/home_tasks_section.dart';
+import 'widgets/onboarding_shortcuts_section.dart';
 import 'widgets/top_holdings_section.dart';
 
 /// The buyer home tab, built around what the collection is worth: the
@@ -39,11 +40,27 @@ class HomePage extends ConsumerWidget {
                 child: HomeLoadingGate(
                   child: RefreshIndicator(
                     onRefresh: () async {
+                      // Sections keep what they show until the new data
+                      // lands, rather than dropping back to spinners.
+                      final refreshing = ref.read(
+                        homeRefreshingProvider.notifier,
+                      );
+                      refreshing.state = true;
                       ref.invalidate(portfolioHoldingsProvider);
                       ref.invalidate(collectionSummaryProvider);
                       ref.invalidate(portfolioValueSeriesProvider);
                       ref.invalidate(homeFeedProvider);
-                      await ref.read(collectionSummaryProvider.future);
+                      try {
+                        await Future.wait<void>([
+                          ref.read(collectionSummaryProvider.future),
+                          ref.read(portfolioValueSeriesProvider.future),
+                        ]);
+                      } catch (_) {
+                        // Each section shows its own error; the spinner
+                        // just needs to stop.
+                      } finally {
+                        refreshing.state = false;
+                      }
                     },
                     child: ListView(
                       // Bottom padding rather than a fixed spacer: the last
@@ -53,6 +70,9 @@ class HomePage extends ConsumerWidget {
                         bottom: AppBottomNav.reservedSpace(context) + 12,
                       ),
                       children: const [
+                        // A new account's own picks from onboarding come
+                        // first: it has no value or holdings to show yet.
+                        OnboardingShortcutsSection(),
                         PortfolioValueSection(),
                         TopHoldingsSection(),
                         // What needs answering, then whatever is being

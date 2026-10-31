@@ -134,6 +134,62 @@ void main() {
     });
   });
 
+  group('same-position card changes', () {
+    final first = List<double>.generate(192, (i) => i.isEven ? 0.3 : -0.3);
+    final second = List<double>.generate(192, (i) => i.isEven ? -0.2 : 0.2);
+
+    test('stable changed artwork re-arms without corner movement', () {
+      final machine = AutoCaptureMachine();
+      machine.tick(_quad(), at(0), appearance: first);
+      expect(
+        machine.tick(_quad(), at(400), appearance: first).action,
+        AutoCaptureAction.capture,
+      );
+      for (final ms in [520, 640, 760]) {
+        machine.tick(_quad(), at(ms), appearance: second);
+      }
+      expect(machine.waitingForRemoval, isTrue);
+      expect(
+        machine.tick(_quad(), at(1160), appearance: second).action,
+        AutoCaptureAction.capture,
+      );
+      expect(
+        machine.tick(_quad(), at(2000), appearance: second).action,
+        AutoCaptureAction.tracking,
+      );
+    });
+
+    test('a brief occlusion or small colour change does not scan twice', () {
+      final machine = AutoCaptureMachine();
+      machine.tick(_quad(), at(0), appearance: first);
+      machine.tick(_quad(), at(400), appearance: first);
+      machine.tick(_quad(), at(520), appearance: second);
+      machine.tick(_quad(), at(640), appearance: second);
+      machine.tick(_quad(), at(760), appearance: second);
+      machine.tick(_quad(), at(800), appearance: first);
+      final noise = first.map((v) => v + 0.03).toList();
+      for (final ms in [880, 1000, 1400, 2000]) {
+        expect(
+          machine.tick(_quad(), at(ms), appearance: noise).action,
+          AutoCaptureAction.tracking,
+        );
+      }
+      expect(machine.waitingForRemoval, isTrue);
+    });
+
+    test('a failed capture can retry the unchanged card after reset', () {
+      final machine = AutoCaptureMachine();
+      machine.tick(_quad(), at(0), appearance: first);
+      machine.tick(_quad(), at(400), appearance: first);
+      machine.reset();
+      machine.tick(_quad(), at(1500), appearance: first);
+      expect(
+        machine.tick(_quad(), at(1900), appearance: first).action,
+        AutoCaptureAction.capture,
+      );
+    });
+  });
+
   group('control', () {
     test('reset clears the hold and the fired quad', () {
       final m = AutoCaptureMachine();

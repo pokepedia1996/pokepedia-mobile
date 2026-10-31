@@ -8,6 +8,7 @@
 library;
 
 import 'warp_quad.dart';
+import 'card_appearance.dart';
 
 /// How long a quad must hold still before capture fires.
 ///
@@ -75,13 +76,29 @@ class AutoCaptureMachine {
   /// The quad that last fired. Non-null means the machine is disarmed and
   /// waiting for a reason to believe a *new* card is in view.
   Quad? _lastFired;
+  List<double>? _firedAppearance;
+  List<double>? _replacementAppearance;
+  int _replacementTicks = 0;
+  DateTime? _replacementSince;
+  Quad? _replacementQuad;
+
+  bool get waitingForRemoval => _lastFired != null;
+  bool get replacingCapturedCard => _replacementTicks > 0;
+
+  void _clearReplacement() {
+    _replacementAppearance = null;
+    _replacementTicks = 0;
+    _replacementSince = null;
+    _replacementQuad = null;
+  }
 
   /// Feeds one detector result in and gets back what to do.
   ///
   /// [quad] is null when the detector found nothing that passed its gates.
-  AutoCaptureTick tick(Quad? quad, DateTime now) {
+  AutoCaptureTick tick(Quad? quad, DateTime now, {List<double>? appearance}) {
     if (quad == null) {
       _misses++;
+      _clearReplacement();
       _holding = null;
       _holdingSince = null;
       // Enough consecutive misses means the card genuinely left the frame, so
@@ -96,7 +113,35 @@ class AutoCaptureMachine {
     // again until it moves far enough to be a different card.
     final lastFired = _lastFired;
     if (lastFired != null) {
-      if (quad.driftFrom(lastFired) <= rearmDriftFraction) {
+      var replaced = false;
+      final previous = _firedAppearance;
+      if (appearance != null &&
+          previous != null &&
+          appearanceDistance(previous, appearance) > 0.12) {
+        final candidate = _replacementAppearance;
+        if (candidate == null ||
+            appearanceDistance(candidate, appearance) > 0.06 ||
+            quad.driftFrom(_replacementQuad!) > maxLockDrift) {
+          _replacementAppearance = appearance;
+          _replacementTicks = 1;
+          _replacementSince = now;
+          _replacementQuad = quad;
+        } else {
+          _replacementTicks++;
+        }
+        replaced =
+            _replacementTicks >= 3 &&
+            now.difference(_replacementSince!) >= lockFor;
+        if (replaced) {
+          // The changed content itself completed the stable hold. Do not
+          // re-arm early and then capture the old card after a brief occlusion.
+          _holding = quad;
+          _holdingSince = _replacementSince;
+        }
+      } else {
+        _clearReplacement();
+      }
+      if (!replaced && quad.driftFrom(lastFired) <= rearmDriftFraction) {
         return AutoCaptureTick(
           action: AutoCaptureAction.tracking,
           quad: quad,
@@ -104,6 +149,7 @@ class AutoCaptureMachine {
         );
       }
       _lastFired = null;
+      _clearReplacement();
     }
 
     final holding = _holding;
@@ -121,6 +167,7 @@ class AutoCaptureMachine {
     final held = now.difference(since);
     if (held >= lockFor) {
       _lastFired = quad;
+      _firedAppearance = appearance == null ? null : List.of(appearance);
       _holding = null;
       _holdingSince = null;
       return AutoCaptureTick(
@@ -144,12 +191,16 @@ class AutoCaptureMachine {
     _holdingSince = null;
     _misses = 0;
     _lastFired = null;
+    _firedAppearance = null;
+    _clearReplacement();
   }
 
   /// Disarms without clearing the tracked pose, so the machine won't fire
   /// again while a scan is in flight.
   void suspendUntilMoved(Quad firedOn) {
     _lastFired = firedOn;
+    _firedAppearance = null;
+    _clearReplacement();
     _holding = null;
     _holdingSince = null;
   }
