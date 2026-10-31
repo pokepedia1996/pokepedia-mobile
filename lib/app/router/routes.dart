@@ -176,6 +176,10 @@ class Routes {
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
 
+  /// One dispute by its `disputes.slug` — the seller's way in, and where a
+  /// buyer lands from a sibling in the same package.
+  static String dispute(String slug) => '/disputes/$slug';
+
   /// A room, optionally naming the listing it was opened about.
   ///
   /// The listing rides in the query rather than in `extra`: that slot

@@ -56,11 +56,11 @@ class ConditionGradePicker extends StatelessWidget {
   bool get _multi => selected != null;
 
   /// The graded companies in `CONDITION_COMPANIES` order, each with its
-  /// grades in declaration order.
+  /// grades in declaration order. The legacy PSA ≤8 bucket isn't offered.
   static final _gradedByCompany = <String, List<CardCondition>>{
     for (final company in conditionCompanies.where((c) => c != 'Raw'))
       company: CardCondition.values
-          .where((c) => c.gradingCompany == company)
+          .where((c) => c.gradingCompany == company && !c.isLegacy)
           .toList(),
   };
 

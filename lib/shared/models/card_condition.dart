@@ -8,6 +8,18 @@ enum CardCondition {
   hp,
   psa10,
   psa9,
+  psa8,
+  psa7,
+  psa6,
+  psa5,
+  psa4,
+  psa3,
+  psa2,
+  psa1,
+
+  /// The old "PSA ≤8" bucket, from before exact grades below 9. No longer
+  /// offered anywhere; kept so a row still carrying it reads as itself
+  /// rather than falling back to NM.
   psaLow,
   bgsBl10,
   bgsGd10,
@@ -59,6 +71,22 @@ extension CardConditionX on CardCondition {
         return 'PSA10';
       case CardCondition.psa9:
         return 'PSA9';
+      case CardCondition.psa8:
+        return 'PSA8';
+      case CardCondition.psa7:
+        return 'PSA7';
+      case CardCondition.psa6:
+        return 'PSA6';
+      case CardCondition.psa5:
+        return 'PSA5';
+      case CardCondition.psa4:
+        return 'PSA4';
+      case CardCondition.psa3:
+        return 'PSA3';
+      case CardCondition.psa2:
+        return 'PSA2';
+      case CardCondition.psa1:
+        return 'PSA1';
       case CardCondition.psaLow:
         return 'PSALOW';
       case CardCondition.bgsBl10:
@@ -94,6 +122,10 @@ extension CardConditionX on CardCondition {
 
   bool get isRaw => rawConditions.contains(this);
 
+  /// A grade kept only so existing rows still read — never offered in a
+  /// picker or filter.
+  bool get isLegacy => this == CardCondition.psaLow;
+
   /// Mirrors `isGradedCondition` in `lib/orders/conditions.ts` (SQL twin
   /// `is_graded_condition`): anything outside NM/LP/MP/HP is a slab.
   bool get isGraded => !isRaw;
@@ -117,6 +149,22 @@ extension CardConditionX on CardCondition {
         return 'PSA 10';
       case CardCondition.psa9:
         return 'PSA 9';
+      case CardCondition.psa8:
+        return 'PSA 8';
+      case CardCondition.psa7:
+        return 'PSA 7';
+      case CardCondition.psa6:
+        return 'PSA 6';
+      case CardCondition.psa5:
+        return 'PSA 5';
+      case CardCondition.psa4:
+        return 'PSA 4';
+      case CardCondition.psa3:
+        return 'PSA 3';
+      case CardCondition.psa2:
+        return 'PSA 2';
+      case CardCondition.psa1:
+        return 'PSA 1';
       case CardCondition.psaLow:
         return 'PSA ≤8';
       case CardCondition.bgsBl10:
@@ -184,6 +232,22 @@ extension CardConditionX on CardCondition {
       case CardCondition.cgc9:
       case CardCondition.egs9:
         return '9';
+      case CardCondition.psa8:
+        return '8';
+      case CardCondition.psa7:
+        return '7';
+      case CardCondition.psa6:
+        return '6';
+      case CardCondition.psa5:
+        return '5';
+      case CardCondition.psa4:
+        return '4';
+      case CardCondition.psa3:
+        return '3';
+      case CardCondition.psa2:
+        return '2';
+      case CardCondition.psa1:
+        return '1';
       case CardCondition.psaLow:
       case CardCondition.bgsLow:
       case CardCondition.cgcLow:

@@ -53,10 +53,6 @@ class CardArt extends StatelessWidget {
   Widget build(BuildContext context) {
     final tile = cardTileImage(imageUrl);
     final url = thumbnail || !tile.contain ? tile.url : imageUrl;
-    // A sealed tile is already its 480px thumbnail, which is the half size.
-    final fetch = tile.contain && thumbnail && size == ImageSize.half
-        ? ImageSize.full
-        : size;
 
     return AspectRatio(
       aspectRatio: aspectRatio,
@@ -69,7 +65,7 @@ class CardArt extends StatelessWidget {
               : LayoutBuilder(
                   builder: (context, constraints) => cachedNetworkImage(
                     url,
-                    size: fetch,
+                    size: size,
                     fit: tile.contain ? BoxFit.contain : BoxFit.cover,
                     alignment: alignment,
                     // Decoded at the size it is drawn at. A catalog scan is

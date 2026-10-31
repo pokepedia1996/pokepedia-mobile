@@ -41,7 +41,9 @@ class SellerProductsPage extends ConsumerStatefulWidget {
   /// would make them unusable.
   final SellerListingBucket? initialBucket;
 
-  /// Whether to arrive with "Dengan penawaran" already on.
+  /// Whether to arrive with "Dengan penawaran" on. Off for every other way
+  /// in: only "Ada penawaran masuk" asks for it, and a filter left on from
+  /// that visit hid most listings the next time the page was opened.
   final bool initialOffersFilter;
 
   @override
@@ -55,16 +57,14 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   void initState() {
     super.initState();
     final bucket = widget.initialBucket;
-    if (bucket == null && !widget.initialOffersFilter) return;
     // After the frame: these are providers, and the tree is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (bucket != null) {
         ref.read(sellerBucketProvider.notifier).state = bucket;
       }
-      if (widget.initialOffersFilter) {
-        ref.read(sellerOfferFilterProvider.notifier).state = true;
-      }
+      ref.read(sellerOfferFilterProvider.notifier).state =
+          widget.initialOffersFilter;
     });
   }
 

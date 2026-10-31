@@ -79,6 +79,7 @@ class _MyProposalsPageState extends ConsumerState<MyProposalsPage> {
       );
     if (error == null) {
       ref.invalidate(sentProposalsProvider);
+      ref.invalidate(proposalCardFeedProvider);
       ref.invalidate(proposalsSummaryProvider);
     }
   }

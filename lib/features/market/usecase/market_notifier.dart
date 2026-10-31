@@ -97,6 +97,10 @@ class MarketListingsState {
 /// loader) throughout the swipe, and still has them on the way back.
 class MarketListingsNotifier
     extends FamilyNotifier<MarketListingsState, MarketBucket> {
+  /// Bumped by every first-page load, so a page that answers after a newer
+  /// one started — a refresh racing a scroll, say — is dropped.
+  int _generation = 0;
+
   @override
   MarketListingsState build(MarketBucket bucket) {
     // Watched, so changing any of them tears this notifier down and rebuilds
@@ -117,6 +121,7 @@ class MarketListingsNotifier
     required MarketSort sort,
     required MarketFilters filters,
   }) async {
+    final generation = ++_generation;
     try {
       final page = await ref
           .read(marketRepositoryProvider)
@@ -126,6 +131,7 @@ class MarketListingsNotifier
             sort: sort,
             filters: filters,
           );
+      if (generation != _generation) return;
       state = MarketListingsState(
         listings: page.listings,
         loading: false,
@@ -133,6 +139,10 @@ class MarketListingsNotifier
         cursor: page.cursor,
       );
     } catch (_) {
+      if (generation != _generation) return;
+      // A failed refresh leaves the rows already on screen; only a feed
+      // with nothing to show falls to the error state.
+      if (state.listings.isNotEmpty) return;
       state = const MarketListingsState(loading: false, error: true);
     }
   }
@@ -144,6 +154,7 @@ class MarketListingsNotifier
     if (state.loading || state.loadingMore || !state.hasNext) return;
     if (cursor == null) return;
 
+    final generation = _generation;
     state = state.copyWith(loadingMore: true);
     try {
       final page = await ref
@@ -155,6 +166,7 @@ class MarketListingsNotifier
             filters: ref.read(marketFiltersProvider),
             cursor: cursor,
           );
+      if (generation != _generation) return;
       state = state.copyWith(
         listings: [...state.listings, ...page.listings],
         loadingMore: false,
@@ -165,6 +177,7 @@ class MarketListingsNotifier
         cursor: page.cursor ?? cursor,
       );
     } catch (_) {
+      if (generation != _generation) return;
       // The rows already on screen stay; only the next page is lost, and
       // scrolling again retries.
       state = state.copyWith(loadingMore: false);
@@ -173,6 +186,20 @@ class MarketListingsNotifier
 
   /// What the error state's "Coba lagi" calls.
   void retry() => ref.invalidateSelf();
+
+  /// Pull-to-refresh: re-reads the first page under the rows already on
+  /// screen instead of dropping back to the loader, and completes once it
+  /// lands so the indicator spins for as long as the fetch does.
+  Future<void> refresh() {
+    // A page still appending would land on the fresh feed's rows.
+    state = state.copyWith(loadingMore: false);
+    return _load(
+      bucket: arg,
+      query: ref.read(marketQueryProvider),
+      sort: ref.read(marketSortProvider),
+      filters: ref.read(marketFiltersProvider),
+    );
+  }
 }
 
 final marketListingsProvider =
@@ -207,16 +234,29 @@ final storeListingsProvider = FutureProvider.family<List<ListingModel>, String>(
   },
 );
 
-/// A seller's feedback summary and their reviews. Keyed by the seller's
-/// `user_id`, which is what both feedback RPCs take.
+/// Which of a user's feedback to read: theirs by `user_id` (what both
+/// feedback RPCs take), narrowed to one side of the order or null for both.
+typedef StoreFeedbackQuery = ({String userId, FeedbackRole? role});
+
+/// A seller's feedback summary and their reviews.
 final storeFeedbackSummaryProvider =
-    FutureProvider.family<StoreFeedbackSummary, String>((ref, userId) {
-      return ref.read(marketRepositoryProvider).fetchFeedbackSummary(userId);
+    FutureProvider.family<StoreFeedbackSummary, StoreFeedbackQuery>((
+      ref,
+      query,
+    ) {
+      return ref
+          .read(marketRepositoryProvider)
+          .fetchFeedbackSummary(query.userId, role: query.role);
     });
 
 final storeFeedbackProvider =
-    FutureProvider.family<List<StoreFeedback>, String>((ref, userId) {
-      return ref.read(marketRepositoryProvider).fetchFeedback(userId);
+    FutureProvider.family<List<StoreFeedback>, StoreFeedbackQuery>((
+      ref,
+      query,
+    ) {
+      return ref
+          .read(marketRepositoryProvider)
+          .fetchFeedback(query.userId, role: query.role);
     });
 
 /// Everything the per-seller "product" page needs for one (store, card)

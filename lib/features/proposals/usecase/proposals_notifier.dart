@@ -26,12 +26,12 @@ final proposalsSummaryProvider = FutureProvider<ProposalsSummary>((ref) {
   return ref.read(proposalsRepositoryProvider).fetchSummary();
 });
 
-/// Everything the per-card Proposal page shows, filtered out of the lists
-/// the feed already loaded.
+/// Everything the per-card Proposal page shows, filtered out of the user's
+/// full bid and proposal lists.
 ///
-/// Deliberately not three new card-scoped queries: the page is reached from
-/// the feed, whose data is in hand, and re-fetching risks the drill-down
-/// disagreeing with the row that led to it.
+/// The feed no longer holds those lists — it loads a batch at a time — so
+/// opening a card reads them whole. Card-scoped queries would be lighter
+/// for an account with a long history.
 typedef CardProposalData = ({
   List<MyBidModel> bids,
   List<BidProposalModel> received,
@@ -57,16 +57,97 @@ final proposalFeedFilterProvider = StateProvider<ProposalFeedFilter>(
   (ref) => ProposalFeedFilter.all,
 );
 
-/// The card-grouped feed — web's default Proposal view. Composed from the
-/// bid and sent-proposal providers rather than its own query, so a refresh
-/// of either flows through and the numbers can't disagree.
-final proposalCardFeedProvider = FutureProvider<List<ProposalCardGroup>>((
-  ref,
-) async {
-  final bids = await ref.watch(myBidsProvider.future);
-  final sent = await ref.watch(sentProposalsProvider.future);
-  return groupProposalsByCard(bids: bids, sent: sent);
-});
+/// Rows of each kind the feed asks for at a time: two of the repository's
+/// 50-row pages. The newest activity comes first, so this is what the feed
+/// opens on; older activity loads on request.
+const proposalFeedBatch = 100;
+
+/// What the Proposal page has loaded so far, grouped by card.
+class ProposalFeed {
+  const ProposalFeed({
+    required this.groups,
+    required this.hasMore,
+    this.loadingMore = false,
+  });
+
+  final List<ProposalCardGroup> groups;
+
+  /// Older bids or sent proposals are still on the server.
+  final bool hasMore;
+  final bool loadingMore;
+}
+
+/// The card-grouped feed — web's default Proposal view — loaded a batch at a
+/// time rather than walked to the end. An account with years of bids and
+/// proposals used to pull every row and every received proposal before the
+/// page could draw anything; now it reads the newest [proposalFeedBatch] of
+/// each and fetches older ones from [ProposalFeedNotifier.loadMore].
+///
+/// A card whose activity spans the boundary shows what has loaded so far,
+/// and its counts catch up as older rows arrive.
+final proposalCardFeedProvider =
+    AsyncNotifierProvider<ProposalFeedNotifier, ProposalFeed>(
+      ProposalFeedNotifier.new,
+    );
+
+class ProposalFeedNotifier extends AsyncNotifier<ProposalFeed> {
+  final _bids = <MyBidModel>[];
+  final _sent = <SentProposalModel>[];
+  var _bidsHasMore = true;
+  var _sentHasMore = true;
+
+  @override
+  Future<ProposalFeed> build() async {
+    _bids.clear();
+    _sent.clear();
+    _bidsHasMore = true;
+    _sentHasMore = true;
+    final user = ref.watch(authProvider).valueOrNull;
+    if (user == null) return const ProposalFeed(groups: [], hasMore: false);
+    await _fetchNext();
+    return _feed();
+  }
+
+  /// The next batch of whichever lists still have more. A failure leaves
+  /// what is on screen and keeps the button for another try.
+  Future<void> loadMore() async {
+    final current = state.valueOrNull;
+    if (current == null || !current.hasMore || current.loadingMore) return;
+    state = AsyncData(
+      ProposalFeed(groups: current.groups, hasMore: true, loadingMore: true),
+    );
+    try {
+      await _fetchNext();
+    } catch (_) {
+      // Swallowed: the rows already loaded stay, and so does the button.
+    }
+    state = AsyncData(_feed());
+  }
+
+  Future<void> _fetchNext() async {
+    final repo = ref.read(proposalsRepositoryProvider);
+    final (bids, sent) = await (
+      _bidsHasMore
+          ? repo.fetchMyBidsPage(offset: _bids.length, limit: proposalFeedBatch)
+          : Future.value((rows: const <MyBidModel>[], hasMore: false)),
+      _sentHasMore
+          ? repo.fetchSentProposalsPage(
+              offset: _sent.length,
+              limit: proposalFeedBatch,
+            )
+          : Future.value((rows: const <SentProposalModel>[], hasMore: false)),
+    ).wait;
+    _bids.addAll(bids.rows);
+    _sent.addAll(sent.rows);
+    _bidsHasMore = bids.hasMore;
+    _sentHasMore = sent.hasMore;
+  }
+
+  ProposalFeed _feed() => ProposalFeed(
+    groups: groupProposalsByCard(bids: _bids, sent: _sent),
+    hasMore: _bidsHasMore || _sentHasMore,
+  );
+}
 
 /// Proposals this user sent as a seller on other people's WTB bids.
 final sentProposalsProvider = FutureProvider<List<SentProposalModel>>((ref) {

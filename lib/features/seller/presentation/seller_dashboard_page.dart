@@ -15,6 +15,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/setup_kit.dart';
 import '../../../shared/widgets/store_card.dart' show TopSellerBadge;
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/repository/models/seller_order.dart';
 import '../repository/models/my_reliability.dart';
 import '../repository/models/seller_dashboard.dart';
 import '../repository/seller_repository.dart';
@@ -125,7 +126,7 @@ class _DashboardScroll extends ConsumerWidget {
       (
         label: 'Perlu dikirim',
         count: kpi.toShip,
-        route: Routes.sellerOrdersFiltered('to_ship'),
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.urgent.filterKey),
       ),
       (
         label: 'Ada penawaran masuk',
@@ -137,7 +138,7 @@ class _DashboardScroll extends ConsumerWidget {
       (
         label: 'Komplain terbuka',
         count: kpi.disputesOpen,
-        route: Routes.sellerOrdersFiltered('disputes'),
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.disputed.filterKey),
       ),
     ];
     // Web's heading counts the work, not the rows: "Tugas · 0" is a clear
@@ -358,7 +359,7 @@ class _StickyAddButton extends StatelessWidget {
   }
 }
 
-/// "OMZET 30 HARI" and what it did — the one number a seller opens this
+/// "OMZET 90 HARI" and what it did — the one number a seller opens this
 /// page for.
 class _RevenueBlock extends StatelessWidget {
   const _RevenueBlock({required this.summary});
@@ -368,7 +369,7 @@ class _RevenueBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = DesignPalette.of(context);
-    final up = summary.delta30 >= 0;
+    final up = summary.delta90 >= 0;
     final tone = up ? palette.successText : palette.brand;
 
     return Column(
@@ -377,7 +378,7 @@ class _RevenueBlock extends StatelessWidget {
         Row(
           children: [
             Text(
-              'OMZET 30 HARI',
+              'OMZET 90 HARI',
               style: setupText(
                 12,
                 palette.muted,
@@ -387,8 +388,8 @@ class _RevenueBlock extends StatelessWidget {
             const SizedBox(width: 6),
             Tooltip(
               message:
-                  'Nilai transaksi selesai dalam 30 hari terakhir, '
-                  'dibandingkan 30 hari sebelumnya.',
+                  'Nilai transaksi selesai dalam 90 hari terakhir, '
+                  'dibandingkan 90 hari sebelumnya.',
               triggerMode: TooltipTriggerMode.tap,
               child: Icon(LucideIcons.info, size: 14, color: palette.muted),
             ),
@@ -402,7 +403,7 @@ class _RevenueBlock extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  formatRupiah(summary.last30),
+                  formatRupiah(summary.last90),
                   maxLines: 1,
                   style: setupHeading(38, palette.ink),
                 ),
@@ -416,7 +417,7 @@ class _RevenueBlock extends StatelessWidget {
             ),
             const SizedBox(width: 3),
             Text(
-              '${up ? '+' : ''}${summary.delta30.toStringAsFixed(0)}%',
+              '${up ? '+' : ''}${summary.delta90.toStringAsFixed(0)}%',
               style: setupText(13, tone, FontWeight.w600),
             ),
           ],
@@ -451,7 +452,11 @@ class _StatStrip extends StatelessWidget {
         value: active,
         route: Routes.sellerProductsTab('active'),
       ),
-      (label: 'PESANAN', value: orders, route: Routes.sellerOrders),
+      (
+        label: 'PESANAN',
+        value: orders,
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.all.filterKey),
+      ),
       (label: 'DRAFT', value: drafts, route: Routes.sellerProductsTab('draft')),
       (
         label: 'INAKTIF',

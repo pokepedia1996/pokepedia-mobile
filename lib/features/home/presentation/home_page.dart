@@ -40,11 +40,27 @@ class HomePage extends ConsumerWidget {
                 child: HomeLoadingGate(
                   child: RefreshIndicator(
                     onRefresh: () async {
+                      // Sections keep what they show until the new data
+                      // lands, rather than dropping back to spinners.
+                      final refreshing = ref.read(
+                        homeRefreshingProvider.notifier,
+                      );
+                      refreshing.state = true;
                       ref.invalidate(portfolioHoldingsProvider);
                       ref.invalidate(collectionSummaryProvider);
                       ref.invalidate(portfolioValueSeriesProvider);
                       ref.invalidate(homeFeedProvider);
-                      await ref.read(collectionSummaryProvider.future);
+                      try {
+                        await Future.wait<void>([
+                          ref.read(collectionSummaryProvider.future),
+                          ref.read(portfolioValueSeriesProvider.future),
+                        ]);
+                      } catch (_) {
+                        // Each section shows its own error; the spinner
+                        // just needs to stop.
+                      } finally {
+                        refreshing.state = false;
+                      }
                     },
                     child: ListView(
                       // Bottom padding rather than a fixed spacer: the last

@@ -100,6 +100,11 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: async.when(
+          // The refresh invalidates the lists this is built from, which
+          // Riverpod reports as a reload rather than a refresh — without
+          // this the page dropped to the loader instead of keeping the
+          // proposals up until the new ones landed.
+          skipLoadingOnReload: true,
           loading: () => const PikachuLoader(),
           error: (_, __) => Center(
             child: Text(
@@ -125,6 +130,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
                 ref.invalidate(myBidsProvider);
                 ref.invalidate(receivedProposalsProvider);
                 ref.invalidate(sentProposalsProvider);
+                ref.invalidate(proposalCardFeedProvider);
                 await ref.read(cardProposalsProvider(widget.cardId).future);
               },
               child: ListView(
@@ -222,6 +228,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       ref.invalidate(receivedProposalsProvider);
       ref.invalidate(sentProposalsProvider);
       ref.invalidate(myBidsProvider);
+      ref.invalidate(proposalCardFeedProvider);
       ref.invalidate(proposalsSummaryProvider);
     }
   }
@@ -246,6 +253,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     ref.invalidate(receivedProposalsProvider);
     ref.invalidate(sentProposalsProvider);
     ref.invalidate(myBidsProvider);
+    ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(proposalsSummaryProvider);
     ref.invalidate(myPendingCheckoutsProvider);
     ref.invalidate(cartDealsProvider);
@@ -271,6 +279,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     await Navigator.of(context).push(dealCheckoutRoute([externalId]));
     if (!mounted) return;
     ref.invalidate(myBidsProvider);
+    ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(myPendingCheckoutsProvider);
     ref.invalidate(cartDealsProvider);
   }
