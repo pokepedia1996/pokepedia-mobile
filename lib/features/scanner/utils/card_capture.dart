@@ -268,6 +268,33 @@ img.Image _snapToCardAspect(img.Image source) {
 ({double variance, double luma}) scoreFrame(img.Image source) =>
     _laplacianVarianceAndLuma(source);
 
+/// Scores the card interior, excluding the desk, screen, hands and outer border.
+/// [normalizedCard] is in 0..1 coordinates so it survives capture-resolution changes.
+double scoreCardFocus(img.Image source, Quad normalizedCard) {
+  final corners = normalizedCard.corners;
+  final sample = img.Image(width: 64, height: 64);
+  for (var y = 0; y < 64; y++) {
+    final v = 0.15 + 0.7 * y / 63;
+    for (var x = 0; x < 64; x++) {
+      final u = 0.15 + 0.7 * x / 63;
+      final topX = corners[0].x * (1 - u) + corners[1].x * u;
+      final topY = corners[0].y * (1 - u) + corners[1].y * u;
+      final bottomX = corners[3].x * (1 - u) + corners[2].x * u;
+      final bottomY = corners[3].y * (1 - u) + corners[2].y * u;
+      final sx = ((topX * (1 - v) + bottomX * v) * source.width).clamp(
+        0.0,
+        source.width - 1.0,
+      );
+      final sy = ((topY * (1 - v) + bottomY * v) * source.height).clamp(
+        0.0,
+        source.height - 1.0,
+      );
+      sample.setPixel(x, y, source.getPixelInterpolate(sx, sy));
+    }
+  }
+  return scoreFrame(sample).variance;
+}
+
 ({double variance, double luma}) _laplacianVarianceAndLuma(img.Image source) {
   final sample = img.copyResize(
     source,

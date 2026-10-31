@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:pokepedia_mobile/features/scanner/utils/camera_frame.dart';
 import 'package:pokepedia_mobile/features/scanner/utils/card_detector.dart';
 import 'package:pokepedia_mobile/features/scanner/utils/detector_worker.dart';
@@ -63,6 +64,11 @@ void main() {
       // are fractions of *that*, so decoding against any other one puts the
       // quad somewhere the card is not.
       expect(prep.region.width, greaterThan(0));
+      final jpeg = await worker.snapshot();
+      expect(jpeg, isNotNull);
+      final snapshot = img.decodeJpg(jpeg!);
+      expect(snapshot?.width, 320);
+      expect(snapshot?.height, 240);
     });
 
     test('answers a second request against the frame it kept', () async {
@@ -83,6 +89,32 @@ void main() {
       expect(tensor, isNotNull);
       expect(tensor!.length, 3 * modelInputSize * modelInputSize);
     });
+
+    test(
+      'a diagnostic snapshot keeps its frame as detection advances',
+      () async {
+        final worker = await DetectorWorker.spawn();
+        addTearDown(worker.dispose);
+        await worker.prepareFrameForTest(
+          planes: _bgraPlanes(320, 240),
+          width: 320,
+          height: 240,
+          sensorOrientation: 0,
+        );
+        final snapshot = worker.snapshot();
+        final next = await worker.prepareFrameForTest(
+          planes: _checkerPlanes(64, 48),
+          width: 64,
+          height: 48,
+          sensorOrientation: 0,
+        );
+        expect(next!.width, 64);
+        final saved = img.decodeJpg((await snapshot)!);
+        expect(saved!.width, 320);
+        expect(saved.height, 240);
+        expect(saved.getPixel(0, 0).r, closeTo(230, 3));
+      },
+    );
 
     test('the burst keeps the sharpest frame, not the last one', () async {
       final worker = await DetectorWorker.spawn();

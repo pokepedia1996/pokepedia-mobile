@@ -106,7 +106,7 @@ img.Image? _yuv420ToImage(
   final uvRowStride = uPlane.bytesPerRow;
   final uvPixelStride = uPlane.bytesPerPixel ?? 1;
 
-  final out = img.Image(width: width, height: height);
+  final rgb = Uint8List(width * height * 3);
   final xRatio = srcWidth / width;
   final yRatio = srcHeight / height;
 
@@ -135,10 +135,18 @@ img.Image? _yuv420ToImage(
       final g = (y - 0.344136 * u - 0.714136 * v).round().clamp(0, 255);
       final b = (y + 1.772 * u).round().clamp(0, 255);
 
-      out.setPixelRgb(dx, dy, r, g, b);
+      final dst = (dy * width + dx) * 3;
+      rgb[dst] = r;
+      rgb[dst + 1] = g;
+      rgb[dst + 2] = b;
     }
   }
-  return out;
+  return img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: rgb.buffer,
+    numChannels: 3,
+  );
 }
 
 /// BGRA8888 (iOS) → RGB, sampling directly at the output size.
@@ -155,7 +163,7 @@ img.Image? _bgraToImage(
   final bytes = plane.bytes;
   final rowStride = plane.bytesPerRow;
 
-  final out = img.Image(width: width, height: height);
+  final rgb = Uint8List(width * height * 3);
   final xRatio = srcWidth / width;
   final yRatio = srcHeight / height;
 
@@ -168,10 +176,18 @@ img.Image? _bgraToImage(
       final i = row + sx * 4;
       if (i + 2 >= bytes.length) continue;
       // B, G, R, A in memory order.
-      out.setPixelRgb(dx, dy, bytes[i + 2], bytes[i + 1], bytes[i]);
+      final dst = (dy * width + dx) * 3;
+      rgb[dst] = bytes[i + 2];
+      rgb[dst + 1] = bytes[i + 1];
+      rgb[dst + 2] = bytes[i];
     }
   }
-  return out;
+  return img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: rgb.buffer,
+    numChannels: 3,
+  );
 }
 
 /// Rotates a frame so it matches what the user sees.

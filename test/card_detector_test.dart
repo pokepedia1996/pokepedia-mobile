@@ -21,6 +21,25 @@ List<double> _prediction({double presenceLogit = 3, List<double>? corners}) => [
 void main() {
   final frame = wholeFrame(1000, 1000);
 
+  test('non-finite presence and corners never reach the warp', () {
+    expect(
+      passesGates(Detection(present: double.nan, quad: _card()), frame),
+      isFalse,
+    );
+    final corners = List<Point2>.of(_card().corners);
+    corners[0] = const Point2(double.infinity, 0);
+    expect(
+      passesGates(Detection(present: 1, quad: Quad(corners)), frame),
+      isFalse,
+    );
+  });
+
+  test('a self-crossing quad is rejected even with high presence', () {
+    final corners = _card().corners;
+    final crossed = Quad([corners[0], corners[2], corners[1], corners[3]]);
+    expect(passesGates(Detection(present: 1, quad: crossed), frame), isFalse);
+  });
+
   group('decodePrediction', () {
     test('maps normalised corners into the region they were detected in', () {
       final d = decodePrediction(

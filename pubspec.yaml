@@ -73,6 +73,7 @@ dependencies:
   sign_in_with_apple: ^8.2.0
   crypto: ^3.0.7
   flutter_litert: ^3.9.1
+  wakelock_plus: ^1.8.0
   # Keeps downloaded pictures on disk. `Image.network` has none, so every
   # picture was fetched again on each launch and on every memory-cache
   # eviction. flutter_cache_manager is named for the store's own `Config`.
