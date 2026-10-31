@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/models/card_condition.dart';
 import 'app_theme.dart';
 
-/// The 21 grading values from `listings_condition_check` bucketed into the
+/// The grading values from `listings_condition_check` bucketed into the
 /// 7 `--cond-*` tokens in `globals.css`, mirroring how web's
 /// `CONDITION_BADGE_CLASSES` / `CONDITION_CHART_VAR` collapse them.
 const _top10 = {

@@ -253,6 +253,7 @@ class _OrderDetailPageState extends ConsumerState<OrderDetailPage> {
                           const SizedBox(height: 12),
                           OrderRatingSection(
                             order: order,
+                            rating: orderRatingProvider(order.slug),
                             child: (title, children) =>
                                 _Section(title: title, children: children),
                           ),

@@ -31,6 +31,7 @@ class StoreModel {
     this.vacationUntil,
     this.vacationMessage,
     this.userId,
+    this.username,
     this.logoUrl,
     this.bannerUrl,
     this.aboutMarkdown,
@@ -58,6 +59,10 @@ class StoreModel {
 
   /// `seller_profiles.followers_count`.
   final int followersCount;
+
+  /// The owner's `profiles.username`, shown in the store's Info. Null where
+  /// the source row doesn't carry it.
+  final String? username;
 
   /// `seller_profiles.vacation_mode` ('soft' | 'hard' | null).
   final String? vacationMode;
@@ -132,6 +137,7 @@ class StoreModel {
         storeName: row['store_name'] as String?,
         username: row['username'] as String?,
       ),
+      username: row['username'] as String?,
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: (row['active_listing_count'] as num?)?.toInt() ?? 0,
       cityName: row['city_name'] as String? ?? '',
@@ -171,6 +177,7 @@ class StoreModel {
         storeName: row['store_name'] as String?,
         username: row['username'] as String?,
       ),
+      username: row['username'] as String?,
       tagline: row['store_tagline'] as String? ?? '',
       activeListingCount: activeListingCount,
       cityName: row['city_name'] as String? ?? '',

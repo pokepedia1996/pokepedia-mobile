@@ -53,6 +53,26 @@ extension FeedbackKindX on FeedbackKind {
   };
 }
 
+/// Which side of the order the profile owner was on — `get_feedback_list`'s
+/// `rated_role`, and what `p_role` filters both feedback RPCs by.
+enum FeedbackRole { seller, buyer }
+
+extension FeedbackRoleX on FeedbackRole {
+  static FeedbackRole? fromRaw(String? raw) => switch (raw) {
+    'seller' => FeedbackRole.seller,
+    'buyer' => FeedbackRole.buyer,
+    _ => null,
+  };
+
+  String get raw => name;
+
+  /// "penjual" / "pembeli", for "Sebagai …" and "Balasan …".
+  String get noun => switch (this) {
+    FeedbackRole.seller => 'penjual',
+    FeedbackRole.buyer => 'pembeli',
+  };
+}
+
 /// One review left on a seller — a `get_feedback_list` row, which stands for
 /// a whole transaction: its `feedback` is the worst tone across the order's
 /// items and `is_auto` is true only when every item was auto-rated.
@@ -65,6 +85,7 @@ class StoreFeedback {
     this.reply,
     this.raterUsername,
     this.isAuto = false,
+    this.ratedRole,
   });
 
   factory StoreFeedback.fromRow(Map<String, dynamic> row) {
@@ -78,6 +99,7 @@ class StoreFeedback {
       reply: row['reply'] as String?,
       raterUsername: row['rater_username'] as String?,
       isAuto: row['is_auto'] as bool? ?? false,
+      ratedRole: FeedbackRoleX.fromRaw(row['rated_role'] as String?),
     );
   }
 
@@ -105,4 +127,8 @@ class StoreFeedback {
 
   /// Left by the system when the rating window closed, not by a person.
   final bool isAuto;
+
+  /// The side the rated user (the profile owner, on a received list) was on
+  /// in that order. Null on a database older than the role filter.
+  final FeedbackRole? ratedRole;
 }

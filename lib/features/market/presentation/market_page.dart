@@ -200,8 +200,8 @@ class _MarketPageState extends ConsumerState<MarketPage>
                             dividerColor: Colors.transparent,
                             tabs: const [
                               Tab(text: 'Semua'),
-                              Tab(text: 'Selling'),
-                              Tab(text: 'Buying'),
+                              Tab(text: 'WTS'),
+                              Tab(text: 'WTB'),
                               Tab(text: 'Toko'),
                             ],
                           ),
@@ -440,73 +440,88 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
     });
 
     final state = ref.watch(marketListingsProvider(widget.bucket));
+    final notifier = ref.read(marketListingsProvider(widget.bucket).notifier);
 
     if (state.loading) return const PikachuLoader();
     if (state.error) {
-      return EmptyState(
-        icon: LucideIcons.circleAlert,
-        title: 'Gagal memuat listing',
-        action: OutlinedButton(
-          onPressed: () =>
-              ref.read(marketListingsProvider(widget.bucket).notifier).retry(),
-          child: const Text('Coba lagi'),
+      return RefreshIndicator(
+        onRefresh: notifier.refresh,
+        child: _PullableFill(
+          child: EmptyState(
+            icon: LucideIcons.circleAlert,
+            title: 'Gagal memuat listing',
+            action: OutlinedButton(
+              onPressed: notifier.retry,
+              child: const Text('Coba lagi'),
+            ),
+          ),
         ),
       );
     }
     if (state.listings.isEmpty) {
-      return const EmptyState(
-        icon: LucideIcons.store,
-        title: 'Tidak ada listing',
+      return RefreshIndicator(
+        onRefresh: notifier.refresh,
+        child: const _PullableFill(
+          child: EmptyState(
+            icon: LucideIcons.store,
+            title: 'Tidak ada listing',
+          ),
+        ),
       );
     }
 
     final listings = state.listings;
 
-    return NotificationListener<ScrollNotification>(
-      // Fires well before the last row, as web's sentinel does with its
-      // 200px rootMargin — the next page should already be arriving by the
-      // time the user gets there.
-      onNotification: (notification) {
-        final metrics = notification.metrics;
-        if (metrics.axis != Axis.vertical) return false;
-        if (metrics.extentAfter < 600) {
-          ref.read(marketListingsProvider(widget.bucket).notifier).loadMore();
-        }
-        return false;
-      },
-      // A sliver grid with a footer rather than one more grid cell: as a
-      // cell the spinner sat in the first column, off to the left. Below the
-      // grid it spans the full width and centres properly.
-      child: CustomScrollView(
-        controller: _scroll,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            sliver: SliverGrid(
-              gridDelegate: listingGridDelegate(context, showSeller: true),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => ListingCard(listing: listings[i]),
-                childCount: listings.length,
-              ),
-            ),
-          ),
-          if (state.hasNext)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+    return RefreshIndicator(
+      onRefresh: notifier.refresh,
+      child: NotificationListener<ScrollNotification>(
+        // Fires well before the last row, as web's sentinel does with its
+        // 200px rootMargin — the next page should already be arriving by the
+        // time the user gets there.
+        onNotification: (notification) {
+          final metrics = notification.metrics;
+          if (metrics.axis != Axis.vertical) return false;
+          if (metrics.extentAfter < 600) {
+            ref.read(marketListingsProvider(widget.bucket).notifier).loadMore();
+          }
+          return false;
+        },
+        // A sliver grid with a footer rather than one more grid cell: as a
+        // cell the spinner sat in the first column, off to the left. Below the
+        // grid it spans the full width and centres properly.
+        child: CustomScrollView(
+          controller: _scroll,
+          // A short feed still has to drag down for the refresh.
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              sliver: SliverGrid(
+                gridDelegate: listingGridDelegate(context, showSeller: true),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => ListingCard(listing: listings[i]),
+                  childCount: listings.length,
                 ),
               ),
             ),
-          SliverToBoxAdapter(
-            child: SizedBox(height: AppBottomNav.reservedSpace(context) + 12),
-          ),
-        ],
+            if (state.hasNext)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: SizedBox(height: AppBottomNav.reservedSpace(context) + 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -542,36 +557,84 @@ class _StoreDirectoryState extends ConsumerState<_StoreDirectory> {
       ref.invalidate(marketStoresProvider);
     });
 
+    Future<void> refresh() async {
+      ref.invalidate(marketStoresProvider);
+      try {
+        await ref.read(marketStoresProvider.future);
+      } catch (_) {
+        // The stores already on screen stay; `skipError` below keeps them.
+      }
+    }
+
     final async = ref.watch(marketStoresProvider);
     return async.when(
+      // A refresh re-reads under the list on screen rather than dropping
+      // back to the loader, and a failed one leaves that list where it was.
+      skipLoadingOnReload: true,
+      skipError: true,
       data: (stores) {
         if (stores.isEmpty) {
-          return const EmptyState(
-            icon: LucideIcons.store,
-            title: 'Toko tidak ditemukan',
+          return RefreshIndicator(
+            onRefresh: refresh,
+            child: const _PullableFill(
+              child: EmptyState(
+                icon: LucideIcons.store,
+                title: 'Toko tidak ditemukan',
+              ),
+            ),
           );
         }
-        return ListView.separated(
-          controller: _scroll,
-          padding: EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            AppBottomNav.reservedSpace(context) + 12,
+        return RefreshIndicator(
+          onRefresh: refresh,
+          child: ListView.separated(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              AppBottomNav.reservedSpace(context) + 12,
+            ),
+            itemCount: stores.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final store = stores[i];
+              return StoreCard(
+                store: store,
+                onTap: () => context.push(Routes.storeDetail(store.handle)),
+              );
+            },
           ),
-          itemCount: stores.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) {
-            final store = stores[i];
-            return StoreCard(
-              store: store,
-              onTap: () => context.push(Routes.storeDetail(store.handle)),
-            );
-          },
         );
       },
       loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat toko')),
+      error: (_, __) => RefreshIndicator(
+        onRefresh: refresh,
+        child: const _PullableFill(
+          child: Center(child: Text('Gagal memuat toko')),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gives a tab's empty or error state something to drag, so the pull to
+/// refresh works there too — it's the state most worth re-reading from.
+class _PullableFill extends StatelessWidget {
+  const _PullableFill({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: child,
+        ),
+      ),
     );
   }
 }

@@ -87,7 +87,7 @@ class BidListingPage extends ConsumerWidget {
                           'Pembeli mungkin sudah membatalkan atau memenuhi '
                           'permintaan kartu ini.',
                       action: OutlinedButton(
-                        onPressed: () => context.push(Routes.market),
+                        onPressed: () => context.go(Routes.market),
                         child: const Text('Lihat market'),
                       ),
                     ),

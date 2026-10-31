@@ -31,7 +31,7 @@ DashboardPayload _payload(DashboardKpi kpi) => DashboardPayload(
   kpi: kpi,
   performance: const DashboardPerformance(window: 30),
   health: const DashboardHealth(),
-  summary: const DashboardSummary(last30: 25000000, delta30: 317),
+  summary: const DashboardSummary(last90: 25000000, delta90: 317),
   walletBalance: 177179,
 );
 
@@ -101,12 +101,12 @@ void main() {
     expect(find.text('Halo, satoshi'), findsOneWidget);
   });
 
-  testWidgets('the headline is the 30-day revenue and its move', (
+  testWidgets('the headline is the 90-day revenue and its move', (
     tester,
   ) async {
     await _pump(tester, const DashboardKpi());
 
-    expect(find.text('OMZET 30 HARI'), findsOneWidget);
+    expect(find.text('OMZET 90 HARI'), findsOneWidget);
     expect(find.text('Rp25.000.000'), findsOneWidget);
     // Signed, so a fall reads as one without having to compare two numbers.
     expect(find.text('+317%'), findsOneWidget);
@@ -137,7 +137,7 @@ void main() {
     await _pump(tester, const DashboardKpi());
 
     // The design ends at the button; the charts moved to their own page,
-    // which is also why the 30-day figure appears once again.
+    // which is also why the 90-day figure appears once again.
     expect(find.text('Rp25.000.000'), findsOneWidget);
     expect(find.text('Tambahkan Listing'), findsOneWidget);
   });

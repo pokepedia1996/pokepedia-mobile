@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/app_pagination.dart';
+import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
@@ -179,6 +180,23 @@ const _pageSizeOptions = [15, 25, 50, 100];
 /// Ports `card-feed-list.tsx`, paged as web pages it: the whole feed is
 /// loaded and grouped once, then shown a page at a time — the counts on the
 /// filter are over every card, not just the page on screen.
+/// Whether [group]'s card answers [query]: every word of it found in the
+/// card's name, set code or collector number, ignoring case. "pikachu",
+/// "sv8 pikachu" and "094" all find the same card; a leading `#` on a
+/// number is dropped, as people write numbers both ways.
+bool matchesProposalSearch(ProposalCardGroup group, String query) {
+  final words = query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .map((w) => w.startsWith('#') ? w.substring(1) : w)
+      .where((w) => w.isNotEmpty);
+  if (words.isEmpty) return true;
+  final card = group.card;
+  final haystack = '${card.name} ${card.expansionCode} ${card.collectorNumber}'
+      .toLowerCase();
+  return words.every(haystack.contains);
+}
+
 class _CardFeedTab extends ConsumerStatefulWidget {
   const _CardFeedTab();
 
@@ -188,6 +206,11 @@ class _CardFeedTab extends ConsumerStatefulWidget {
 
 class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
   final _scroll = ScrollController();
+  final _searchController = TextEditingController();
+
+  /// What the search box holds. The whole feed is already loaded, so it
+  /// narrows on the device as the reader types, with no round trip.
+  String _search = '';
 
   /// 1-based, like web's.
   int _page = 1;
@@ -196,6 +219,7 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
   @override
   void dispose() {
     _scroll.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -220,8 +244,11 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
     // A new filter or a reload starts from the first page, as web's
     // `setPage(1)` beside each does.
     ref.listen(proposalFeedFilterProvider, (_, __) => _goTo(1));
-    ref.listen(proposalCardFeedProvider, (_, next) {
-      if (next.hasValue && !next.isLoading) _goTo(1);
+    // Only a reload: loading older activity keeps the reader where they are.
+    ref.listen(proposalCardFeedProvider, (previous, next) {
+      if ((previous?.isLoading ?? true) && next.hasValue && !next.isLoading) {
+        _goTo(1);
+      }
     });
 
     // The states with nothing to scroll keep the heading above them.
@@ -243,7 +270,8 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
           ),
         ),
       ),
-      data: (groups) {
+      data: (feed) {
+        final groups = feed.groups;
         if (groups.isEmpty) {
           return withHeading(
             const EmptyState(
@@ -256,7 +284,12 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
           );
         }
 
-        final visible = groups.where(filter.matches).toList();
+        // The search narrows first, so the chip counts below are counts of
+        // what it found — a chip saying 4 over a list of 1 would be wrong.
+        final searched = _search.isEmpty
+            ? groups
+            : groups.where((g) => matchesProposalSearch(g, _search)).toList();
+        final visible = searched.where(filter.matches).toList();
         final pageCount = (visible.length / _pageSize).ceil();
         // A page that no longer exists — the feed shrank under it — shows
         // the last one there is, as web's `safePage` does.
@@ -267,11 +300,7 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
             .toList();
 
         return RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(myBidsProvider);
-            ref.invalidate(sentProposalsProvider);
-            await ref.read(proposalCardFeedProvider.future);
-          },
+          onRefresh: () => ref.refresh(proposalCardFeedProvider.future),
           // One scroll for the whole page: the heading and the count go up
           // with the cards, and the filter pins to the top once they have,
           // so changing it never means scrolling back.
@@ -288,10 +317,23 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
                     // Web states the size of the feed above the filter, so
                     // the count on "Semua" has something to be a share of.
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                       child: Text(
-                        '${groups.length} kartu dengan aktivitas',
+                        // "30+": the newest activity is loaded, older is not.
+                        '${groups.length}${feed.hasMore ? '+' : ''} '
+                        'kartu dengan aktivitas',
                         style: AppTypography.bodySm(context.mutedForeground),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
+                      child: AppSearchField(
+                        hintText: 'Cari kartu, set, atau nomor',
+                        controller: _searchController,
+                        onChanged: (value) {
+                          _search = value.trim();
+                          _goTo(1);
+                        },
                       ),
                     ),
                   ],
@@ -307,11 +349,11 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
                         // Web drops a chip with nothing behind it; "Semua"
                         // always stands so there is a way back.
                         if (option == ProposalFeedFilter.all ||
-                            groups.any(option.matches))
+                            searched.any(option.matches))
                           _FilterChip(
                             label:
                                 '${option.label} '
-                                '(${groups.where(option.matches).length})',
+                                '(${searched.where(option.matches).length})',
                             selected: filter == option,
                             onTap: () =>
                                 ref
@@ -326,14 +368,28 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
                 ),
               ),
               if (visible.isEmpty)
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: LucideIcons.filterX,
-                      title: 'Tidak ada kartu untuk filter ini',
-                    ),
+                    padding: const EdgeInsets.only(top: 24),
+                    child: _search.isEmpty
+                        ? const EmptyState(
+                            icon: LucideIcons.filterX,
+                            title: 'Tidak ada kartu untuk filter ini',
+                          )
+                        : EmptyState(
+                            icon: LucideIcons.searchX,
+                            title: 'Tidak ada kartu yang cocok',
+                            description:
+                                'Tidak ada "$_search" di proposal '
+                                'kamu.',
+                          ),
                   ),
+                ),
+              // Nothing among what is loaded, but older activity may hold it.
+              if (visible.isEmpty && feed.hasMore)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  sliver: SliverToBoxAdapter(child: _LoadOlder(feed: feed)),
                 )
               else
                 SliverPadding(
@@ -363,6 +419,10 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
                           },
                         ),
                       ),
+                      if (feed.hasMore) ...[
+                        const SizedBox(height: 16),
+                        _LoadOlder(feed: feed),
+                      ],
                     ],
                   ),
                 ),
@@ -411,6 +471,33 @@ class _PinnedFilter extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_PinnedFilter oldDelegate) =>
       oldDelegate.child != child || oldDelegate.textScaler != textScaler;
+}
+
+/// "Muat aktivitas lebih lama": the next batch of bids and proposals. The
+/// pages above only cover what has loaded, so this is the way past them.
+class _LoadOlder extends ConsumerWidget {
+  const _LoadOlder({required this.feed});
+
+  final ProposalFeed feed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: feed.loadingMore
+            ? null
+            : () => ref.read(proposalCardFeedProvider.notifier).loadMore(),
+        child: feed.loadingMore
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('Muat aktivitas lebih lama'),
+      ),
+    );
+  }
 }
 
 class _CardGroupRow extends StatelessWidget {

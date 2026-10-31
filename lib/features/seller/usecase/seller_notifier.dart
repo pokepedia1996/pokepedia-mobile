@@ -64,6 +64,9 @@ final sellerDashboardProvider = FutureProvider<DashboardPayload?>((ref) async {
   final quarter = results[1];
   if (quarter == null) return payload;
   return payload.copyWith(
-    summary: computeSummary(quarter.performance.dailyGmv),
+    summary: computeSummary(
+      quarter.performance.dailyGmv,
+      prev90: quarter.performance.prevGmv,
+    ),
   );
 });

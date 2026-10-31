@@ -309,8 +309,9 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: 'dispute',
-              builder: (_, state) =>
-                  DisputeDetailPage(orderSlug: state.pathParameters['slug']!),
+              builder: (_, state) => DisputeDetailPage.forOrder(
+                orderSlug: state.pathParameters['slug']!,
+              ),
             ),
             GoRoute(
               path: 'open-dispute',
@@ -320,6 +321,11 @@ final appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+    GoRoute(
+      path: '/disputes/:slug',
+      builder: (_, state) =>
+          DisputeDetailPage(disputeSlug: state.pathParameters['slug']!),
     ),
     GoRoute(path: Routes.offers, builder: (_, __) => const OffersPage()),
     GoRoute(

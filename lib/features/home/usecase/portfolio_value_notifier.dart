@@ -124,6 +124,14 @@ final selectedCollectionIdProvider = FutureProvider<String?>((ref) async {
   return primaryCollectionId(ref.read(supabaseClientProvider), user.id);
 });
 
+/// True while the home page's pull-to-refresh is in flight.
+///
+/// The chart's series is rebuilt because the summary it reads changed, which
+/// Riverpod reports as a reload — the same as switching range or portfolio.
+/// Only a pull should keep the old line up until the new one lands; a switch
+/// still shows the spinner, since the old line would be the wrong one.
+final homeRefreshingProvider = StateProvider<bool>((ref) => false);
+
 /// The chart series for the selected portfolio and range.
 ///
 /// Yesterday and earlier come from `collection_value_snapshots`; **today is

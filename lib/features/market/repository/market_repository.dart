@@ -150,7 +150,9 @@ class MarketRepository {
                 'p_search': query.trim().isEmpty ? null : query.trim(),
                 'p_offset': 0,
                 'p_limit': 40,
-                'p_sort': 'listings_desc',
+                // Most recently listed toko first, ahead of the
+                // top-rated/verified pinning the other sorts keep.
+                'p_sort': 'recent_activity',
               },
             )
             as List;
@@ -493,10 +495,16 @@ class MarketRepository {
   }
 
   /// The seller's feedback summary, bucketed by period server-side.
-  Future<StoreFeedbackSummary> fetchFeedbackSummary(String userId) async {
+  /// [role] narrows it to orders where they were the seller or the buyer.
+  Future<StoreFeedbackSummary> fetchFeedbackSummary(
+    String userId, {
+    FeedbackRole? role,
+  }) async {
     final result = await _client.rpc(
       'get_feedback_counts_matrix',
-      params: {'p_user_id': userId},
+      // Sent only when narrowing, so Semua still resolves on a database
+      // older than the role filter.
+      params: {'p_user_id': userId, 'p_role': ?role?.raw},
     );
     if (result is! Map) {
       return const StoreFeedbackSummary(positive: 0, neutral: 0, negative: 0);
@@ -511,9 +519,11 @@ class MarketRepository {
   /// included, all periods. The RPC groups sibling items of one order into a
   /// single review and joins the rater's username itself. [filter] is
   /// `positive` / `neutral` / `negative`; [period] is `1mo` / `6mo` / `12mo` /
-  /// `all`; [sort] is `recent` / `oldest`.
+  /// `all`; [sort] is `recent` / `oldest`; [role] keeps only the orders
+  /// where [userId] was the seller or the buyer.
   Future<List<StoreFeedback>> fetchFeedback(
     String userId, {
+    FeedbackRole? role,
     int limit = 20,
     int page = 1,
     String? filter,
@@ -537,6 +547,7 @@ class MarketRepository {
             : trimmedSearch,
         'p_page': page,
         'p_page_size': limit,
+        'p_role': ?role?.raw,
       },
     );
     return StoreFeedback.parseList(result);

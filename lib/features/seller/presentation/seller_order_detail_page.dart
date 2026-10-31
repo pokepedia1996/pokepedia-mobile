@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -14,6 +16,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/presentation/widgets/order_rating_section.dart';
 import '../../orders/presentation/widgets/order_thumbnail.dart';
 import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/seller_order_detail.dart';
@@ -69,7 +72,7 @@ class SellerOrderDetailPage extends ConsumerWidget {
               ref.invalidate(sellerOrderDetailProvider(orderSlug));
               await ref.read(sellerOrderDetailProvider(orderSlug).future);
             },
-            child: _Body(detail: detail),
+            child: _Body(detail: detail, orderSlug: orderSlug),
           );
         },
       ),
@@ -78,9 +81,12 @@ class SellerOrderDetailPage extends ConsumerWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.detail});
+  const _Body({required this.detail, required this.orderSlug});
 
   final SellerOrderDetail detail;
+
+  /// The page's key, which the rating provider shares with the detail.
+  final String orderSlug;
 
   @override
   Widget build(BuildContext context) {
@@ -131,6 +137,24 @@ class _Body extends StatelessWidget {
             child: _ShipmentBlock(detail: detail),
           ),
         const SizedBox(height: 12),
+
+        // Web's "Nilai pembeli": once the order is done, the seller rates
+        // the buyer — positive only.
+        if (OrderRatingSection.isReviewable(order)) ...[
+          OrderRatingSection(
+            order: order,
+            rating: sellerOrderRatingProvider(orderSlug),
+            asSeller: true,
+            child: (title, children) => _Section(
+              title: title,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
 
         _Section(
           title: 'Pesanan',
@@ -312,6 +336,21 @@ class _ItemRow extends StatelessWidget {
                   child: InlinePill(tone: pill.tone, label: pill.label),
                 ),
               ],
+              // The complaint is answered on its own page; this row is the
+              // only place the seller sees which line it is about.
+              if (item.dispute?.slug case final slug? when slug.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () => context.push(Routes.dispute(slug)),
+                  icon: const Icon(LucideIcons.messageSquareWarning, size: 14),
+                  label: const Text('Tanggapi komplain'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.error,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: AppTypography.captionSemibold(colors.error),
+                  ),
+                ),
             ],
           ),
         ),
@@ -356,16 +395,14 @@ class _ShipmentBlock extends ConsumerWidget {
     final colors = context.appColors;
     final tracking = order.trackingNumber;
     final bookError = order.biteshipBookError;
+    final pill = sellerShipmentPill(order);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            StatusPill(
-              label: _shipmentLabel(order),
-              color: _shipmentColor(context, order),
-            ),
+            StatusPill.tone(label: pill.label, tone: pill.tone),
             const Spacer(),
             if (order.courier != null)
               Text(
@@ -505,7 +542,10 @@ class _ShipmentBlock extends ConsumerWidget {
           ],
         ],
 
-        if (order.shipmentDeadline != null) ...[
+        // The send-by deadline only means something while the parcel is
+        // still with the seller; on a shipped order "Lewat batas" read as a
+        // late warning that wasn't true.
+        if (order.shipmentDeadline != null && detail.awaitingShipment) ...[
           const SizedBox(height: 8),
           Text(
             // Web pairs the date with how long is actually left; a bare
@@ -719,25 +759,30 @@ class _MoneyRow extends StatelessWidget {
   }
 }
 
-String _shipmentLabel(OrderModel order) => switch (order.shipmentStatus) {
-  'awaiting_shipment' || null => 'Menunggu dikirim',
-  'confirmed' || 'allocated' || 'picking_up' => 'Menunggu kurir',
-  'picked' || 'dropping_off' || 'on_hold' => 'Dalam perjalanan',
-  'delivered' => 'Terkirim',
-  'cancelled' || 'rejected' || 'returned' => 'Dibatalkan',
-  final other => other,
-};
-
-Color _shipmentColor(BuildContext context, OrderModel order) {
-  final colors = context.appColors;
-  return switch (order.shipmentStatus) {
-    'delivered' => colors.primary,
-    'cancelled' || 'rejected' || 'returned' => colors.error,
-    // `condMp` is the app's amber, which is the warning tone web paints a
-    // waiting state in. `tertiary` was never set on either ColorScheme, so
-    // it resolved to Material's default — a near-black in dark mode, which
-    // is why "Menunggu dikirim" was unreadable.
-    'awaiting_shipment' || null => context.appSemantic.condMp,
-    _ => context.mutedForeground,
-  };
-}
+/// The shipping chip — web's seller `STATUS_TONE` and the buyer-side
+/// `SHIPMENT_OVERRIDE_MAP` labels. `shipments.status` is the app's own
+/// vocabulary; Biteship's tracking words arrive in the same column on older
+/// rows, so both read as Indonesian rather than leaking the raw value.
+({String label, InlinePillTone tone}) sellerShipmentPill(OrderModel order) =>
+    switch (order.shipmentStatus) {
+      'awaiting_shipment' ||
+      'pending' ||
+      null => (label: 'Menunggu dikirim', tone: InlinePillTone.warning),
+      'awaiting_pickup' ||
+      'confirmed' ||
+      'allocated' ||
+      'picking_up' => (label: 'Menunggu pickup', tone: InlinePillTone.progress),
+      'shipped' ||
+      'picked' ||
+      'dropping_off' ||
+      'on_hold' => (label: 'Dikirim', tone: InlinePillTone.shipped),
+      'received' ||
+      'delivered' => (label: 'Tiba di tujuan', tone: InlinePillTone.success),
+      'completed' => (label: 'Selesai', tone: InlinePillTone.success),
+      'cancelled' || 'rejected' || 'returned' => (
+        label: 'Pengiriman dibatalkan',
+        tone: InlinePillTone.neutral,
+      ),
+      'issue' => (label: 'Bermasalah', tone: InlinePillTone.danger),
+      _ => (label: 'Status tidak diketahui', tone: InlinePillTone.neutral),
+    };

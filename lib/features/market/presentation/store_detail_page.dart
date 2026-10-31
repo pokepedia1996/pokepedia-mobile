@@ -912,11 +912,12 @@ class _About extends StatelessWidget {
           const SizedBox(height: 14),
           Text('Info', style: AppTypography.bodySemibold(colors.onSurface)),
           const SizedBox(height: 8),
-          _AboutRow(
-            icon: LucideIcons.idCard,
-            label: 'Status',
-            value: store.isVerified ? 'Terverifikasi' : 'Belum terverifikasi',
-          ),
+          if (store.username?.isNotEmpty ?? false)
+            _AboutRow(
+              icon: LucideIcons.atSign,
+              label: 'Username',
+              value: '@${store.username}',
+            ),
           if (store.cityName.isNotEmpty)
             _AboutRow(
               icon: LucideIcons.mapPin,
@@ -929,16 +930,6 @@ class _About extends StatelessWidget {
               label: 'Bergabung',
               value: formatJoinedId(store.memberSince!),
             ),
-          _AboutRow(
-            icon: LucideIcons.tag,
-            label: 'Terjual',
-            value: '${store.itemsSoldCount} kartu',
-          ),
-          _AboutRow(
-            icon: LucideIcons.users,
-            label: 'Pengikut',
-            value: '${store.followersCount}',
-          ),
           if (store.onVacation)
             _AboutRow(
               icon: LucideIcons.palmtree,
@@ -1054,14 +1045,24 @@ class _FilterToggle extends StatelessWidget {
 }
 
 /// Ports `storefront-feedback-tab.tsx` — the positive-rate headline, the
-/// three-way breakdown, and the reviews themselves.
-class _Feedback extends ConsumerWidget {
+/// three-way breakdown, and the reviews themselves, with web's
+/// Semua / Sebagai Penjual / Sebagai Pembeli switch narrowing all three.
+class _Feedback extends ConsumerStatefulWidget {
   const _Feedback({required this.store});
 
   final StoreModel store;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Feedback> createState() => _FeedbackState();
+}
+
+class _FeedbackState extends ConsumerState<_Feedback> {
+  /// Null for both sides.
+  FeedbackRole? _role;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
     final colors = context.appColors;
     final userId = store.userId;
     if (userId == null) {
@@ -1074,8 +1075,9 @@ class _Feedback extends ConsumerWidget {
       );
     }
 
-    final summaryAsync = ref.watch(storeFeedbackSummaryProvider(userId));
-    final listAsync = ref.watch(storeFeedbackProvider(userId));
+    final query = (userId: userId, role: _role);
+    final summaryAsync = ref.watch(storeFeedbackSummaryProvider(query));
+    final listAsync = ref.watch(storeFeedbackProvider(query));
     final summary = summaryAsync.valueOrNull;
 
     return Padding(
@@ -1144,20 +1146,32 @@ class _Feedback extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          _RoleSwitch(
+            value: _role,
+            onChanged: (role) => setState(() => _role = role),
+          ),
+          const SizedBox(height: 12),
           listAsync.when(
             data: (items) {
               if (items.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Text(
-                    'Belum ada penilaian untuk toko ini.',
+                    _role == null
+                        ? 'Belum ada penilaian untuk toko ini.'
+                        : 'Belum ada penilaian sebagai ${_role!.noun}.',
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
                 );
               }
               return Column(
-                children: [for (final item in items) _FeedbackTile(item: item)],
+                children: [
+                  for (final item in items)
+                    // The badge only says something on Semua; a narrowed
+                    // list is all one side already.
+                    _FeedbackTile(item: item, showRole: _role == null),
+                ],
               );
             },
             loading: () => const Padding(
@@ -1175,6 +1189,60 @@ class _Feedback extends ConsumerWidget {
               style: AppTypography.bodySm(context.mutedForeground),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Semua / Sebagai Penjual / Sebagai Pembeli. Web's labels abbreviate to
+/// "Sbg"; spelled out here, since a phone has the width for three.
+class _RoleSwitch extends StatelessWidget {
+  const _RoleSwitch({required this.value, required this.onChanged});
+
+  final FeedbackRole? value;
+  final ValueChanged<FeedbackRole?> onChanged;
+
+  static const _options = <(FeedbackRole?, String)>[
+    (null, 'Semua'),
+    (FeedbackRole.seller, 'Sebagai Penjual'),
+    (FeedbackRole.buyer, 'Sebagai Pembeli'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Row(
+        children: [
+          for (final (role, label) in _options)
+            Expanded(
+              child: InkWell(
+                onTap: role == value ? null : () => onChanged(role),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: role == value ? colors.primary : null,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: role == value
+                        ? AppTypography.captionSemibold(colors.onPrimary)
+                        : AppTypography.caption(context.mutedForeground),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1203,9 +1271,13 @@ class _Tally extends StatelessWidget {
 }
 
 class _FeedbackTile extends StatelessWidget {
-  const _FeedbackTile({required this.item});
+  const _FeedbackTile({required this.item, this.showRole = false});
 
   final StoreFeedback item;
+
+  /// Web's "Sebagai penjual/pembeli" badge — which side of that order the
+  /// store owner was on.
+  final bool showRole;
 
   @override
   Widget build(BuildContext context) {
@@ -1256,6 +1328,13 @@ class _FeedbackTile extends StatelessWidget {
               ),
             ],
           ),
+          if (showRole && item.ratedRole != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Sebagai ${item.ratedRole!.noun}',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+          ],
           if (item.comment != null && item.comment!.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(item.comment!, style: AppTypography.bodySm(colors.onSurface)),
@@ -1278,7 +1357,9 @@ class _FeedbackTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Balasan penjual',
+                    // The reply is the rated user's, so it's the buyer's
+                    // on a rating they received as one.
+                    'Balasan ${(item.ratedRole ?? FeedbackRole.seller).noun}',
                     style: AppTypography.captionSemibold(
                       context.mutedForeground,
                     ),
