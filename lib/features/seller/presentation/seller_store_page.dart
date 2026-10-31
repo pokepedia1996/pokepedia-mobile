@@ -13,6 +13,8 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/store_profile.dart';
 import '../usecase/store_profile_notifier.dart';
+import '../../../shared/widgets/app_network_image.dart';
+import '../../../core/utils/image_url.dart';
 
 /// Ports the "Toko" section of web's seller workspace nav
 /// (`RAIL_BY_SECTION.store`): Profil toko, Kurir, Chat.
@@ -195,7 +197,10 @@ class _StoreHeader extends StatelessWidget {
             backgroundColor: colors.secondary,
             backgroundImage: profile.storeLogoUrl == null
                 ? null
-                : NetworkImage(profile.storeLogoUrl!),
+                : cachedImageProvider(
+                    profile.storeLogoUrl!,
+                    size: ImageSize.half,
+                  ),
             child: profile.storeLogoUrl != null
                 ? null
                 : Icon(

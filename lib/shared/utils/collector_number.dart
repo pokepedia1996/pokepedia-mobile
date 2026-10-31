@@ -30,3 +30,8 @@ int compareCollectorNumber(String a, String b) {
   if (groupA == _rgbGroup) return _rgbRank(a)! - _rgbRank(b)!;
   return compareNatural(a, b);
 }
+
+/// Web's `stripCardNumberSuffix`: "025/165-2" reads "025/165". The suffix
+/// only tells apart two printings under one number in the catalog.
+String stripCardNumberSuffix(String number) =>
+    number.replaceFirst(RegExp(r'-\d+$'), '');

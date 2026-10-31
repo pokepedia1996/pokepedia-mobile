@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/expansions/usecase/expansions_notifier.dart';
 import '../../features/portfolio/usecase/collection_page_notifier.dart';
 import '../../features/portfolio/usecase/portfolio_notifier.dart';
+import '../../features/portfolio/repository/models/inventory_entry.dart';
 import '../../shared/models/deck_model.dart';
 
 /// Single choke point for every mutation that changes what a user owns or
@@ -178,12 +179,17 @@ class CardOwnershipController {
   /// Confirms an inventory draft (`user_inventory.is_draft` → false) and
   /// syncs the quantity into the primary collection — the RPC only does the
   /// former, mirroring the web's `handleSaveDraft` making both calls itself.
+  ///
+  /// Except for a [synced] draft: it was copied *out of* the collection, so
+  /// adding it back would count those cards twice. Web skips them too
+  /// (`splitDraftsBySource`).
   Future<String?> confirmInventoryDraft({
     required String userId,
     required int recordId,
     required int cardId,
     required int quantity,
     required int unitPrice,
+    bool synced = false,
   }) async {
     final repo = _ref.read(portfolioRepositoryProvider);
     final confirmError = await repo.confirmDraftRecord(
@@ -193,13 +199,82 @@ class CardOwnershipController {
       unitPrice: unitPrice,
     );
     if (confirmError != null) return confirmError;
-    final qtyError = await _ref
-        .read(expansionsRepositoryProvider)
-        .upsertUserCard(userId: userId, cardId: cardId, delta: quantity);
+    final qtyError = synced
+        ? null
+        : await _ref
+              .read(expansionsRepositoryProvider)
+              .upsertUserCard(userId: userId, cardId: cardId, delta: quantity);
     _revalidateOwnership(cardId);
     _revalidateInventory();
     return qtyError;
   }
+
+  /// Web's "Simpan Semua": every draft confirmed in a few bulk calls, the
+  /// ones typed in by hand added to the primary collection — one call per
+  /// card, however many drafts it had — and everything re-read once at the
+  /// end rather than after each draft.
+  ///
+  /// It used to confirm one draft at a time, and each one re-read the whole
+  /// inventory and every draft: thousands of round trips, and a re-download
+  /// of the table per row, after syncing a large collection.
+  Future<({int saved, int failed, String? error})> confirmInventoryDrafts({
+    required String userId,
+    required List<InventoryEntry> drafts,
+    void Function(int done)? onProgress,
+  }) async {
+    final result = await _ref
+        .read(portfolioRepositoryProvider)
+        .confirmDraftRecords(
+          userId: userId,
+          recordIds: [for (final d in drafts) d.id],
+          onProgress: onProgress,
+        );
+    final confirmed = result.confirmed;
+
+    final deltas = <int, int>{};
+    for (final d in drafts) {
+      if (d.isSynced || !confirmed.contains(d.id)) continue;
+      deltas.update(
+        d.card.id,
+        (q) => q + d.quantity,
+        ifAbsent: () => d.quantity,
+      );
+    }
+    String? collectionError;
+    final expansions = _ref.read(expansionsRepositoryProvider);
+    final pending = deltas.entries.toList();
+    // A few at a time: a sync's worth of cards fired at once is hundreds of
+    // simultaneous requests from one phone.
+    for (var i = 0; i < pending.length; i += _collectionWriteBatch) {
+      final batch = pending.sublist(
+        i,
+        (i + _collectionWriteBatch).clamp(0, pending.length),
+      );
+      final errors = await Future.wait([
+        for (final e in batch)
+          expansions.upsertUserCard(
+            userId: userId,
+            cardId: e.key,
+            delta: e.value,
+          ),
+      ]);
+      collectionError ??= errors.whereType<String>().firstOrNull;
+    }
+
+    _revalidateInventory();
+    if (deltas.isNotEmpty) {
+      _ref.invalidate(collectionProvider);
+      invalidateCollectionViews(_ref.invalidate);
+      _ref.invalidate(ownedQuantityProvider);
+    }
+    return (
+      saved: confirmed.length,
+      failed: drafts.length - confirmed.length,
+      error: result.error ?? collectionError,
+    );
+  }
+
+  static const _collectionWriteBatch = 8;
 
   /// Bulk-removes inventory records. `bulk_remove_inventory` already
   /// decrements the primary collection and logs the activity row

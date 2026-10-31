@@ -24,6 +24,7 @@ import '../repository/models/sent_proposal.dart';
 import '../usecase/proposals_notifier.dart';
 import 'widgets/bid_edit_sheet.dart';
 import 'widgets/sent_proposal_card.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `/proposals/card/[cardId]` — everything happening on one card:
 /// your bids for it, the proposals sellers made on those bids, and the
@@ -791,7 +792,7 @@ class _ProposalPhotos extends StatelessWidget {
                 child: SizedBox(
                   width: 40,
                   height: 56,
-                  child: Image.network(
+                  child: cachedNetworkImage(
                     url,
                     fit: BoxFit.cover,
                     errorBuilder: (context, _, __) => ColoredBox(
@@ -823,7 +824,7 @@ class _ProposalPhotos extends StatelessWidget {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(16),
         child: InteractiveViewer(
-          child: Image.network(urls[index.clamp(0, urls.length - 1)]),
+          child: cachedNetworkImage(urls[index.clamp(0, urls.length - 1)]),
         ),
       ),
     );

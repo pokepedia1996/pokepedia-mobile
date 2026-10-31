@@ -4,6 +4,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import 'image_lightbox.dart';
+import 'app_network_image.dart';
 
 /// Ports `components/ui/photo-strip.tsx` — a row of thumbnails that open
 /// full-screen, with the overflow folded onto the last tile.
@@ -75,7 +76,7 @@ class _Thumb extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
+            cachedNetworkImage(
               src,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Icon(

@@ -7,8 +7,9 @@ import '../models/listing_model.dart';
 import 'reputation_star.dart';
 
 /// The rating line under a seller's name on card listing rows: the tiered
-/// reputation star with its score, then the sales count — or "Penjual baru"
-/// for a seller with neither. Web's `SellerRatingBadge` leads with a
+/// reputation star with its score, then the sales count and the share of
+/// orders completed once there are enough to publish it — or "Penjual baru"
+/// for a seller with none of these. Web's `SellerRatingBadge` leads with a
 /// positive %, which mobile drops in favour of the star used everywhere
 /// else in the app; the review breakdown it shows on hover is the
 /// long-press tooltip here.
@@ -24,7 +25,9 @@ class SellerRatingBadge extends StatelessWidget {
   /// Nothing worth showing yet: no sales, and a score still in the star's
   /// hollow "new" tier.
   bool get isNew =>
-      (rating?.totalSales ?? 0) == 0 && reputationTier(score).isNew;
+      (rating?.totalSales ?? 0) == 0 &&
+      rating?.completionPct == null &&
+      reputationTier(score).isNew;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +35,11 @@ class SellerRatingBadge extends StatelessWidget {
     if (isNew) return Text('Penjual baru', style: muted);
 
     final sales = rating?.totalSales ?? 0;
+    final completion = rating?.completionPct;
+    final tail = [
+      if (sales > 0) '${formatCountId(sales)} penjualan',
+      if (completion != null) '$completion% selesai',
+    ];
     final line = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -41,10 +49,10 @@ class SellerRatingBadge extends StatelessWidget {
           formatCountId(score),
           style: AppTypography.captionSemibold(context.appColors.onSurface),
         ),
-        if (sales > 0)
+        if (tail.isNotEmpty)
           Flexible(
             child: Text(
-              ' · ${formatCountId(sales)} penjualan',
+              ' · ${tail.join(' · ')}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: muted,

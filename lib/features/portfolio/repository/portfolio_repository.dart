@@ -12,6 +12,7 @@ import '../../../shared/utils/primary_collection.dart';
 import 'models/collection_page.dart';
 import 'models/deck_card_entry.dart';
 import 'models/inventory_entry.dart';
+import 'models/portfolio_export_row.dart';
 import 'models/wantlist_model.dart';
 import '../../../core/errors/user_message.dart';
 
@@ -107,6 +108,10 @@ Map<String, dynamic> collectionPageParams({
     'p_cursor_ts': cursor?.cursorTs?.toUtc().toIso8601String(),
   };
 }
+
+/// Rows per `search_cards_picker` page — web's `SEARCH_LIMIT`. A page this
+/// full means there may be more behind it.
+const cardPickerPageSize = 40;
 
 /// Data access for the Portfolio feature (Koleksi / Deck / Inventori /
 /// Wishlist tabs), backed by Supabase. Mirrors `fetchCollectionCards` /
@@ -449,17 +454,46 @@ class PortfolioRepository {
     }
   }
 
+  /// Web's `JOINED_SELECT`: the card, and through its expansion the series
+  /// the Database tab's Seri column shows.
   static const _inventorySelect =
-      'id, card_id, quantity, unit_price, created_at, notes, cards!inner($_cardColumns)';
+      'id, card_id, quantity, unit_price, created_at, notes, custom_data, '
+      'variant_key, source, cards!inner($_cardColumns, '
+      'expansions(series:series_id(id, name_id)))';
 
-  InventoryEntry _mapInventoryRow(Map<String, dynamic> r) => InventoryEntry(
-    id: r['id'] as int,
-    card: CardModel.fromRow(r['cards'] as Map<String, dynamic>),
-    quantity: r['quantity'] as int,
-    unitPrice: r['unit_price'] as int,
-    createdAt: DateTime.parse(r['created_at'] as String),
-    notes: r['notes'] as String?,
-  );
+  InventoryEntry _mapInventoryRow(Map<String, dynamic> r) {
+    final cardRow = r['cards'] as Map<String, dynamic>;
+    final expansion = cardRow['expansions'] as Map<String, dynamic>?;
+    final series = expansion?['series'] as Map<String, dynamic>?;
+    return InventoryEntry(
+      id: r['id'] as int,
+      card: CardModel.fromRow(cardRow),
+      quantity: r['quantity'] as int,
+      unitPrice: r['unit_price'] as int,
+      createdAt: DateTime.parse(r['created_at'] as String),
+      notes: r['notes'] as String?,
+      series: series?['name_id'] as String?,
+      seriesId: series?['id'] as int?,
+      variantKey: r['variant_key'] as String?,
+      customData: (r['custom_data'] as Map<String, dynamic>?) ?? const {},
+      source: r['source'] as String?,
+    );
+  }
+
+  /// Ports `fetchColumnConfig` — the user's Database columns, in their
+  /// order. Empty when they have never opened the column settings on web,
+  /// which means every built-in column is shown.
+  Future<List<InventoryColumn>> fetchInventoryColumns(String userId) async {
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('user_inventory_column_config')
+          .select('column_key, label, data_type, is_visible, is_custom')
+          .eq('user_id', userId)
+          .order('sort_order', ascending: true)
+          .range(from, to),
+    );
+    return rows.map(InventoryColumn.fromRow).toList();
+  }
 
   /// Ports `fetchInventoryRecords` — confirmed (non-draft) `user_inventory`
   /// rows. This is the "Database" view: what's actually in the inventory.
@@ -545,6 +579,109 @@ class PortfolioRepository {
     }
   }
 
+  /// Ports web's "Sinkronkan Koleksi" (`/api/inventory/sync`): stages, as
+  /// drafts, every copy the collection holds that the inventory doesn't yet
+  /// — neither saved nor already drafted. Null [collectionId] means the
+  /// main collection.
+  ///
+  /// Called on the function itself rather than through web's route: it
+  /// checks `auth.uid()` against [userId] and resolves the collection
+  /// through it, so it is as safe from here, and the route sits behind
+  /// Vercel's firewall. It only ever adds what is missing, under a per-user
+  /// lock, so a second tap adds nothing.
+  Future<({int inserted, String? error})> syncInventoryFromCollection({
+    required String userId,
+    String? collectionId,
+  }) async {
+    try {
+      final data = await _client.rpc(
+        'sync_inventory_from_collection',
+        params: {'p_user_id': userId, 'p_collection_id': collectionId},
+      );
+      final row = data is List && data.isNotEmpty ? data.first : data;
+      final inserted = row is Map ? row['inserted_count'] : null;
+      return (inserted: inserted is int ? inserted : 0, error: null);
+    } on PostgrestException catch (e) {
+      return (
+        inserted: 0,
+        error: e.message.contains('collection_not_found')
+            ? 'Koleksi tidak ditemukan.'
+            : 'Gagal menyinkronkan inventori.',
+      );
+    } catch (_) {
+      return (inserted: 0, error: 'Gagal menyinkronkan inventori.');
+    }
+  }
+
+  /// Ports web's "Simpan Semua": confirms [recordIds] through
+  /// `confirm_bulk_inventory_drafts`, [_bulkConfirmChunk] at a time, as web
+  /// does — one call per few hundred drafts rather than one per draft.
+  ///
+  /// Returns the ids it confirmed. A draft can be skipped (gone, or locked
+  /// by a save already in flight), so that set may be smaller than what was
+  /// asked for; [onProgress] hears after each chunk.
+  Future<({Set<int> confirmed, String? error})> confirmDraftRecords({
+    required String userId,
+    required List<int> recordIds,
+    void Function(int done)? onProgress,
+  }) async {
+    final confirmed = <int>{};
+    try {
+      for (var i = 0; i < recordIds.length; i += _bulkConfirmChunk) {
+        final chunk = recordIds.sublist(
+          i,
+          (i + _bulkConfirmChunk).clamp(0, recordIds.length),
+        );
+        final rows = await _client.rpc(
+          'confirm_bulk_inventory_drafts',
+          params: {'p_user_id': userId, 'p_record_ids': chunk},
+        );
+        for (final row in rows as List) {
+          if (row['ok'] == true) {
+            confirmed.add((row['record_id'] as num).toInt());
+          }
+        }
+        onProgress?.call(i + chunk.length);
+      }
+      return (confirmed: confirmed, error: null);
+    } on PostgrestException catch (e) {
+      return (confirmed: confirmed, error: userFacingError(e));
+    }
+  }
+
+  /// Ports web's "Hapus Semua": [recordIds] in a few `in` filters rather
+  /// than a delete per draft. By id rather than "every draft", so a draft
+  /// staged elsewhere after this list was read survives, as on web.
+  Future<String?> deleteDraftRecords({
+    required String userId,
+    required List<int> recordIds,
+  }) async {
+    try {
+      // PostgREST carries `in.(...)` in the URL; kept short enough for any
+      // proxy in between.
+      for (var i = 0; i < recordIds.length; i += _bulkDeleteChunk) {
+        await _client
+            .from('user_inventory')
+            .delete()
+            .inFilter(
+              'id',
+              recordIds.sublist(
+                i,
+                (i + _bulkDeleteChunk).clamp(0, recordIds.length),
+              ),
+            )
+            .eq('user_id', userId)
+            .eq('is_draft', true);
+      }
+      return null;
+    } on PostgrestException catch (e) {
+      return userFacingError(e);
+    }
+  }
+
+  static const _bulkConfirmChunk = 500;
+  static const _bulkDeleteChunk = 200;
+
   Future<String?> deleteDraftRecord({
     required String userId,
     required int recordId,
@@ -596,7 +733,9 @@ class PortfolioRepository {
       (from, to) => _client
           .from('user_inventory_activity')
           .select(
-            'id, card_id, action, quantity, unit_price, created_at, cards!inner($_cardColumns)',
+            'id, card_id, action, quantity, unit_price, created_at, '
+            'variant_key, cards!inner($_cardColumns, '
+            'expansions(series:series_id(id, name_id)))',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false)
@@ -604,13 +743,19 @@ class PortfolioRepository {
           .range(from, to),
     );
     return rows.map((r) {
+      final cardRow = r['cards'] as Map<String, dynamic>;
+      final expansion = cardRow['expansions'] as Map<String, dynamic>?;
+      final series = expansion?['series'] as Map<String, dynamic>?;
       return InventoryActivityEntry(
         id: r['id'] as int,
-        card: CardModel.fromRow(r['cards'] as Map<String, dynamic>),
+        card: CardModel.fromRow(cardRow),
         action: InventoryActivityActionX.fromRaw(r['action'] as String),
         quantity: r['quantity'] as int,
         unitPrice: r['unit_price'] as int,
         createdAt: DateTime.parse(r['created_at'] as String),
+        variantKey: r['variant_key'] as String?,
+        series: series?['name_id'] as String?,
+        seriesId: series?['id'] as int?,
       );
     }).toList();
   }
@@ -641,12 +786,14 @@ class PortfolioRepository {
   }
 
   /// Ports `searchCardsPicker` — the catalog search used by "Tambahkan" to
-  /// find a card to stage into inventory.
+  /// find a card to stage into inventory. [offset] pages past the first
+  /// [cardPickerPageSize]; a common name matches hundreds of prints.
   Future<List<CardModel>> searchCardsPicker(
     String query, {
     CardLanguage? language,
     List<String> regulationMarks = const [],
     bool includeCardText = false,
+    int offset = 0,
   }) async {
     if (query.trim().length < 2) return const [];
     final rows =
@@ -654,7 +801,8 @@ class PortfolioRepository {
               'search_cards_picker',
               params: {
                 'search_query': query,
-                'p_limit': 40,
+                'p_limit': cardPickerPageSize,
+                'p_offset': offset,
                 // Narrowed in SQL rather than after the fact: the RPC
                 // returns one capped page, so filtering the page here would
                 // answer "Pikachu in EN" with whatever few English prints
@@ -697,6 +845,72 @@ class PortfolioRepository {
         .eq('is_primary', false)
         .order('updated_at', ascending: false);
     return rows.map(WantlistModel.fromRow).toList();
+  }
+
+  /// Every card on every one of the user's portfolios — the main
+  /// collection and each list — priced, for the portfolio export.
+  ///
+  /// One paged read across all of them rather than one per list, then one
+  /// batch of prices for the lot. Each keeps its own quantity, as
+  /// [fetchCollection] and [fetchListCards] read them.
+  Future<List<PortfolioExportRow>> fetchPortfolioExport(String userId) async {
+    final primaryId = await primaryCollectionId(_client, userId);
+    final lists = await fetchLists(userId);
+    final portfolios = <String, ({String name, int index})>{
+      if (primaryId != null) primaryId: (name: 'Utama', index: 0),
+      for (var i = 0; i < lists.length; i++)
+        lists[i].id: (name: lists[i].name, index: i + 1),
+    };
+    if (portfolios.isEmpty) return const [];
+
+    final rows = await pagedRows(
+      (from, to) => _client
+          .from('collection_cards')
+          .select(
+            'collection_id, quantity, variant_key, notes, '
+            'cards!inner($_cardColumns, '
+            'expansions(series:series_id(id, name_id)))',
+          )
+          .inFilter('collection_id', portfolios.keys.toList())
+          .order('collection_id', ascending: true)
+          .order('card_id', ascending: true)
+          .order('id', ascending: true)
+          .range(from, to),
+    );
+
+    final kept = [
+      for (final r in rows)
+        // The main collection keeps a row at zero once its last copy goes;
+        // a list's row is on the shelf whatever its count says.
+        if (r['collection_id'] != primaryId ||
+            ((r['quantity'] as num?)?.toInt() ?? 0) > 0)
+          r,
+    ];
+    final priced = await priceCards(_client, [
+      for (final r in kept)
+        CardModel.fromRow(r['cards'] as Map<String, dynamic>),
+    ]);
+
+    final result = <PortfolioExportRow>[];
+    for (var i = 0; i < kept.length; i++) {
+      final r = kept[i];
+      final portfolio = portfolios[r['collection_id'] as String]!;
+      final cardRow = r['cards'] as Map<String, dynamic>;
+      final expansion = cardRow['expansions'] as Map<String, dynamic>?;
+      final series = expansion?['series'] as Map<String, dynamic>?;
+      result.add(
+        PortfolioExportRow(
+          portfolio: portfolio.name,
+          portfolioIndex: portfolio.index,
+          card: priced[i],
+          quantity: (r['quantity'] as num?)?.toInt() ?? 1,
+          variantKey: r['variant_key'] as String?,
+          series: series?['name_id'] as String?,
+          notes: r['notes'] as String?,
+        ),
+      );
+    }
+    return result;
   }
 
   /// A collection's cards, in the order they were filed (`created_at`

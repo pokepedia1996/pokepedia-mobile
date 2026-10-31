@@ -1,0 +1,6 @@
+# Copy to key.properties (gitignored) and fill in. storeFile is resolved
+# relative to android/app/, so an absolute path is the least surprising.
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=/Users/you/pokepedia-upload.jks

@@ -26,6 +26,7 @@ import '../usecase/portfolio_notifier.dart';
 import '../utils/deck_pricing.dart';
 import '../utils/deck_validation.dart';
 import 'deck_form_sheet.dart';
+import '../../../core/utils/image_url.dart';
 
 /// Ports `app/portfolio/deck/[id]/page.tsx` + `components/deck/*` — the
 /// deck builder. Uses the same "Cari Kartu" / "Deck" two-pane split the web
@@ -664,7 +665,7 @@ class _DeckSearchCard extends StatelessWidget {
             children: [
               Stack(
                 children: [
-                  CardArt(imageUrl: card.imageUrl),
+                  CardArt(imageUrl: card.imageUrl, size: ImageSize.half),
                   if (thisPrintQty > 0)
                     Positioned(
                       top: 4,
@@ -838,6 +839,7 @@ class _DeckCardRow extends StatelessWidget {
             width: 36,
             child: CardArt(
               imageUrl: entry.card.imageUrl,
+              size: ImageSize.half,
               borderRadius: AppRadius.sm,
             ),
           ),

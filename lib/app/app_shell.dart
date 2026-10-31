@@ -30,6 +30,15 @@ class AppShell extends ConsumerStatefulWidget {
 
   static final _accountTabIndex = AppBottomNav.tabPaths.indexOf(Routes.account);
 
+  /// Child routes that are a view of their tab rather than a detour off it,
+  /// so the pill stays where it is: an expansion opened from Pencarian.
+  static final _navChildPrefixes = ['${Routes.search}/expansions/'];
+
+  static bool _isTabRoot(String path) => _tabRootPaths.contains(path);
+
+  static bool _showsNav(String path) =>
+      _isTabRoot(path) || _navChildPrefixes.any(path.startsWith);
+
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
@@ -53,7 +62,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     // The top bar's logo row keys off absolute offset, like the web's
     // `scrollY > 100`, so it's read from every notification rather than
     // only the direction-sensitive updates the nav pill needs below.
-    _syncTopBar(notification.metrics.pixels > AppTopBar.morphThreshold);
+    // Only a tab root draws the shared top bar; a child view (a pack page)
+    // scrolling must not leave it folded for the root underneath.
+    if (AppShell._isTabRoot(widget.state.uri.path)) {
+      _syncTopBar(notification.metrics.pixels > AppTopBar.morphThreshold);
+    }
 
     if (notification is! ScrollUpdateNotification) return false;
 
@@ -74,7 +87,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isTabRoot = AppShell._tabRootPaths.contains(widget.state.uri.path);
+    final showsNav = AppShell._showsNav(widget.state.uri.path);
     final navigationShell = widget.navigationShell;
     final accountDot = ref.watch(accountNavIndicatorProvider);
 
@@ -83,8 +96,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         onNotification: _onScroll,
         child: navigationShell,
       ),
-      extendBody: isTabRoot,
-      bottomNavigationBar: isTabRoot
+      extendBody: showsNav,
+      bottomNavigationBar: showsNav
           ? AppBottomNav(
               currentIndex: navigationShell.currentIndex,
               hidden: _navHidden,

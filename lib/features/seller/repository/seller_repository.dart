@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
+import 'models/my_reliability.dart';
 import 'models/seller_dashboard.dart';
 
 /// The seller's own store identity, for the "Lihat Toko" link.
@@ -85,18 +86,27 @@ class SellerRepository {
     );
   }
 
-  /// True once the user has a `seller_profiles` row at all — the app only
-  /// offers the dashboard to sellers, and onboarding a new one is a web
-  /// flow (it writes store details the app has no form for yet).
+  /// True once the user has opened a store — a `seller_profiles` row with a
+  /// name. A row alone is not enough: saving a pickup address from Alamat
+  /// (as web allows before any store exists) creates the row too, and that
+  /// seller still needs Buka Toko rather than an empty dashboard.
+  /// Ports web's `get_my_reliability` read. Granted to `authenticated` and
+  /// scoped by `auth.uid()`, so the app calls it on its own session.
+  Future<MyReliability?> fetchMyReliability() async {
+    final result = await _client.rpc('get_my_reliability');
+    return MyReliability.fromJson(result);
+  }
+
   Future<bool> hasStore() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return false;
     final row = await _client
         .from('seller_profiles')
-        .select('user_id')
+        .select('store_name')
         .eq('user_id', userId)
         .maybeSingle();
-    return row != null;
+    final name = row?['store_name'] as String?;
+    return name != null && name.trim().isNotEmpty;
   }
 }
 

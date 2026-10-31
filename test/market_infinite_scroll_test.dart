@@ -41,6 +41,7 @@ class _FakeRepo implements MarketRepository {
   /// Pages handed out in order, one per call.
   final List<MarketListingsPage> pages;
   final cursors = <MarketCursor?>[];
+  final buckets = <MarketBucket>[];
   int calls = 0;
 
   @override
@@ -53,6 +54,7 @@ class _FakeRepo implements MarketRepository {
     int limit = 40,
   }) async {
     cursors.add(cursor);
+    buckets.add(bucket);
     final page = pages[calls.clamp(0, pages.length - 1)];
     calls++;
     return page;
@@ -85,10 +87,13 @@ ProviderContainer _container(_FakeRepo repo) {
   return container;
 }
 
-Future<MarketListingsState> _settled(ProviderContainer c) async {
-  c.listen(marketListingsProvider, (_, __) {});
+Future<MarketListingsState> _settled(
+  ProviderContainer c, [
+  MarketBucket bucket = MarketBucket.all,
+]) async {
+  c.listen(marketListingsProvider(bucket), (_, __) {});
   await Future<void>.delayed(Duration.zero);
-  return c.read(marketListingsProvider);
+  return c.read(marketListingsProvider(bucket));
 }
 
 void main() {
@@ -113,8 +118,10 @@ void main() {
     final container = _container(repo);
     await _settled(container);
 
-    await container.read(marketListingsProvider.notifier).loadMore();
-    final state = container.read(marketListingsProvider);
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
+    final state = container.read(marketListingsProvider(MarketBucket.all));
 
     expect(state.listings.map((l) => l.id), [1, 2, 3, 4]);
     expect(state.hasNext, isFalse);
@@ -129,8 +136,12 @@ void main() {
     final container = _container(repo);
     await _settled(container);
 
-    await container.read(marketListingsProvider.notifier).loadMore();
-    await container.read(marketListingsProvider.notifier).loadMore();
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
 
     expect(repo.calls, 1);
   });
@@ -155,16 +166,25 @@ void main() {
     final container = _container(repo);
     await _settled(container);
 
-    await container.read(marketListingsProvider.notifier).loadMore();
-    expect(container.read(marketListingsProvider).hasNext, isTrue);
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
+    expect(
+      container.read(marketListingsProvider(MarketBucket.all)).hasNext,
+      isTrue,
+    );
 
-    await container.read(marketListingsProvider.notifier).loadMore();
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
     expect(repo.cursors.last?.id, 9);
-    expect(container.read(marketListingsProvider).listings.map((l) => l.id), [
-      1,
-      2,
-      10,
-    ]);
+    expect(
+      container
+          .read(marketListingsProvider(MarketBucket.all))
+          .listings
+          .map((l) => l.id),
+      [1, 2, 10],
+    );
   });
 
   test('a failed page keeps the rows already on screen', () async {
@@ -175,14 +195,16 @@ void main() {
     await _settled(container);
 
     repo.pages.clear();
-    await container.read(marketListingsProvider.notifier).loadMore();
-    final state = container.read(marketListingsProvider);
+    await container
+        .read(marketListingsProvider(MarketBucket.all).notifier)
+        .loadMore();
+    final state = container.read(marketListingsProvider(MarketBucket.all));
 
     expect(state.listings.map((l) => l.id), [1, 2]);
     expect(state.loadingMore, isFalse);
   });
 
-  test('changing the tab starts a fresh feed', () async {
+  test('each tab has its own feed', () async {
     final repo = _FakeRepo([
       _page([1, 2], hasNext: true),
       _page([7], hasNext: false),
@@ -190,11 +212,20 @@ void main() {
     final container = _container(repo);
     await _settled(container);
 
-    container.read(bucketProvider.notifier).state = MarketBucket.buylist;
-    final state = await _settled(container);
+    final buylist = await _settled(container, MarketBucket.buylist);
 
     // Not appended to the old tab's rows, and asked for without a cursor.
-    expect(state.listings.map((l) => l.id), [7]);
+    expect(buylist.listings.map((l) => l.id), [7]);
     expect(repo.cursors.last, isNull);
+    expect(repo.buckets.last, MarketBucket.buylist);
+    // And the tab swiped away from still has its own, not the new one's —
+    // the swipe used to show one tab's cards under another's label.
+    expect(
+      container
+          .read(marketListingsProvider(MarketBucket.all))
+          .listings
+          .map((l) => l.id),
+      [1, 2],
+    );
   });
 }

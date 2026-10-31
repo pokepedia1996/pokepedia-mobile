@@ -94,6 +94,60 @@ class StoreProfileRepository {
     }
   }
 
+  /// Opens a store in one write: its name and URL, the pickup point and the
+  /// couriers, together.
+  ///
+  /// Web reaches the same row a section at a time, but in one upsert the row
+  /// is born complete — `seller_profiles_set_is_active` marks it active on
+  /// insert — or not at all. A flow abandoned half way, or a write that
+  /// fails, leaves no half-made store behind to turn the Jual tab into a
+  /// dashboard with nothing to sell from.
+  ///
+  /// The slug still goes through `resolve_unique_store_slug` first, as
+  /// [saveStorefront] does.
+  Future<String?> openStore({
+    required String storeName,
+    required String storeSlug,
+    required PickupAddress pickup,
+    required List<String> courierServiceIds,
+  }) async {
+    final userId = _uid;
+    if (userId == null) return 'Sesi berakhir.';
+    final name = storeName.trim();
+    if (name.length < 3 || name.length > 40) {
+      return 'Nama toko harus 3–40 karakter.';
+    }
+    if (courierServiceIds.isEmpty) return 'Pilih minimal 1 layanan kurir.';
+
+    try {
+      final resolved = await _client.rpc(
+        'resolve_unique_store_slug',
+        params: {'p_base': storeSlug, 'p_exclude_id': userId},
+      );
+      final finalSlug = resolved as String?;
+      if (finalSlug == null || finalSlug.isEmpty) {
+        return 'Nama toko tidak valid.';
+      }
+
+      await _client.from('seller_profiles').upsert({
+        'user_id': userId,
+        'store_name': name,
+        'store_slug': finalSlug,
+        ...pickup.toRow(),
+        'accepted_courier_services': courierServiceIds,
+        'accepted_couriers': {
+          for (final id in courierServiceIds) id.split('/').first,
+        }.toList(),
+      }, onConflict: 'user_id');
+      return null;
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        return 'URL toko itu baru saja dipakai orang lain. Coba lagi.';
+      }
+      return userFacingError(e);
+    }
+  }
+
   /// Web's `about` section.
   Future<String?> saveAbout(String? aboutMd) async {
     final userId = _uid;
@@ -272,6 +326,69 @@ class StoreProfileRepository {
     }
   }
 }
+
+/// A pickup point, as `seller_profiles` keeps it. The area names travel with
+/// their codes: the row stores both, and Biteship reads the codes.
+class PickupAddress {
+  const PickupAddress({
+    required this.contactName,
+    required this.contactPhone,
+    required this.provinceId,
+    required this.provinceName,
+    required this.cityId,
+    required this.cityName,
+    required this.districtId,
+    required this.districtName,
+    required this.postalCode,
+    required this.fullAddress,
+    required this.latitude,
+    required this.longitude,
+    this.notes,
+  });
+
+  final String contactName;
+  final String contactPhone;
+  final String provinceId;
+  final String provinceName;
+  final String cityId;
+  final String cityName;
+  final String districtId;
+  final String districtName;
+  final String postalCode;
+  final String fullAddress;
+  final double latitude;
+  final double longitude;
+
+  /// A landmark for the courier — "Rumah pagar hitam".
+  final String? notes;
+
+  Map<String, dynamic> toRow() => {
+    'contact_name': contactName.trim(),
+    'contact_phone': contactPhone.trim(),
+    'province_id': provinceId,
+    'province_name': provinceName,
+    'city_id': cityId,
+    'city_name': cityName,
+    'district_id': districtId,
+    'district': districtName,
+    'postal_code': postalCode.trim(),
+    'full_address': fullAddress.trim(),
+    'notes': _nullIfBlank(notes),
+    'pickup_lat': latitude,
+    'pickup_lng': longitude,
+  };
+}
+
+/// Ports web's `SLUG_REGEX`: what `store_slug` may be.
+final storeSlugPattern = RegExp(r'^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$');
+
+/// Ports `slugify`: a store name as its URL.
+String slugify(String value) => value
+    .toLowerCase()
+    .trim()
+    .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+    .replaceAll(RegExp(r'[\s_-]+'), '-')
+    .replaceAll(RegExp(r'^-+|-+$'), '');
 
 /// Ports `extractStorefrontPath` — the object path inside the bucket, which
 /// is what Storage's `remove` takes.
