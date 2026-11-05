@@ -744,7 +744,10 @@ class _PurchasePanelState extends State<_PurchasePanel> {
 
     if (widget.isOwnListing) {
       return OutlinedButton.icon(
-        onPressed: () => context.push(Routes.sellerProducts),
+        // `go`, not `push`: Kelola Listing lives in the Jual tab, and this
+        // page sits on the root navigator above the shell. A push lands it
+        // on the branch underneath, out of sight, so the tap did nothing.
+        onPressed: () => context.go(Routes.sellerProducts),
         icon: const Icon(LucideIcons.pencil, size: 15),
         label: const Text(
           'Kelola listing',

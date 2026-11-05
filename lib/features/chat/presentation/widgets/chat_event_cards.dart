@@ -525,7 +525,9 @@ class _OfferFooterState extends ConsumerState<_OfferFooter> {
     if (viewerId == widget.event.sellerId) {
       return _LinkFooter(
         label: 'Lihat & balas penawaran',
-        onTap: () => context.push(Routes.sellerProducts),
+        // `go`: the page is in the Jual tab, under the chat on the root
+        // navigator, where a push would land it out of sight.
+        onTap: () => context.go(Routes.sellerProducts),
       );
     }
     if (viewerId != widget.event.buyerId || !widget.isLatest) {
