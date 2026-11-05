@@ -11,6 +11,7 @@ import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../notifications/usecase/notification_route.dart';
 import '../usecase/promo_popup_controller.dart';
 import 'promo_popup_dialog.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/promos/components/promo-popup-gate.tsx` +
 /// `usePromoPopup`: wraps the home screen and, once it has settled, shows
@@ -120,7 +121,7 @@ class _PromoPopupGateState extends ConsumerState<PromoPopupGate> {
     final loaded = Completer<bool>();
     unawaited(
       precacheImage(
-        NetworkImage(url),
+        cachedImageProvider(url),
         context,
         onError: (_, __) {
           if (!loaded.isCompleted) loaded.complete(false);

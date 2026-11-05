@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// The order thumbnail web draws: a **square** crop of the card art, focused
 /// near the top, ringed by a border.
@@ -44,7 +45,7 @@ class OrderThumbnail extends StatelessWidget {
       ),
       child: url == null || url.isEmpty
           ? placeholder
-          : Image.network(
+          : cachedNetworkImage(
               url,
               fit: BoxFit.cover,
               // `object-[center_15%]`: the focal point sits 15% down, which

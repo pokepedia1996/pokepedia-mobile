@@ -1,3 +1,4 @@
+import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_market_price.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/models/pokemon_type.dart';
@@ -12,6 +13,7 @@ class CollectionCardRow {
   const CollectionCardRow({
     required this.card,
     required this.collectionCardId,
+    this.condition = CardCondition.nm,
     this.cursorNum,
     this.cursorText,
     this.cursorTs,
@@ -22,6 +24,10 @@ class CollectionCardRow {
   /// `collection_cards.id`. One card can sit in a collection under several
   /// variant keys, so this, not the card id, is what identifies a row.
   final String collectionCardId;
+
+  /// The condition these copies are in. Part of the row's identity, so the
+  /// same card in NM and LP is two rows — and two tiles.
+  final CardCondition condition;
 
   /// The price-asc sentinel for an unpriced card is the bigint maximum, so
   /// this has to stay a 64-bit int end to end — never a double.
@@ -59,6 +65,7 @@ class CollectionCardRow {
               }),
       ),
       collectionCardId: row['collection_card_id'] as String,
+      condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       cursorNum: (row['cursor_num'] as num?)?.toInt(),
       cursorText: row['cursor_text'] as String?,
       cursorTs: row['cursor_ts'] == null

@@ -43,7 +43,8 @@ Future<void> _search(
       overrides: [
         authProvider.overrideWith(_FakeAuth.new),
         inventoryRecordsProvider.overrideWith((ref) async => []),
-        inventoryDraftsProvider.overrideWith((ref) async => drafts),
+        inventoryDraftsProvider.overrideWith(() => _Drafts(drafts)),
+        inventoryColumnsProvider.overrideWith((ref) async => const []),
         cardSearchPickerProvider((
           query: 'pika',
           language: null,
@@ -63,6 +64,16 @@ Future<void> _search(
   await tester.enterText(find.byType(TextField).last, 'pika');
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
+}
+
+/// Stands in for the drafts notifier with a fixed list.
+class _Drafts extends InventoryDraftsNotifier {
+  _Drafts(this.drafts);
+
+  final List<InventoryEntry> drafts;
+
+  @override
+  Future<List<InventoryEntry>> build() async => drafts;
 }
 
 void main() {

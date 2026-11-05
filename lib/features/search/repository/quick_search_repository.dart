@@ -54,14 +54,17 @@ class QuickSearchRepository {
   /// `SEARCH_BATCH_SIZE` — one page of the full results list.
   static const searchBatchSize = 40;
 
-  Future<QuickSearchResults> search(String query) async {
+  Future<QuickSearchResults> search(
+    String query, {
+    required CardLanguage language,
+  }) async {
     final needle = query.trim();
     if (needle.length < minQueryLength) return QuickSearchResults.empty;
 
     // In parallel: neither depends on the other, and the dropdown shows both
     // at once.
     final results = await Future.wait([
-      _searchCards(needle),
+      _searchCards(needle, language),
       _searchStores(needle),
     ]);
     return QuickSearchResults(
@@ -70,7 +73,10 @@ class QuickSearchRepository {
     );
   }
 
-  Future<List<CardModel>> _searchCards(String needle) async {
+  Future<List<CardModel>> _searchCards(
+    String needle,
+    CardLanguage language,
+  ) async {
     try {
       final rows =
           await _client.rpc(
@@ -78,7 +84,7 @@ class QuickSearchRepository {
                 params: {
                   'search_query': needle,
                   'p_limit': cardLimit,
-                  'p_languages': null,
+                  'p_languages': [language.raw],
                   'p_regulation_marks': null,
                 },
               )
@@ -96,9 +102,9 @@ class QuickSearchRepository {
   }
 
   /// One page of full results — `search_cards_fuzzy`, the RPC behind web's
-  /// `/search?q=`, which matches names, numbers, expansion codes,
-  /// illustrators, rarities, attacks and abilities in one pass and ranks them
-  /// by relevance. Typos are absorbed by its trigram fallback.
+  /// `/search?q=`, which matches card identity only — name, collector
+  /// number, expansion code and name, rarity (EN aliases too) — and ranks by
+  /// relevance. Typos are absorbed by its trigram fallback.
   Future<FullSearchPage> searchAll(
     String query, {
     int offset = 0,

@@ -277,17 +277,14 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
   /// Web draws two different empty states: nothing at all, versus nothing in
   /// this tab.
   Widget _empty(SellerOrderTab tab, {required bool hasAny}) {
-    return ListView(
-      children: [
-        const SizedBox(height: 40),
-        EmptyState(
-          icon: LucideIcons.package,
-          title: hasAny ? tab.emptyHeadline : 'Belum ada pesanan',
-          description: hasAny
-              ? (tab.emptySub ?? 'Coba ganti filter atau tab.')
-              : 'Pesanan dari pembeli akan muncul di sini.',
-        ),
-      ],
+    return ScrollableEmptyState(
+      child: EmptyState(
+        icon: LucideIcons.package,
+        title: hasAny ? tab.emptyHeadline : 'Belum ada pesanan',
+        description: hasAny
+            ? (tab.emptySub ?? 'Coba ganti filter atau tab.')
+            : 'Pesanan dari pembeli akan muncul di sini.',
+      ),
     );
   }
 }

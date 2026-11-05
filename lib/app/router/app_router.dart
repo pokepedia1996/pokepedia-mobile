@@ -45,6 +45,7 @@ import '../../features/scanner/presentation/scanner_page.dart';
 import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/search/presentation/search_results_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
+import '../../features/seller/presentation/store_setup/store_setup_page.dart';
 import '../../features/seller/presentation/seller_listing_offers_page.dart';
 import '../../features/seller/presentation/seller_order_detail_page.dart';
 import '../../features/seller/presentation/seller_orders_page.dart';
@@ -103,6 +104,18 @@ final appRouter = GoRouter(
               builder: (_, state) => AdvancedSearchPage(
                 initialQuery: state.uri.queryParameters['q'],
               ),
+              routes: [
+                // An expansion is a view of Pencarian, not a page above it:
+                // pushed on the branch's navigator, it slides in under the
+                // shell's nav pill instead of bringing a copy of the pill
+                // along with it.
+                GoRoute(
+                  path: 'expansions/:packSlug',
+                  builder: (_, state) => PackDetailPage(
+                    packSlug: state.pathParameters['packSlug']!,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -204,8 +217,16 @@ final appRouter = GoRouter(
     // `/expansions/:packSlug` is what a notification, a chat card and every
     // saved link point at, and those must keep resolving.
     GoRoute(path: Routes.expansions, redirect: (_, __) => Routes.search),
+    //
+    // The pack page itself lives in the Pencarian branch now, so the bare
+    // pack path redirects there. The card below stays a full-screen page; a
+    // route redirect runs for every route in the match, hence the segment
+    // count, which keeps `/expansions/<slug>/<cardId>` where it is.
     GoRoute(
       path: '${Routes.expansions}/:packSlug',
+      redirect: (_, state) => state.uri.pathSegments.length == 2
+          ? Routes.packDetail(state.pathParameters['packSlug']!)
+          : null,
       builder: (_, state) =>
           PackDetailPage(packSlug: state.pathParameters['packSlug']!),
       routes: [
@@ -228,6 +249,7 @@ final appRouter = GoRouter(
 
     // Card scanner (opened from AppTopBar's scan button).
     GoRoute(path: Routes.scan, builder: (_, __) => const ScannerPage()),
+    GoRoute(path: Routes.openStore, builder: (_, __) => const StoreSetupPage()),
 
     // Auth.
     //
@@ -287,8 +309,9 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: 'dispute',
-              builder: (_, state) =>
-                  DisputeDetailPage(orderSlug: state.pathParameters['slug']!),
+              builder: (_, state) => DisputeDetailPage.forOrder(
+                orderSlug: state.pathParameters['slug']!,
+              ),
             ),
             GoRoute(
               path: 'open-dispute',
@@ -298,6 +321,11 @@ final appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+    GoRoute(
+      path: '/disputes/:slug',
+      builder: (_, state) =>
+          DisputeDetailPage(disputeSlug: state.pathParameters['slug']!),
     ),
     GoRoute(path: Routes.offers, builder: (_, __) => const OffersPage()),
     GoRoute(

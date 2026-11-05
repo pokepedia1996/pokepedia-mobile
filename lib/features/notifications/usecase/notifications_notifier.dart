@@ -14,8 +14,8 @@ class NotificationsNotifier extends AsyncNotifier<List<NotificationModel>> {
   @override
   Future<List<NotificationModel>> build() {
     // Rebuilds on sign-in/out so one account never sees another's inbox.
-    final user = ref.watch(authProvider).valueOrNull;
-    if (user == null) return Future.value(const <NotificationModel>[]);
+    final userId = ref.watch(authProvider.select((a) => a.valueOrNull?.id));
+    if (userId == null) return Future.value(const <NotificationModel>[]);
     return ref.read(notificationsRepositoryProvider).fetchNotifications();
   }
 
@@ -158,9 +158,27 @@ final notificationsProvider =
       NotificationsNotifier.new,
     );
 
-/// Unread count, for badges elsewhere in the app.
+/// Whether a row belongs in the Notifikasi inbox.
+///
+/// Chat messages don't: the chat tab carries its own unread badge, and one
+/// row per message buried everything else. They still raise a phone
+/// notification ([NotificationPushNotifier] listens to the table directly)
+/// and stay in [notificationsProvider] so opening a thread can mark them read.
+bool showsInInbox(NotificationModel n) =>
+    n.type != NotificationType.chatMessage;
+
+/// What the Notifikasi page lists: everything but chat.
+final inboxNotificationsProvider =
+    Provider<AsyncValue<List<NotificationModel>>>(
+      (ref) => ref
+          .watch(notificationsProvider)
+          .whenData((items) => items.where(showsInInbox).toList()),
+    );
+
+/// Unread count, for badges elsewhere in the app. Counts the inbox only, so
+/// the bell never claims something the page doesn't show.
 final unreadNotificationCountProvider = Provider<int>((ref) {
-  final items = ref.watch(notificationsProvider).valueOrNull;
+  final items = ref.watch(inboxNotificationsProvider).valueOrNull;
   if (items == null) return 0;
   return items.where((n) => !n.isRead).length;
 });

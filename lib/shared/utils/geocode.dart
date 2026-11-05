@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 /// Ports `features/address/location/geocode.ts` — Nominatim lookups for the
 /// map picker.
 ///
@@ -13,15 +15,41 @@ class GeocodeResult {
     this.province,
     this.city,
     this.district,
+    this.provinceIso,
+    this.cityNames = const [],
+    this.districtNames = const [],
+    this.village,
     this.postalCode,
     this.displayName,
+    this.street,
   });
 
   final String? province;
   final String? city;
   final String? district;
+
+  /// The province's ISO 3166-2 suffix, "JK" for `ID-JK`. OSM sends it even
+  /// where it leaves out the province's name, as it does across Jakarta.
+  final String? provinceIso;
+
+  /// Every name OSM gave that could be the kota/kabupaten, likeliest first.
+  /// Which key holds it depends on the region and on search versus reverse,
+  /// so the catalog decides rather than a fixed key.
+  final List<String> cityNames;
+
+  /// The same for the kecamatan.
+  final List<String> districtNames;
+
+  /// The kelurahan/desa. Only a stand-in for the kecamatan where OSM has no
+  /// kecamatan and the two share a name, so it is kept apart from
+  /// [districtNames] and matched exactly.
+  final String? village;
+
   final String? postalCode;
   final String? displayName;
+
+  /// The road and house number, where OSM knows them — "Jl. Ijen 25".
+  final String? street;
 
   static const empty = GeocodeResult();
 }
@@ -33,8 +61,13 @@ class PlaceResult extends GeocodeResult {
     super.province,
     super.city,
     super.district,
+    super.provinceIso,
+    super.cityNames,
+    super.districtNames,
+    super.village,
     super.postalCode,
     super.displayName,
+    super.street,
   });
 
   final double latitude;
@@ -47,18 +80,63 @@ const _timeout = Duration(seconds: 5);
 /// block clients that don't send one.
 const _userAgent = 'PokepediaMobile/1.0 (https://pokepedia.id)';
 
-GeocodeResult _parse(Map<String, dynamic>? address, Object? displayName) {
+/// Reads the area levels out of Nominatim's `address`.
+///
+/// OSM tags Indonesia several ways. Most of the country: `state` is the
+/// province, `city` the kota/kabupaten, `district` the kecamatan and
+/// `suburb` the kelurahan. Jakarta has no `state` at all, and then either
+/// `city` is the province with `city_district` the kota administrasi and
+/// `suburb` the kecamatan (reverse), or `city` is "Jakarta Utara" itself
+/// (search). Some points have no kecamatan in OSM, only the kelurahan. So each level carries every key that could hold it, and
+/// `resolveArea` keeps whichever the catalog recognises.
+@visibleForTesting
+GeocodeResult parseNominatim(
+  Map<String, dynamic>? address,
+  Object? displayName,
+) {
   final a = address ?? const {};
+  List<String> names(List<String> keys) => [
+    for (final key in keys)
+      if (a[key] case final String value when value.trim().isNotEmpty) value,
+  ];
+
+  final iso = a['ISO3166-2-lvl4'] as String?;
+  final cityNames = names([
+    'city_district',
+    'city',
+    'county',
+    'regency',
+    'town',
+    'municipality',
+  ]);
+  final districtNames = names([
+    'district',
+    'suburb',
+    'city_district',
+    'municipality',
+  ]);
   return GeocodeResult(
     province: a['state'] as String?,
-    city: (a['city'] ?? a['county'] ?? a['town']) as String?,
-    district: (a['suburb'] ?? a['village'] ?? a['city_district']) as String?,
+    city: cityNames.firstOrNull,
+    district: districtNames.firstOrNull,
+    provinceIso: iso != null && iso.startsWith('ID-') ? iso.substring(3) : null,
+    cityNames: cityNames,
+    districtNames: districtNames,
+    village: names(['village']).firstOrNull,
     postalCode: a['postcode'] as String?,
+    street: _street(a),
     displayName: displayName?.toString().substring(
       0,
       displayName.toString().length.clamp(0, 300),
     ),
   );
+}
+
+String? _street(Map<String, dynamic> a) {
+  final road = (a['road'] ?? a['pedestrian'] ?? a['residential']) as String?;
+  if (road == null || road.trim().isEmpty) return null;
+  final number = a['house_number'] as String?;
+  return number == null || number.trim().isEmpty ? road : '$road No. $number';
 }
 
 Future<Object?> _get(Uri uri) async {
@@ -85,7 +163,10 @@ Future<GeocodeResult> reverseGeocode(double lat, double lng) async {
     ),
   );
   if (json is! Map<String, dynamic>) return GeocodeResult.empty;
-  return _parse(json['address'] as Map<String, dynamic>?, json['display_name']);
+  return parseNominatim(
+    json['address'] as Map<String, dynamic>?,
+    json['display_name'],
+  );
 }
 
 /// Places matching a typed query.
@@ -112,7 +193,7 @@ Future<List<PlaceResult>> searchPlace(String query) async {
     final lng = double.tryParse('${item['lon']}');
     if (lat == null || lng == null) continue;
 
-    final parsed = _parse(
+    final parsed = parseNominatim(
       item['address'] as Map<String, dynamic>?,
       item['display_name'],
     );
@@ -123,8 +204,13 @@ Future<List<PlaceResult>> searchPlace(String query) async {
         province: parsed.province,
         city: parsed.city,
         district: parsed.district,
+        provinceIso: parsed.provinceIso,
+        cityNames: parsed.cityNames,
+        districtNames: parsed.districtNames,
+        village: parsed.village,
         postalCode: parsed.postalCode,
         displayName: parsed.displayName,
+        street: parsed.street,
       ),
     );
   }

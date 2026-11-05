@@ -19,6 +19,7 @@ import 'condition_badge.dart';
 import 'reputation_star.dart';
 import 'seller_avatar.dart';
 import 'wishlist_heart.dart';
+import '../../core/utils/image_url.dart';
 
 /// Ports `features/market/ui/storefront-listing-card.tsx` — a marketplace
 /// listing tile with a wishlist badge, condition, language/variant, price,
@@ -195,7 +196,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
             Flexible(
               child: Stack(
                 children: [
-                  CardArt(imageUrl: listing.tileImageUrl),
+                  CardArt(imageUrl: listing.tileImageUrl, size: ImageSize.half),
                   if (!listing.card.isSealed)
                     Positioned(
                       right: 6,

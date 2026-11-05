@@ -64,11 +64,11 @@ String? _sellerRoute(List<String> segments, Uri uri) {
           ? Routes.sellerOrderDetail(segments[2])
           : _sellerOrdersList(uri);
     case 'disputes':
-      // The app has no seller dispute screen yet. The disputed orders list is
-      // the nearest place the complaint can actually be worked on, and it is
-      // reachable — dropping the tap would leave the loudest notification
-      // there is doing nothing.
-      return Routes.sellerOrdersFiltered('disputed');
+      // A bare `/seller/disputes` names no dispute; the disputed orders list
+      // is where those live.
+      return segments.length > 2
+          ? Routes.dispute(segments[2])
+          : Routes.sellerOrdersFiltered('disputed');
     case 'products':
       // Web's `?filter=penawaran` bucket has no counterpart here; offers are
       // per-listing (`/seller/products/offers/<slug>`) and the notification

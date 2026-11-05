@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
+import 'app_network_image.dart';
 
 /// Renders the markdown the tutorial and terms content is written in.
 ///
@@ -351,7 +352,7 @@ class _MarkdownImage extends StatelessWidget {
           child: Semantics(
             image: true,
             label: alt.isEmpty ? null : alt,
-            child: Image.network(
+            child: cachedNetworkImage(
               url,
               fit: BoxFit.contain,
               alignment: Alignment.topLeft,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'app_network_image.dart';
+import '../../core/utils/image_url.dart';
 
 /// Ports `components/store/seller-avatar.tsx` — a circular seller/store
 /// image, falling back to the name's first letter when there's no logo.
@@ -32,8 +34,9 @@ class SellerAvatar extends StatelessWidget {
         alignment: Alignment.center,
         child: imageUrl == null || imageUrl!.isEmpty
             ? Text(initial, style: textStyle)
-            : Image.network(
+            : cachedNetworkImage(
                 imageUrl!,
+                size: ImageSize.half,
                 fit: BoxFit.cover,
                 width: size,
                 height: size,

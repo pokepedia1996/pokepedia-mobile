@@ -28,6 +28,8 @@ class PortfolioValueChart extends ConsumerWidget {
     return SizedBox(
       height: height,
       child: async.when(
+        // A pull-to-refresh keeps the current line until the new one lands.
+        skipLoadingOnReload: ref.watch(homeRefreshingProvider),
         loading: () => const Center(
           child: SizedBox(
             width: 18,

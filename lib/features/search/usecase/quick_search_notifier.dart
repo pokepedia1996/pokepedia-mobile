@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/catalog_language_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/card_filtering.dart';
@@ -26,7 +27,11 @@ final quickSearchProvider = FutureProvider.autoDispose
       if (query.trim().length < QuickSearchRepository.minQueryLength) {
         return Future.value(QuickSearchResults.empty);
       }
-      return ref.read(quickSearchRepositoryProvider).search(query);
+      // Suggestions follow the catalog language, as web's navbar does.
+      final language = ref.watch(catalogLanguageProvider);
+      return ref
+          .read(quickSearchRepositoryProvider)
+          .search(query, language: language);
     });
 
 /// The full results list for one query — web's `/search?q=`.

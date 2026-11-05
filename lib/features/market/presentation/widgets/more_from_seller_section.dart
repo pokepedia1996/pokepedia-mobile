@@ -11,6 +11,7 @@ import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/condition_badge.dart';
 import '../../usecase/market_notifier.dart';
+import '../../../../core/utils/image_url.dart';
 
 /// "Lebih banyak dari penjual" — the rest of this seller's shelf, so a buyer
 /// who came for one card can fill a single order rather than paying shipping
@@ -125,6 +126,7 @@ class _SellerListingThumb extends StatelessWidget {
             children: [
               CardArt(
                 imageUrl: listing.card.imageUrl,
+                size: ImageSize.half,
                 borderRadius: AppRadius.md,
               ),
               Padding(

@@ -7,6 +7,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../shared/utils/card_filtering.dart';
 import '../../home/repository/models/portfolio_value.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../user/usecase/user_notifier.dart';
 import '../repository/models/collection_page.dart';
 import '../repository/portfolio_repository.dart';
 import 'portfolio_notifier.dart';
@@ -74,12 +75,16 @@ final collectionFacetsProvider = FutureProvider<CollectionFacets>((ref) {
       .fetchCollectionFacets(_collectionIdOf(target));
 });
 
-/// Everything that reads a collection through the paged RPCs. Takes the
-/// caller's `invalidate`, so a widget and the ownership controller share it.
+/// Everything that reads a collection through the paged RPCs, plus the
+/// profile page's portfolio. Takes the caller's `invalidate`, so a widget and
+/// the ownership controller share it.
 void invalidateCollectionViews(void Function(ProviderOrFamily) invalidate) {
   invalidate(collectionPageProvider);
   invalidate(collectionSummaryProvider);
   invalidate(collectionFacetsProvider);
+  // Kept alive per username, so without this the owner's profile went on
+  // showing the shelf as it was before the card was added.
+  invalidate(userCollectionProvider);
 }
 
 class CollectionPageState {

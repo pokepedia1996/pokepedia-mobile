@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'app_network_image.dart';
 
 /// Whether [url] points at vector art.
 ///
@@ -59,7 +60,7 @@ class RemoteImage extends StatelessWidget {
       );
     }
 
-    return Image.network(
+    return cachedNetworkImage(
       url,
       height: height,
       width: width,

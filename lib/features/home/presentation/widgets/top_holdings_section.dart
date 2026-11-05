@@ -57,7 +57,7 @@ class TopHoldingsSection extends ConsumerWidget {
             ],
             Divider(height: 1, color: context.borderColor),
             InkWell(
-              onTap: () => context.push(Routes.portfolio),
+              onTap: () => context.go(Routes.portfolio),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(

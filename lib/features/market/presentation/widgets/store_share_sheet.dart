@@ -28,6 +28,7 @@ Future<void> showStoreShareSheet(
   required StoreModel store,
   double? positivePct,
   int feedbackScore = 0,
+  PosterSide initialSide = PosterSide.wts,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -40,6 +41,7 @@ Future<void> showStoreShareSheet(
       store: store,
       positivePct: positivePct,
       feedbackScore: feedbackScore,
+      initialSide: initialSide,
     ),
   );
 }
@@ -50,11 +52,16 @@ class StoreShareSheet extends ConsumerStatefulWidget {
     required this.store,
     this.positivePct,
     this.feedbackScore = 0,
+    this.initialSide = PosterSide.wts,
   });
 
   final StoreModel store;
   final double? positivePct;
   final int feedbackScore;
+
+  /// Which side's poster it opens on — the side just listed, when it opens
+  /// straight after a listing goes up.
+  final PosterSide initialSide;
 
   @override
   ConsumerState<StoreShareSheet> createState() => _StoreShareSheetState();
@@ -66,7 +73,7 @@ class _StoreShareSheetState extends ConsumerState<StoreShareSheet> {
   final _keys = <int, GlobalKey>{};
   final _controller = PageController(viewportFraction: 0.74);
 
-  PosterSide _side = PosterSide.wts;
+  late PosterSide _side = widget.initialSide;
   bool _busy = false;
 
   /// The page the carousel is resting on.

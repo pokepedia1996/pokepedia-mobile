@@ -93,7 +93,34 @@ Future<({ProviderContainer container, _FakeRepository repository})> _open(
   return (container: container, repository: repository);
 }
 
+/// Unread rows of every type, chat included. The bell's count leaves chat
+/// out, so it can't say whether a conversation's rows were cleared.
+int _unread(ProviderContainer container) =>
+    (container.read(notificationsProvider).valueOrNull ?? const [])
+        .where((n) => !n.isRead)
+        .length;
+
 void main() {
+  test(
+    'chat stays out of the inbox and its badge, but stays in the list',
+    () async {
+      final open = await _open([
+        _n(id: 1),
+        _n(
+          id: 2,
+          type: NotificationType.paymentReceived,
+          actionUrl: '/orders/x',
+        ),
+      ]);
+
+      final inbox = open.container.read(inboxNotificationsProvider).valueOrNull;
+      expect(inbox?.map((n) => n.id), [2]);
+      expect(open.container.read(unreadNotificationCountProvider), 1);
+      // Still held, so opening the thread can mark it read.
+      expect(_unread(open.container), 2);
+    },
+  );
+
   test('a chat tap reads the whole conversation, not just the row', () async {
     final open = await _open([
       _n(id: 1),
@@ -106,7 +133,7 @@ void main() {
     await open.container.read(notificationsProvider.notifier).markRead(2);
 
     expect(open.repository.marked..sort(), [1, 2, 3]);
-    expect(open.container.read(unreadNotificationCountProvider), 1);
+    expect(_unread(open.container), 1);
   });
 
   test('the row is marked by slug, which is what the RPC takes', () async {
@@ -120,7 +147,7 @@ void main() {
     await open.container.read(notificationsProvider.notifier).markRead(7);
 
     expect(open.repository.markedSlugs, ['slug-7']);
-    expect(open.container.read(unreadNotificationCountProvider), 0);
+    expect(_unread(open.container), 0);
   });
 
   test('an order tap reads only what was tapped', () async {
@@ -138,7 +165,7 @@ void main() {
     await open.container.read(notificationsProvider.notifier).markRead(1);
 
     expect(open.repository.marked, [1]);
-    expect(open.container.read(unreadNotificationCountProvider), 1);
+    expect(_unread(open.container), 1);
   });
 
   test('a failed write puts every dot back', () async {
@@ -147,7 +174,7 @@ void main() {
 
     await open.container.read(notificationsProvider.notifier).markRead(1);
 
-    expect(open.container.read(unreadNotificationCountProvider), 2);
+    expect(_unread(open.container), 2);
   });
 
   test('a row already read asks the server for nothing', () async {
@@ -179,7 +206,7 @@ void main() {
     // Room A's chat rows, and nothing else — not the other room, and not a
     // non-chat row that happens to point the same way.
     expect(open.repository.marked..sort(), [1, 2]);
-    expect(open.container.read(unreadNotificationCountProvider), 2);
+    expect(_unread(open.container), 2);
   });
 
   test('opening a room with nothing unread writes nothing', () async {
@@ -230,6 +257,6 @@ void main() {
     await open.container.read(notificationsProvider.notifier).markRead(99);
 
     expect(open.repository.marked, isEmpty);
-    expect(open.container.read(unreadNotificationCountProvider), 2);
+    expect(_unread(open.container), 2);
   });
 }

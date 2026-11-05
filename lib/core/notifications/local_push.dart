@@ -54,8 +54,8 @@ class LocalPush {
       const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(
-          // Asked for on the first notification instead, so a fresh install
-          // isn't met with a permission sheet before anything has happened.
+          // Not here: [requestPermission] asks once the first frame is up, so
+          // the sheet sits over the app rather than a blank launch screen.
           requestAlertPermission: false,
           requestBadgePermission: false,
           requestSoundPermission: false,
@@ -93,8 +93,22 @@ class LocalPush {
     return route;
   }
 
-  /// Asks for permission the first time there is something to show. Returns
-  /// false when the user has said no — nothing is posted in that case.
+  /// Asks for notification permission up front, at launch. The OS shows its
+  /// sheet once; after that this only reads the answer back.
+  Future<bool> requestPermission() async {
+    try {
+      await init();
+      return await _ensurePermission();
+    } catch (e) {
+      // No platform to ask (tests, an unsupported host): the app runs on
+      // without notifications rather than failing at launch.
+      if (kDebugMode) debugPrint('[push] permission request failed: $e');
+      return false;
+    }
+  }
+
+  /// Asks for permission if it hasn't been settled yet. Returns false when
+  /// the user has said no — nothing is posted in that case.
   Future<bool> _ensurePermission() async {
     if (_permitted) return true;
     if (Platform.isAndroid) {

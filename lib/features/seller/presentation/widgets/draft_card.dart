@@ -632,8 +632,11 @@ class _ConditionPicker extends StatelessWidget {
       tooltip: 'Ubah kondisi',
       onSelected: onChanged,
       itemBuilder: (context) => [
+        // PSA ≤8 only stays on a draft that already has it; DMG is
+        // collection-only and never listable.
         for (final c in CardCondition.values)
-          PopupMenuItem(value: c, child: Text(c.label)),
+          if ((!c.isLegacy && !c.isCollectionOnly) || c == condition)
+            PopupMenuItem(value: c, child: Text(c.label)),
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

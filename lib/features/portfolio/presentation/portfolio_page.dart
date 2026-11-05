@@ -22,12 +22,17 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
+import '../../../shared/utils/csv_export.dart';
+import '../../../shared/models/card_condition.dart';
+import '../repository/models/collection_page.dart';
 import '../usecase/collection_page_notifier.dart';
+import '../usecase/portfolio_export.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'widgets/portfolio_picker_sheet.dart';
 import 'widgets/selection_sheet.dart';
 import 'wishlist_page.dart';
 import 'widgets/collection_add_sheet.dart';
+import 'widgets/portfolio_empty_state.dart';
 
 /// Ports `app/portfolio/collection/page.tsx`.
 ///
@@ -95,22 +100,26 @@ class _CollectionTab extends ConsumerStatefulWidget {
   ConsumerState<_CollectionTab> createState() => _CollectionTabState();
 }
 
-/// A staged quantity edit, remembering what the card held when it was
+/// A staged quantity edit, remembering what the row held when it was
 /// staged — the page under it can reload mid-edit, and the write is a delta.
-typedef _StagedEdit = ({int from, int to});
+/// The card and condition say which `collection_cards` row it writes to.
+typedef _StagedEdit = ({int cardId, CardCondition condition, int from, int to});
 
 class _CollectionTabState extends ConsumerState<_CollectionTab> {
   CardViewMode _viewMode = CardViewMode.grid;
 
   bool _editMode = false;
 
-  /// Staged quantities by card id — only the ones the user actually moved.
-  final Map<int, _StagedEdit> _edits = {};
+  /// Staged quantities by `collection_cards.id` — only the rows the user
+  /// actually moved. By row, not card: the same card held in NM and LP is
+  /// two tiles with two counts.
+  final Map<String, _StagedEdit> _edits = {};
 
   /// Cards ticked in Kelola mode, for the batch actions.
   final Set<int> _selected = {};
   bool _saving = false;
   bool _working = false;
+  bool _exporting = false;
 
   /// Asks for the next page once the end of the loaded rows is within a
   /// screenful. Returns false so the notification carries on bubbling.
@@ -133,13 +142,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     });
   }
 
-  void _stage(CardModel card, int quantity) {
+  void _stage(CollectionCardRow row, int quantity) {
     setState(() {
-      final from = _edits[card.id]?.from ?? card.owned;
+      final key = row.collectionCardId;
+      final from = _edits[key]?.from ?? row.card.owned;
       if (quantity == from) {
-        _edits.remove(card.id);
+        _edits.remove(key);
       } else {
-        _edits[card.id] = (from: from, to: quantity);
+        _edits[key] = (
+          cardId: row.card.id,
+          condition: row.condition,
+          from: from,
+          to: quantity,
+        );
       }
     });
   }
@@ -182,18 +197,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     final target = ref.read(selectedPortfolioProvider);
     String? failure;
 
-    for (final entry in _edits.entries) {
-      final edit = entry.value;
+    for (final edit in _edits.values) {
       final error = target.isPrimary
           ? await controller.adjustQuantity(
               userId: user.id,
-              cardId: entry.key,
+              cardId: edit.cardId,
               delta: edit.to - edit.from,
+              condition: edit.condition,
             )
           : await controller.setListCardQuantity(
               listId: target.listId!,
-              cardId: entry.key,
+              cardId: edit.cardId,
               quantity: edit.to,
+              condition: edit.condition,
             );
       failure ??= error;
     }
@@ -250,6 +266,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                 child: _CollectionHeader(
                   totalValue: summary?.totalValue ?? 0,
                   hasCards: hasCards,
+                  empty: collectionEmpty,
                   editMode: _editMode,
                   pendingEdits: _edits.length,
                   saving: _saving,
@@ -257,6 +274,8 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                   onManage: () => setState(() => _editMode = true),
                   onDone: _save,
                   onCancel: _exitEdit,
+                  exporting: _exporting,
+                  onExport: _export,
                 ),
               ),
               if (hasCards)
@@ -281,7 +300,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
                     ),
                   ),
                 ),
-              ..._body(page, cards, collectionEmpty),
+              ..._body(page, collectionEmpty),
               SliverToBoxAdapter(
                 child: SizedBox(
                   // Room for the nav pill, plus the batch bar when it's up.
@@ -313,12 +332,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     );
   }
 
-  List<Widget> _body(
-    CollectionPageState page,
-    List<CardModel> cards,
-    bool collectionEmpty,
-  ) {
-    if (cards.isEmpty) {
+  List<Widget> _body(CollectionPageState page, bool collectionEmpty) {
+    final rows = page.rows;
+    if (rows.isEmpty) {
       if (page.loading) {
         return const [
           SliverPadding(
@@ -330,9 +346,14 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       if (page.error) return [_retry()];
       if (collectionEmpty) {
         return [
-          _message(
-            'Belum ada kartu dalam koleksi. Tambahkan kartu dari halaman '
-            'ekspansi!',
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              22,
+              16,
+              AppBottomNav.reservedSpace(context) + 16,
+            ),
+            sliver: const SliverToBoxAdapter(child: PortfolioEmptyState()),
           ),
         ];
       }
@@ -346,9 +367,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
           sliver: SliverCardGrid(
             // The stepper row only exists while editing.
             extraChrome: _editMode ? cardGridItemFooterChrome : 0,
-            hasVariant: (i) => cards[i].variantLabel != null,
-            itemCount: cards.length,
-            itemBuilder: (context, i) => _collectionCard(cards[i]),
+            hasVariant: (i) => rows[i].card.variantLabel != null,
+            itemCount: rows.length,
+            itemBuilder: (context, i) => _collectionCard(rows[i]),
           ),
         )
       else
@@ -358,9 +379,9 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
             delegate: SliverChildBuilderDelegate(
               (context, i) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _collectionCard(cards[i], list: true),
+                child: _collectionCard(rows[i], list: true),
               ),
-              childCount: cards.length,
+              childCount: rows.length,
               addAutomaticKeepAlives: false,
             ),
           ),
@@ -507,13 +528,14 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
       ..showSnackBar(SnackBar(content: Text(message), persist: false));
   }
 
-  Widget _collectionCard(CardModel card, {bool list = false}) {
+  Widget _collectionCard(CollectionCardRow row, {bool list = false}) {
+    final card = row.card;
     // Out of edit mode a tile is just a link to the card.
     if (!_editMode) {
       void open() => context.push(Routes.cardDetail(card.packSlug, card.id));
       return list
-          ? CardListItem(card: card, onTap: open)
-          : CardGridItem(card: card, onTap: open);
+          ? CardListItem(card: card, condition: row.condition, onTap: open)
+          : CardGridItem(card: card, condition: row.condition, onTap: open);
     }
 
     // In edit mode the tile stops being a link — it's a checkbox. Tapping
@@ -524,16 +546,18 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     // to cover the tile's text to sit anywhere, and its taps then had to be
     // carved back out of the tile underneath.
     final selected = _selected.contains(card.id);
-    final footer = _stepperRow(card);
+    final footer = _stepperRow(row);
     return list
         ? CardListItem(
             card: card,
+            condition: row.condition,
             selected: selected,
             onTap: () => _toggleSelected(card),
             footer: footer,
           )
         : CardGridItem(
             card: card,
+            condition: row.condition,
             selected: selected,
             onTap: () => _toggleSelected(card),
             footer: footer,
@@ -542,19 +566,19 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
 
   /// The quantity stepper, and the trash that zeroes a card out in one tap
   /// instead of holding minus down — web's edit-mode row.
-  Widget _stepperRow(CardModel card) {
-    final quantity = _edits[card.id]?.to ?? card.owned;
+  Widget _stepperRow(CollectionCardRow row) {
+    final quantity = _edits[row.collectionCardId]?.to ?? row.card.owned;
     return Row(
       children: [
         QuantitySelector(
           value: quantity,
-          onChanged: (value) => _stage(card, value),
+          onChanged: (value) => _stage(row, value),
           size: QuantitySelectorSize.sm,
         ),
         const Spacer(),
         if (quantity > 0)
           InkWell(
-            onTap: () => _stage(card, 0),
+            onTap: () => _stage(row, 0),
             borderRadius: BorderRadius.circular(AppRadius.sm),
             child: Padding(
               padding: const EdgeInsets.all(4),
@@ -584,6 +608,40 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
     );
   }
 
+  /// Every portfolio — Utama and each list — as one CSV, a Portofolio
+  /// column saying which each card is on, handed to the share sheet.
+  Future<void> _export(Rect? origin) async {
+    final user = ref.read(authProvider).valueOrNull;
+    if (user == null || _exporting) return;
+    setState(() => _exporting = true);
+    String? message;
+    try {
+      final rows = await ref
+          .read(portfolioRepositoryProvider)
+          .fetchPortfolioExport(user.id);
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        message = 'Portofolio masih kosong.';
+      } else {
+        await ref.read(csvSharerProvider)(
+          portfolioExportFileName(),
+          portfolioCsv(rows),
+          origin,
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[portfolio] export failed: $e\n$st');
+      message = 'Gagal mengekspor portofolio.';
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _openAddSheet() async {
     final added = await showCollectionAddSheet(context);
     if (added != true || !mounted) return;
@@ -598,6 +656,7 @@ class _CollectionHeader extends StatelessWidget {
   const _CollectionHeader({
     required this.totalValue,
     required this.hasCards,
+    required this.empty,
     required this.editMode,
     required this.pendingEdits,
     required this.saving,
@@ -605,10 +664,15 @@ class _CollectionHeader extends StatelessWidget {
     required this.onManage,
     required this.onDone,
     required this.onCancel,
+    required this.exporting,
+    required this.onExport,
   });
 
   final int totalValue;
   final bool hasCards;
+
+  /// Nothing on this portfolio at all — not a filter matching nothing.
+  final bool empty;
   final bool editMode;
   final int pendingEdits;
   final bool saving;
@@ -616,6 +680,10 @@ class _CollectionHeader extends StatelessWidget {
   final VoidCallback onManage;
   final VoidCallback onDone;
   final VoidCallback onCancel;
+  final bool exporting;
+
+  /// Exports every portfolio, the share sheet anchored on the button.
+  final ValueChanged<Rect?> onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -626,68 +694,104 @@ class _CollectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            // Web shows "Rp–" rather than Rp0 when nothing is priced yet, so
-            // a missing price never reads as a zero valuation.
-            totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
-            // Plain foreground, not the brand red: red on a portfolio total
-            // reads as a loss rather than as a headline.
-            style: AppTypography.h2(colors.onSurface),
-          ),
-          const SizedBox(height: 6),
-          const _MarketTrend(),
-          const SizedBox(height: 6),
-          if (editMode)
-            Row(
-              // Batch deletion moved to the selection bar's menu, so this row
-              // is only about the staged quantity edits now.
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: saving ? null : onDone,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                  ),
-                  child: saving
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          pendingEdits > 0
-                              ? 'Selesai ($pendingEdits)'
-                              : 'Selesai',
-                        ),
-                ),
-                const SizedBox(width: 6),
-                TextButton(
-                  onPressed: saving ? null : onCancel,
-                  child: const Text('Batal'),
-                ),
-              ],
+          // An empty portfolio is worth exactly nothing, so it says Rp0, and
+          // it has no trend, nothing to manage and nothing to export: the
+          // empty state under it carries the page.
+          if (empty)
+            Text(
+              'Rp0',
+              style: TextStyle(
+                fontFamily: 'CalSans',
+                fontSize: 30,
+                color: context.mutedForeground,
+              ),
             )
-          else
-            Row(
-              // Centred under the centred title, rather than hanging off the
-              // left edge on its own.
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // const SizedBox(width: 8),
-                if (hasCards)
-                  OutlinedButton.icon(
-                    onPressed: onManage,
-                    icon: const Icon(LucideIcons.pencil, size: 15),
-                    label: const Text('Kelola'),
-                    style: OutlinedButton.styleFrom(
+          else ...[
+            Text(
+              // Web shows "Rp–" rather than Rp0 when nothing is priced yet, so
+              // a missing price never reads as a zero valuation.
+              totalValue <= 0 ? 'Rp–' : formatRupiah(totalValue),
+              // Plain foreground, not the brand red: red on a portfolio total
+              // reads as a loss rather than as a headline.
+              style: AppTypography.h2(colors.onSurface),
+            ),
+            const SizedBox(height: 6),
+            const _MarketTrend(),
+            const SizedBox(height: 6),
+            if (editMode)
+              Row(
+                // Batch deletion moved to the selection bar's menu, so this row
+                // is only about the staged quantity edits now.
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: saving ? null : onDone,
+                    style: ElevatedButton.styleFrom(
                       minimumSize: const Size(0, 36),
                     ),
+                    child: saving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            pendingEdits > 0
+                                ? 'Selesai ($pendingEdits)'
+                                : 'Selesai',
+                          ),
                   ),
-              ],
-            ),
+                  const SizedBox(width: 6),
+                  TextButton(
+                    onPressed: saving ? null : onCancel,
+                    child: const Text('Batal'),
+                  ),
+                ],
+              )
+            else
+              Row(
+                // Centred under the centred title, rather than hanging off the
+                // left edge on its own.
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // const SizedBox(width: 8),
+                  if (hasCards)
+                    OutlinedButton.icon(
+                      onPressed: onManage,
+                      icon: const Icon(LucideIcons.pencil, size: 15),
+                      label: const Text('Kelola'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                    ),
+                  if (hasCards) const SizedBox(width: 8),
+                  // Every portfolio goes in the file, not only the one on
+                  // screen — so it's here whenever this one has cards, even
+                  // with a filter matching none of them.
+                  Builder(
+                    builder: (button) => OutlinedButton.icon(
+                      onPressed: exporting
+                          ? null
+                          : () => onExport(shareOriginOf(button)),
+                      icon: exporting
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(LucideIcons.download, size: 15),
+                      label: const Text('Ekspor'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
         ],
       ),
     );

@@ -149,15 +149,14 @@ extension CardLanguageX on CardLanguage {
   /// The country flag for this catalog language, as a regional-indicator
   /// pair the platform renders as a real flag.
   ///
-  /// English uses 🇬🇧 rather than 🇺🇸: these label the *print* a card came
-  /// from, and English prints are the international release, which the TCG
-  /// itself and the rest of the site treat as UK-flagged.
+  /// English shows 🇺🇸, matching `CardLanguageBadge`; the text label stays
+  /// "EN".
   String get flag {
     switch (this) {
       case CardLanguage.id:
         return '🇮🇩';
       case CardLanguage.en:
-        return '🇬🇧';
+        return '🇺🇸';
       case CardLanguage.jp:
         return '🇯🇵';
     }

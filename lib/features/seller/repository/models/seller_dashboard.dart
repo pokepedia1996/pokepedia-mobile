@@ -80,6 +80,7 @@ class DashboardSummary {
     this.last30 = 0,
     this.last90 = 0,
     this.delta30 = 0,
+    this.delta90 = 0,
   });
 
   final int today;
@@ -89,6 +90,10 @@ class DashboardSummary {
 
   /// Percent change of the last 30 days against the 30 before them.
   final double delta30;
+
+  /// Percent change of the last 90 days against the 90 before them — the
+  /// dashboard's headline.
+  final double delta90;
 }
 
 /// Ports `DashboardPayload`.
@@ -188,10 +193,17 @@ class DashboardPayload {
 /// rolling totals under the chart, plus how the last 30 days compare with
 /// the 30 before them.
 ///
+/// [prev90] is the 90-day window's `prev_gmv` — the 90 days before
+/// [daily90] — which the daily rows can't supply, for the headline's delta.
+///
 /// Days are matched on the `YYYY-MM-DD` strings the RPC emits, and those are
 /// produced in UTC — so the walk back from today uses UTC too, otherwise
 /// a device east of Greenwich would look up tomorrow's key and read 0.
-DashboardSummary computeSummary(List<DailyGmv> daily90, {DateTime? now}) {
+DashboardSummary computeSummary(
+  List<DailyGmv> daily90, {
+  int prev90 = 0,
+  DateTime? now,
+}) {
   final today = (now ?? DateTime.now()).toUtc();
   final byDay = {for (final d in daily90) d.day: d.gmv};
 
@@ -226,6 +238,7 @@ DashboardSummary computeSummary(List<DailyGmv> daily90, {DateTime? now}) {
     last30: last30,
     last90: last90,
     delta30: delta30,
+    delta90: percentDelta(current: last90, previous: prev90),
   );
 }
 

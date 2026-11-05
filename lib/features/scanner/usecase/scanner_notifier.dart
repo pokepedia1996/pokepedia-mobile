@@ -80,6 +80,7 @@ class ScannerNotifier extends Notifier<ScanState> {
     final requestGeneration = ++_generation;
     state = const ScanLoading();
 
+    final watch = Stopwatch()..start();
     ScanState next;
     try {
       // Debug builds only — the exact crop the server is judging.
@@ -90,16 +91,26 @@ class ScannerNotifier extends Notifier<ScanState> {
             imageBytes: capture.bytes,
             language: language,
             captureMeta: captureMeta,
-          );
+          )
+          // Bound the entire request, including auth and reading the body.
+          // Match the repository's 65s budget (the server may take 60s).
+          .timeout(const Duration(seconds: 65));
 
-      // Guards only an UNCONFIDENT match: a blurred capture can land close to
-      // an arbitrary wrong card by chance. A confident match already cleared
-      // the server's calibrated distance+margin gate, which is a far stronger
-      // signal than this per-device heuristic — so this must never override
-      // one.
-      final tooBlurry = capture.sharpness < captureMinSharpness;
-
-      if (response.matches.isNotEmpty && (response.confident || !tooBlurry)) {
+      unawaited(
+        recordScanEvent({
+          'stage': 'recognition',
+          'elapsedMs': watch.elapsedMilliseconds,
+          'logId': response.logId,
+          'confident': response.confident,
+          'matches': response.matches
+              .map((m) => {'cardId': m.card.id, 'distance': m.distance})
+              .toList(),
+        }),
+      );
+      // Sharpness varies with artwork and foil. It is not a calibrated veto
+      // on server candidates. Uncertain candidates require an explicit choice
+      // in the scanner page before anything is added to the session.
+      if (response.matches.isNotEmpty) {
         next = ScanMatched(
           matches: response.matches,
           variants: response.variants,
@@ -110,11 +121,7 @@ class ScannerNotifier extends Notifier<ScanState> {
           logId: response.logId,
         );
       } else {
-        next = ScanFailed(
-          tooBlurry
-              ? 'Gambar buram. Tahan kartu lebih stabil dan tambah cahaya.'
-              : 'Kartu tidak dikenali, pindai ulang',
-        );
+        next = const ScanFailed('Kartu belum dikenali. Coba ubah sudut kartu.');
       }
     } on ApiRateLimitedException catch (e) {
       // Caught ahead of `ApiException` so the wait survives — retrying
@@ -130,6 +137,16 @@ class ScannerNotifier extends Notifier<ScanState> {
       next = ScanFailed('Gagal menghubungi server, periksa koneksi');
     }
 
+    if (next is ScanFailed) {
+      unawaited(
+        recordScanEvent({
+          'stage': 'recognition_error',
+          'elapsedMs': watch.elapsedMilliseconds,
+          'message': next.message,
+          'retryAfterMs': next.retryAfter?.inMilliseconds,
+        }),
+      );
+    }
     if (requestGeneration == _generation) state = next;
     return next;
   }

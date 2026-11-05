@@ -49,7 +49,7 @@ class NotificationsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(notificationsProvider);
+    final async = ref.watch(inboxNotificationsProvider);
     final notifier = ref.read(notificationsProvider.notifier);
     final colors = context.appColors;
 

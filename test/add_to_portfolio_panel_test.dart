@@ -39,6 +39,7 @@ class _FakeAuth extends AuthNotifier {
 /// Records what the panel asks for instead of talking to Supabase.
 class _FakeOwnership implements CardOwnershipController {
   final adjustments = <int>[];
+  final conditions = <CardCondition?>[];
 
   /// Held open by the test that needs to look at the panel mid-write, so the
   /// write can be finished on cue rather than resolving in the same tick.
@@ -50,8 +51,10 @@ class _FakeOwnership implements CardOwnershipController {
     required int cardId,
     required int delta,
     String? listId,
+    CardCondition? condition,
   }) async {
     adjustments.add(delta);
+    conditions.add(condition);
     return gate?.future ?? Future.value(null);
   }
 
@@ -63,6 +66,7 @@ class _FakeOwnership implements CardOwnershipController {
 Future<_FakeOwnership> _pump(
   WidgetTester tester, {
   int owned = 0,
+  Map<CardCondition, int>? held,
   CardMarketPrice? price = const CardMarketPrice(
     price: 125000,
     condition: CardCondition.nm,
@@ -78,7 +82,10 @@ Future<_FakeOwnership> _pump(
         cardOwnershipControllerProvider.overrideWithValue(ownership),
         // No saved lists, so the only portfolio is "Utama".
         listsProvider.overrideWith((ref) async => []),
-        ownedQuantityProvider(_card.id).overrideWith((ref) async => owned),
+        conditionQuantitiesProvider((
+          listId: null,
+          cardId: _card.id,
+        )).overrideWith((ref) async => held ?? {CardCondition.nm: owned}),
         cardMarketPriceProvider(_card.id).overrideWith((ref) async => price),
       ],
       child: MaterialApp(
@@ -205,6 +212,31 @@ void main() {
 
     expect(find.text('2'), findsOneWidget);
     expect(find.text('Total: Rp250.000'), findsOneWidget);
+  });
+
+  testWidgets('the stepper counts and writes the condition picked', (
+    tester,
+  ) async {
+    // 2x NM and 1x LP are two rows: switching to LP shows LP's own count,
+    // and the next copy is filed as LP.
+    final ownership = await _pump(
+      tester,
+      held: {CardCondition.nm: 2, CardCondition.lp: 1},
+    );
+    expect(find.text('2'), findsOneWidget);
+
+    await tester.tap(find.text('NM'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lightly Played'));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget);
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pump();
+    expect(ownership.adjustments, [1]);
+    expect(ownership.conditions, [CardCondition.lp]);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('the week\'s move is shown against the price', (tester) async {

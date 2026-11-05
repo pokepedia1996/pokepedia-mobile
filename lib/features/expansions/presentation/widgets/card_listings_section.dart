@@ -27,6 +27,8 @@ import '../../../proposals/repository/models/listing_offer_model.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../usecase/expansions_notifier.dart';
 import '../../../../core/errors/user_message.dart';
+import '../../../../shared/widgets/app_network_image.dart';
+import '../../../../core/utils/image_url.dart';
 
 /// How many rows are shown before "Muat lebih banyak" — web paginates at
 /// the same size, but a phone reads better as one growing list.
@@ -555,8 +557,9 @@ class _ListingRowState extends ConsumerState<_ListingRow> {
                         borderRadius: BorderRadius.circular(10),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
+                          child: cachedNetworkImage(
                             listing.photoUrls[i],
+                            size: ImageSize.half,
                             width: 48,
                             height: 48,
                             fit: BoxFit.cover,

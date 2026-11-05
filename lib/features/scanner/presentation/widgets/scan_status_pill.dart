@@ -32,6 +32,28 @@ enum ScanPillStatus {
 
   /// The user stopped detection from the top bar.
   paused,
+
+  coolingDown,
+  recovering,
+  moveCard,
+}
+
+/// Status describes live work, independently of the retained result sheet.
+ScanPillStatus scannerPillStatus({
+  required bool processing,
+  required bool capturing,
+  required bool paused,
+  required bool coolingDown,
+  required bool capturedCardPresent,
+  required bool tracking,
+}) {
+  if (processing) return ScanPillStatus.processing;
+  if (capturing) return ScanPillStatus.capturing;
+  if (paused) return ScanPillStatus.paused;
+  if (coolingDown) return ScanPillStatus.coolingDown;
+  if (capturedCardPresent) return ScanPillStatus.done;
+  if (tracking) return ScanPillStatus.locking;
+  return ScanPillStatus.searching;
 }
 
 class ScanStatusPill extends StatelessWidget {
@@ -53,6 +75,9 @@ class ScanStatusPill extends StatelessWidget {
       ScanPillStatus.capturing => ('Memindai...', true),
       ScanPillStatus.processing => ('Memproses...', true),
       ScanPillStatus.paused => ('Dijeda', false),
+      ScanPillStatus.recovering => ('Menyiapkan pemindai...', true),
+      ScanPillStatus.moveCard => ('Angkat kartu untuk melanjutkan', false),
+      ScanPillStatus.coolingDown => ('Menunggu untuk mencoba lagi...', false),
     };
 
     return AnimatedSwitcher(

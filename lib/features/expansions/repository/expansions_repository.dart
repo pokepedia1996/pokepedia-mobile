@@ -6,6 +6,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../../shared/utils/collector_number.dart';
 import '../../../shared/utils/primary_collection.dart';
+import '../../seller/repository/models/my_reliability.dart';
 import 'models/market_models.dart';
 import 'models/store_identity.dart';
 import '../../../core/errors/user_message.dart';
@@ -39,6 +40,7 @@ ListingModel cardListingFromRow(
   StoreIdentity? store,
   Map<String, dynamic>? profile,
   Map<String, dynamic>? reputation,
+  int? completionPct,
 }) {
   return ListingModel.fromRow(
     row,
@@ -53,7 +55,9 @@ ListingModel cardListingFromRow(
     sellerFeedbackScore:
         ((reputation?['positive_count_total'] as num?)?.toInt() ?? 0) -
         ((reputation?['negative_count_total'] as num?)?.toInt() ?? 0),
-    sellerRating: reputation == null ? null : SellerRating.fromRow(reputation),
+    sellerRating: reputation == null
+        ? null
+        : SellerRating.fromRow(reputation, completionPct: completionPct),
   );
 }
 
@@ -209,16 +213,50 @@ class ExpansionsRepository {
     return rows.fold<int>(0, (sum, r) => sum + (r['quantity'] as int? ?? 0));
   }
 
+  /// How many copies of a card a collection holds in each condition, summed
+  /// across variant rows. A null [collectionId] is the primary collection.
+  ///
+  /// `collection_cards.condition` is part of the row's identity, so one card
+  /// can sit in a collection as 2x NM and 1x LP — the card page's stepper
+  /// counts one condition at a time.
+  Future<Map<CardCondition, int>> fetchConditionQuantities(
+    String userId,
+    int cardId, {
+    String? collectionId,
+  }) async {
+    final target = collectionId ?? await primaryCollectionId(_client, userId);
+    if (target == null) return const {};
+    final rows = await _client
+        .from('collection_cards')
+        .select('condition, quantity')
+        .eq('collection_id', target)
+        .eq('card_id', cardId)
+        .gt('quantity', 0);
+    final quantities = <CardCondition, int>{};
+    for (final row in rows) {
+      final condition = CardConditionX.fromRaw(
+        row['condition'] as String? ?? 'NM',
+      );
+      quantities[condition] =
+          (quantities[condition] ?? 0) + (row['quantity'] as int? ?? 0);
+    }
+    return quantities;
+  }
+
   /// `delta` is added to the primary collection's existing quantity for this
   /// card, via the same atomic RPC the web uses.
   ///
   /// On a decrease `upsert_collection_card` also draws `user_inventory` down
   /// oldest-first and logs an `out` activity row per batch it takes, so a
   /// caller passing a negative delta has to revalidate inventory as well.
+  ///
+  /// [condition] picks the row. Left null, an add files NM and a removal
+  /// draws down across every condition the card is held in.
   Future<String?> upsertUserCard({
     required String userId,
     required int cardId,
     required int delta,
+    CardCondition? condition,
   }) async {
     final collectionId = await primaryCollectionId(_client, userId);
     if (collectionId == null) return 'Koleksi utama tidak ditemukan';
@@ -229,6 +267,7 @@ class ExpansionsRepository {
           'p_collection_id': collectionId,
           'p_card_id': cardId,
           'p_delta': delta,
+          'p_condition': ?condition?.raw,
         },
       );
       return null;
@@ -424,6 +463,28 @@ class ExpansionsRepository {
       // Swallowed — rows fall back to a 0 reputation score.
     }
 
+    // The "x% selesai" beside each seller's sales, from the publicly
+    // readable `seller_reliability_stats`. Best effort like the rest: a
+    // failure only drops that figure.
+    var completionByUser = <String, int?>{};
+    try {
+      final reliabilityRows = await _client
+          .from('seller_reliability_stats')
+          .select(
+            'seller_id, paid_orders, completed_orders, seller_cancels, '
+            'disputes_lost, shipped_orders, median_ship_hours',
+          )
+          .inFilter('seller_id', userIds);
+      completionByUser = {
+        for (final r in reliabilityRows)
+          r['seller_id'] as String: ReliabilityWindow.fromJson(
+            r,
+          ).publicCompletionPct,
+      };
+    } catch (_) {
+      // Swallowed — rows show sales without a completion rate.
+    }
+
     final storesByUser = await storesFuture;
     return [
       for (final row in rows)
@@ -433,6 +494,7 @@ class ExpansionsRepository {
           store: storesByUser[row['user_id']],
           profile: profilesByUser[row['user_id']],
           reputation: reputationByUser[row['user_id']],
+          completionPct: completionByUser[row['user_id']],
         ),
     ];
   }

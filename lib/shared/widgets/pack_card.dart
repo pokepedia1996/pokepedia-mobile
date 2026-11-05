@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../models/pack_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'app_network_image.dart';
 
 /// Ports `components/pack/pack-card.tsx` — a grid tile for an expansion with
 /// its collected/total progress bar.
@@ -47,7 +48,7 @@ class PackCard extends StatelessWidget {
                       ? _PackInitial(pack: pack)
                       : Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Image.network(
+                          child: cachedNetworkImage(
                             pack.image!,
                             fit: BoxFit.cover,
                             loadingBuilder: (context, child, progress) =>

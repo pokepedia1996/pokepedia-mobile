@@ -35,6 +35,16 @@ void main() {
       expect(summary.delta30, closeTo(50, 0.001));
     });
 
+    test('delta90 compares the last 90 days with the 90 before', () {
+      final summary = computeSummary(
+        [_day('2026-08-15', 150), _day('2026-06-01', 50)],
+        prev90: 100,
+        now: now,
+      );
+      expect(summary.last90, 200);
+      expect(summary.delta90, closeTo(100, 0.001));
+    });
+
     test('a first-ever sale reads as +100%, not infinity', () {
       final summary = computeSummary([_day('2026-08-15', 1000)], now: now);
       expect(summary.delta30, 100);

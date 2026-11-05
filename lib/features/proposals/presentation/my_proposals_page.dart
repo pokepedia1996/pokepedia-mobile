@@ -79,14 +79,26 @@ class _MyProposalsPageState extends ConsumerState<MyProposalsPage> {
       );
     if (error == null) {
       ref.invalidate(sentProposalsProvider);
+      ref.invalidate(proposalCardFeedProvider);
       ref.invalidate(proposalsSummaryProvider);
     }
   }
+
+  static const _padding = EdgeInsets.fromLTRB(16, 8, 16, 32);
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final async = ref.watch(sentProposalsProvider);
+    final title = [
+      Text('Penawaranku', style: AppTypography.h2(colors.onSurface)),
+      const SizedBox(height: 2),
+      Text(
+        'Proposal yang kamu kirim untuk memenuhi bid pembeli.',
+        style: AppTypography.caption(context.mutedForeground),
+      ),
+      const SizedBox(height: 14),
+    ];
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -94,57 +106,56 @@ class _MyProposalsPageState extends ConsumerState<MyProposalsPage> {
       body: AppBarOverlayBody(
         child: RefreshIndicator(
           onRefresh: () => ref.refresh(sentProposalsProvider.future),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            children: [
-              Text('Penawaranku', style: AppTypography.h2(colors.onSurface)),
-              const SizedBox(height: 2),
-              Text(
-                'Proposal yang kamu kirim untuk memenuhi bid pembeli.',
-                style: AppTypography.caption(context.mutedForeground),
+          child: async.when(
+            data: (sent) => _body(sent, title),
+            loading: () => ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: _padding,
+              children: [
+                ...title,
+                const Padding(
+                  padding: EdgeInsets.only(top: 48),
+                  child: PikachuLoader(),
+                ),
+              ],
+            ),
+            error: (_, __) => ScrollableEmptyState(
+              padding: _padding,
+              header: title,
+              child: EmptyState(
+                icon: LucideIcons.circleAlert,
+                title: 'Gagal memuat penawaran',
+                action: OutlinedButton(
+                  onPressed: () => ref.invalidate(sentProposalsProvider),
+                  child: const Text('Coba lagi'),
+                ),
               ),
-              const SizedBox(height: 14),
-              ...async.when(
-                data: _list,
-                loading: () => const [
-                  Padding(
-                    padding: EdgeInsets.only(top: 48),
-                    child: PikachuLoader(),
-                  ),
-                ],
-                error: (_, __) => [
-                  EmptyState(
-                    icon: LucideIcons.circleAlert,
-                    title: 'Gagal memuat penawaran',
-                    action: OutlinedButton(
-                      onPressed: () => ref.invalidate(sentProposalsProvider),
-                      child: const Text('Coba lagi'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  List<Widget> _list(List<SentProposalModel> sent) {
+  /// The proposals under [title], or — with none, or none under the filter —
+  /// the empty state centred in the room left below.
+  Widget _body(List<SentProposalModel> sent, List<Widget> title) {
     if (sent.isEmpty) {
-      return const [
-        EmptyState(
+      return ScrollableEmptyState(
+        padding: _padding,
+        header: title,
+        child: const EmptyState(
           icon: LucideIcons.send,
           title: 'Belum ada penawaran',
           description:
               'Tekan "Penuhi Bid" pada buylist pembeli untuk mengirim proposal.',
         ),
-      ];
+      );
     }
 
     final visible = sent.where(_filter.matches).toList();
-    return [
+    final header = [
+      ...title,
       SizedBox(
         height: 34,
         child: ListView(
@@ -162,30 +173,40 @@ class _MyProposalsPageState extends ConsumerState<MyProposalsPage> {
         ),
       ),
       const SizedBox(height: 12),
-      if (visible.isEmpty)
-        const Padding(
-          padding: EdgeInsets.only(top: 24),
-          child: EmptyState(
-            icon: LucideIcons.inbox,
-            title: 'Belum ada proposal dengan status ini',
-          ),
-        ),
-      for (final proposal in visible) ...[
-        SentProposalCard(
-          proposal: proposal,
-          busy: _busySlug == proposal.slug,
-          onDismiss: () => _dismiss(proposal),
-          // A bid that has closed leaves only a placeholder card, with no
-          // page to open.
-          onOpenCard: proposal.card.id == unavailableProposalCard.id
-              ? null
-              : () => context.push(
-                  Routes.cardDetail(proposal.card.packSlug, proposal.card.id),
-                ),
-        ),
-        const SizedBox(height: 10),
-      ],
     ];
+    if (visible.isEmpty) {
+      return ScrollableEmptyState(
+        padding: _padding,
+        header: header,
+        child: const EmptyState(
+          icon: LucideIcons.inbox,
+          title: 'Belum ada proposal dengan status ini',
+        ),
+      );
+    }
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: _padding,
+      children: [
+        ...header,
+        for (final proposal in visible) ...[
+          SentProposalCard(
+            proposal: proposal,
+            busy: _busySlug == proposal.slug,
+            onDismiss: () => _dismiss(proposal),
+            // A bid that has closed leaves only a placeholder card, with no
+            // page to open.
+            onOpenCard: proposal.card.id == unavailableProposalCard.id
+                ? null
+                : () => context.push(
+                    Routes.cardDetail(proposal.card.packSlug, proposal.card.id),
+                  ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
   }
 }
 

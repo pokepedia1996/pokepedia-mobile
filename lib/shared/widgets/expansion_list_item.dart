@@ -5,6 +5,7 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../models/pack_model.dart';
+import 'app_network_image.dart';
 
 /// Ports `features/expansions/components/expansion-list-item.tsx` — the row
 /// an expansion takes in the list view: pack art in a muted tile, then the
@@ -49,7 +50,7 @@ class ExpansionListItem extends StatelessWidget {
                     )
                   : Padding(
                       padding: const EdgeInsets.all(6),
-                      child: Image.network(
+                      child: cachedNetworkImage(
                         pack.image!,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => Text(

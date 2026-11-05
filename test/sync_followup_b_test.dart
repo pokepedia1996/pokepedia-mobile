@@ -409,7 +409,8 @@ void main() {
       await _pumpCart(tester, items: const [], deals: [_deal()]);
       expect(find.text('Bid Proposal'), findsOneWidget);
       expect(find.text('Lugia V'), findsOneWidget);
-      expect(find.text('Subtotal (1 item)'), findsOneWidget);
+      // One deal line of two copies: the bar counts copies, not lines.
+      expect(find.text('Total · 2 barang'), findsOneWidget);
     });
   });
 

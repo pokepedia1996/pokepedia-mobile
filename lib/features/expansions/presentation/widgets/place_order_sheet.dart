@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,18 +19,23 @@ import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/condition_grade_picker.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../../cart/presentation/checkout_webview_page.dart';
+import '../../../market/presentation/widgets/share_store_prompt.dart';
+import '../../../market/presentation/widgets/store_poster.dart';
 import '../../repository/models/trading_models.dart';
 import '../../usecase/trading_notifier.dart';
 
 /// Opens the bid/ask form for [card]. Resolves true once an order was
 /// actually placed, so the caller can refresh the book.
+///
+/// Once one is, offers to share the store's poster on that side — without
+/// holding the caller's refresh until the offer is answered.
 Future<bool?> showPlaceOrderSheet(
   BuildContext context, {
   required CardModel card,
   required String side,
   int? bestPrice,
-}) {
-  return showModalBottomSheet<bool>(
+}) async {
+  final placed = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).cardColor,
@@ -39,6 +45,15 @@ Future<bool?> showPlaceOrderSheet(
     builder: (_) =>
         _PlaceOrderSheet(card: card, side: side, bestPrice: bestPrice),
   );
+  if (placed == true && context.mounted) {
+    unawaited(
+      promptShareStorePoster(
+        context,
+        side: side == 'bid' ? PosterSide.wtb : PosterSide.wts,
+      ),
+    );
+  }
+  return placed;
 }
 
 /// Ports `PlaceOrderModal` + the gating `OrderBookWidget` does around it:

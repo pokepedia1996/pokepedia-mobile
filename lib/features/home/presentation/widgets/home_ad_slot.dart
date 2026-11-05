@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../ads/usecase/ads_notifier.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// The banner slot on Beranda — 2:1, drawn for an 800×400 image.
 ///
@@ -58,7 +59,7 @@ class HomeAdSlot extends ConsumerWidget {
               borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(color: context.borderColor),
             ),
-            child: Image.network(
+            child: cachedNetworkImage(
               ad.imageUrl,
               fit: BoxFit.cover,
               semanticLabel: ad.companyName,

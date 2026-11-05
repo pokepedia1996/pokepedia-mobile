@@ -44,6 +44,14 @@ Widget _host({List<AddressModel> addresses = const [], StoreProfile? profile}) {
   );
 }
 
+/// Not pumpAndSettle: the pickup form — shown with or without a store —
+/// loads the bundled area catalog and keeps a loader turning, so the tree
+/// never goes quiet under test.
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
 void main() {
   testWidgets('shows both of web\'s cards', (tester) async {
     tester.view.physicalSize = const Size(1170, 3600);
@@ -51,7 +59,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_host());
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('Alamat Pengiriman'), findsOneWidget);
     expect(
@@ -73,7 +81,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_host());
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('Tambah Alamat Baru'), findsOneWidget);
     expect(find.text('Belum ada alamat tersimpan'), findsOneWidget);
@@ -87,14 +95,14 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_host(addresses: [_address()]));
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('Cari nama, kota, atau kecamatan'), findsOneWidget);
     expect(find.text('Rumah'), findsOneWidget);
     expect(find.text('Belum ada alamat tersimpan'), findsNothing);
 
     await tester.enterText(find.byType(TextField).first, 'bandung');
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Tidak ada alamat cocok'), findsOneWidget);
     expect(find.text('Rumah'), findsNothing);
   });
@@ -107,11 +115,23 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_host(profile: const StoreProfile()));
-    // Not pumpAndSettle: the pickup form loads the bundled area catalog and
-    // keeps a loader turning, so the tree never goes quiet under test.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await _settle(tester);
 
     expect(find.textContaining('Belum punya alamat pickup'), findsOneWidget);
+  });
+
+  testWidgets('no store yet still gets the pickup form, as on web', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1170, 3600);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_host());
+    await _settle(tester);
+
+    expect(find.textContaining('Belum punya alamat pickup'), findsOneWidget);
+    expect(find.textContaining('Masuk sebagai penjual'), findsNothing);
+    expect(find.text('Alamat Pengirim'), findsOneWidget);
   });
 }

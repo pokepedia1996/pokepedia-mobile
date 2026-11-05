@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../repository/models/promo_popup.dart';
+import '../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/promos/components/promo-popup.tsx`: a square creative with
 /// a close button over its corner and one CTA underneath.
@@ -46,7 +47,7 @@ class PromoPopupDialog extends StatelessWidget {
                       onTap: accept,
                       child: AspectRatio(
                         aspectRatio: 1,
-                        child: Image.network(
+                        child: cachedNetworkImage(
                           popup.imageUrl,
                           fit: BoxFit.cover,
                           semanticLabel: popup.imageAlt,

@@ -62,11 +62,13 @@ void main() {
       );
     });
 
-    test('a dispute lands on the disputed orders it can be worked from', () {
-      // The app has no seller dispute screen; dropping the tap would leave
-      // the loudest notification there is doing nothing.
+    test('a dispute opens its own detail page', () {
+      expect(appRouteForActionUrl('/seller/disputes/dsp-1'), '/disputes/dsp-1');
+    });
+
+    test('a bare disputes link falls back to the disputed orders', () {
       expect(
-        appRouteForActionUrl('/seller/disputes/dsp-1'),
+        appRouteForActionUrl('/seller/disputes'),
         '/seller/orders?filter=disputed',
       );
     });

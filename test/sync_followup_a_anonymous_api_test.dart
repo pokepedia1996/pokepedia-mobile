@@ -45,17 +45,20 @@ void main() {
       expect(headers[HttpHeaders.acceptHeader], 'application/json');
     });
 
-    test('authenticated: bearer and cookie travel with the firewall header', () {
-      final headers = PokepediaApi.requestHeaders(
-        bearer: 'tok',
-        cookie: 'sb-x-auth-token=base64-abc',
-        bypass: 'k3y',
-      );
+    test(
+      'authenticated: bearer and cookie travel with the firewall header',
+      () {
+        final headers = PokepediaApi.requestHeaders(
+          bearer: 'tok',
+          cookie: 'sb-x-auth-token=base64-abc',
+          bypass: 'k3y',
+        );
 
-      expect(headers[HttpHeaders.authorizationHeader], 'Bearer tok');
-      expect(headers[HttpHeaders.cookieHeader], 'sb-x-auth-token=base64-abc');
-      expect(headers[bypassHeader], 'k3y');
-    });
+        expect(headers[HttpHeaders.authorizationHeader], 'Bearer tok');
+        expect(headers[HttpHeaders.cookieHeader], 'sb-x-auth-token=base64-abc');
+        expect(headers[bypassHeader], 'k3y');
+      },
+    );
 
     test('no key in hand means no empty firewall header', () {
       expect(

@@ -206,9 +206,8 @@ class _ListsPageState extends ConsumerState<ListsPage> {
                     ref.invalidate(listsProvider);
                     await ref.read(listsProvider.future);
                   },
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    children: [
+                  child: () {
+                    final header = [
                       Text(
                         'List Kartu',
                         style: AppTypography.h1(colors.onSurface),
@@ -231,17 +230,25 @@ class _ListsPageState extends ConsumerState<ListsPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      if (lists.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 40),
-                          child: EmptyState(
-                            icon: LucideIcons.listChecks,
-                            title: 'Belum ada list',
-                            description:
-                                'Buat list pertamamu untuk mulai mengatur kartu!',
-                          ),
-                        )
-                      else
+                    ];
+                    const padding = EdgeInsets.fromLTRB(16, 8, 16, 32);
+                    if (lists.isEmpty) {
+                      // Centred in the room under the title and its button.
+                      return ScrollableEmptyState(
+                        padding: padding,
+                        header: header,
+                        child: const EmptyState(
+                          icon: LucideIcons.listChecks,
+                          title: 'Belum ada list',
+                          description:
+                              'Buat list pertamamu untuk mulai mengatur kartu!',
+                        ),
+                      );
+                    }
+                    return ListView(
+                      padding: padding,
+                      children: [
+                        ...header,
                         for (final list in lists) ...[
                           _ListCard(
                             list: list,
@@ -253,8 +260,9 @@ class _ListsPageState extends ConsumerState<ListsPage> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                    ],
-                  ),
+                      ],
+                    );
+                  }(),
                 ),
               ),
       ),

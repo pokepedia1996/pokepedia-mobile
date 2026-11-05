@@ -8,16 +8,22 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/theme/design_palette.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/setup_kit.dart';
+import '../../../shared/widgets/store_card.dart' show TopSellerBadge;
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/repository/models/seller_order.dart';
+import '../repository/models/my_reliability.dart';
 import '../repository/models/seller_dashboard.dart';
 import '../repository/seller_repository.dart';
 import '../usecase/offers_notifier.dart';
 import '../usecase/seller_listings_notifier.dart';
 import '../usecase/seller_notifier.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import 'store_setup/store_setup_launcher.dart';
 import 'widgets/seller_header.dart';
 import 'widgets/daily_gmv_chart.dart';
 
@@ -70,56 +76,28 @@ class _DashboardBody extends ConsumerWidget {
     return hasStore.when(
       loading: () => const PikachuLoader(),
       error: (_, __) => const _DashboardScroll(),
-      data: (has) => has ? const _DashboardScroll() : const _NoStoreState(),
+      // No store yet: Buka Toko's launcher, where the dashboard would be.
+      data: (has) =>
+          has ? const _DashboardScroll() : const StoreSetupLauncher(),
     );
   }
 }
 
-/// Opening a store writes details the app has no form for, so this points
-/// at the web rather than dead-ending.
-class _NoStoreState extends StatelessWidget {
-  const _NoStoreState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: EmptyState(
-        icon: LucideIcons.store,
-        title: 'Belum punya toko',
-        description:
-            'Buka toko dulu di pokepedia.id, lalu kelola penjualannya dari sini.',
-        action: ElevatedButton(
-          onPressed: () => context.push(Routes.settings),
-          child: const Text('Buka Pengaturan'),
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardScroll extends ConsumerStatefulWidget {
+class _DashboardScroll extends ConsumerWidget {
   const _DashboardScroll();
 
-  @override
-  ConsumerState<_DashboardScroll> createState() => _DashboardScrollState();
-}
-
-class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
-  final _search = TextEditingController();
+  /// Space between the sticky button and the nav pill under it.
+  static const _stickyGap = 12.0;
+  static const _stickyHeight = 54.0;
 
   @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = DesignPalette.of(context);
     final async = ref.watch(sellerDashboardProvider);
     final identity =
         ref.watch(sellerIdentityProvider).valueOrNull ?? const SellerIdentity();
     final window = ref.watch(sellerWindowProvider);
+    final reliability = ref.watch(myReliabilityProvider).valueOrNull;
 
     if (async.isLoading && !async.hasValue) return const PikachuLoader();
 
@@ -129,6 +107,7 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
     final payload = async.valueOrNull ?? DashboardPayload.empty(window.days);
     final failed = async.hasError || async.valueOrNull == null;
     final displayName = identity.username ?? 'Penjual';
+    final storeHandle = identity.storeHandle;
 
     final counts = ref.watch(sellerListingCountsProvider).valueOrNull;
     final drafts = ref.watch(sellerDraftsProvider).valueOrNull?.length ?? 0;
@@ -143,17 +122,15 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
     // What the seller has to *do*, in the order it costs them if ignored:
     // an unshipped order is a clock already running, an offer is money
     // waiting on an answer, a complaint is already someone else's move.
-    final tasks = <({String label, int count, bool urgent, String route})>[
+    final tasks = <({String label, int count, String route})>[
       (
         label: 'Perlu dikirim',
         count: kpi.toShip,
-        urgent: kpi.toShip > 0,
-        route: Routes.sellerOrdersFiltered('to_ship'),
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.urgent.filterKey),
       ),
       (
         label: 'Ada penawaran masuk',
         count: offers,
-        urgent: offers > 0,
         // The listings with offers on them, filtered — not the whole list
         // on whichever tab happened to be open last.
         route: Routes.sellerProductsWithOffers(),
@@ -161,147 +138,228 @@ class _DashboardScrollState extends ConsumerState<_DashboardScroll> {
       (
         label: 'Komplain terbuka',
         count: kpi.disputesOpen,
-        urgent: kpi.disputesOpen > 0,
-        route: Routes.sellerOrdersFiltered('disputes'),
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.disputed.filterKey),
       ),
     ];
+    // Web's heading counts the work, not the rows: "Tugas · 0" is a clear
+    // day, where "Tugas · 3" over three zeros read as three things to do.
+    final openTaskCount = tasks.fold<int>(0, (sum, t) => sum + t.count);
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        ref.invalidate(sellerDashboardProvider);
-        ref.invalidate(sellerIdentityProvider);
-        ref.invalidate(sellerListingTabCountsProvider);
-        await ref.read(sellerDashboardProvider.future);
-      },
-      child: ListView(
-        padding: EdgeInsets.only(
-          bottom: AppBottomNav.reservedSpace(context) + 16,
-        ),
-        children: [
-          SellerHeader(controller: _search),
-          const SizedBox(height: 12),
+    // Sticky above the nav pill, per the design team: the one action this
+    // page exists for stays in reach however far down the seller is.
+    final stickyBottom = AppBottomNav.reservedSpace(context) + _stickyGap;
+    const gap = SizedBox(height: 24);
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Halo, $displayName',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.h3(colors.onSurface),
-                  ),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(sellerDashboardProvider);
+            ref.invalidate(sellerIdentityProvider);
+            ref.invalidate(sellerListingTabCountsProvider);
+            ref.invalidate(myReliabilityProvider);
+            await ref.read(sellerDashboardProvider.future);
+          },
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              0,
+              20,
+              // The last section scrolls clear of the button and the pill.
+              stickyBottom + _stickyHeight + 24,
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 20),
+                child: Row(
+                  children: [
+                    Text('Jual', style: setupHeading(32, palette.ink)),
+                    const Spacer(),
+                    const SellerNotificationBell(framed: true),
+                  ],
                 ),
-                TextButton.icon(
-                  onPressed: () => context.push(Routes.sellerStore),
-                  iconAlignment: IconAlignment.end,
-                  icon: const Icon(LucideIcons.arrowUpRight, size: 14),
-                  label: const Text('Atur Toko'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: context.mutedForeground,
-                    textStyle: AppTypography.bodySmSemibold(
-                      context.mutedForeground,
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Halo, $displayName',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: setupHeading(22, palette.ink),
                     ),
                   ),
+                  if (storeHandle != null) ...[
+                    _HeaderLink(
+                      label: 'Lihat Toko',
+                      onTap: () =>
+                          context.push(Routes.storeDetail(storeHandle)),
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                  _HeaderLink(
+                    label: 'Atur Toko',
+                    onTap: () => context.push(Routes.sellerStore),
+                  ),
+                ],
+              ),
+              if (failed) ...[
+                const SizedBox(height: 16),
+                _ErrorBanner(
+                  onRetry: () => ref.invalidate(sellerDashboardProvider),
                 ),
               ],
-            ),
-          ),
-
-          if (failed) ...[
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _ErrorBanner(
-                onRetry: () => ref.invalidate(sellerDashboardProvider),
+              gap,
+              InkWell(
+                onTap: () => context.push(Routes.sellerPerformance),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: _RevenueBlock(summary: payload.summary),
               ),
-            ),
-          ],
-
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: InkWell(
-              onTap: () => context.push(Routes.sellerPerformance),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: _RevenueBlock(summary: payload.summary),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-          _StatStrip(
-            active: counts?.active,
-            orders: openOrders,
-            drafts: drafts,
-            inactive: counts?.inactive,
-          ),
-
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Tugas \u00b7 ${tasks.length}',
-              style: AppTypography.bodySemibold(colors.onSurface),
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (final task in tasks)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _TaskRow(
-                label: task.label,
-                count: task.count,
-                urgent: task.urgent,
-                onTap: () => context.push(task.route),
+              gap,
+              _StatStrip(
+                active: counts?.active,
+                orders: openOrders,
+                drafts: drafts,
+                inactive: counts?.inactive,
               ),
-            ),
-
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Divider(color: context.borderColor, height: 1),
+              gap,
+              Text(
+                'Tugas · $openTaskCount',
+                style: setupHeading(22, palette.ink),
+              ),
+              const SizedBox(height: 10),
+              for (final task in tasks) ...[
+                _TaskRow(
+                  label: task.label,
+                  count: task.count,
+                  onTap: () => context.push(task.route),
+                ),
+                if (task != tasks.last) const SizedBox(height: 10),
+              ],
+              if (reliability != null) ...[
+                gap,
+                _ReliabilitySection(reliability: reliability),
+              ],
+              gap,
+              _Section(
+                title: 'Pembayaran',
+                child: _WalletPill(balance: payload.walletBalance),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Pembayaran',
-              style: AppTypography.bodySemibold(colors.onSurface),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _WalletPill(balance: payload.walletBalance),
-          ),
-
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ElevatedButton.icon(
-              onPressed: () => context.push(Routes.sellerProductsTab('draft')),
-              icon: const Icon(LucideIcons.plus, size: 16),
-              label: const Text('Tambahkan Listing'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colors.onSurface,
-                foregroundColor: Theme.of(context).cardColor,
-                minimumSize: const Size.fromHeight(46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.full),
+        ),
+        // Fades the list out under the button so the two don't collide.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: stickyBottom + _stickyHeight + 48,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    palette.background.withValues(alpha: 0),
+                    palette.background.withValues(alpha: 0.95),
+                    palette.background,
+                  ],
+                  stops: const [0, 0.35, 1],
                 ),
               ),
             ),
           ),
-        ],
+        ),
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: stickyBottom,
+          child: _StickyAddButton(
+            height: _stickyHeight,
+            onPressed: () => context.push(Routes.sellerProductsTab('draft')),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Lihat Toko ↗" / "Atur Toko ↗" beside the greeting.
+class _HeaderLink extends StatelessWidget {
+  const _HeaderLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: setupText(14, palette.ink, FontWeight.w500)),
+            const SizedBox(width: 3),
+            Icon(LucideIcons.arrowUpRight, size: 14, color: palette.ink),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// "OMZET 30 HARI" and what it did — the one number a seller opens this
+class _StickyAddButton extends StatelessWidget {
+  const _StickyAddButton({required this.height, required this.onPressed});
+
+  final double height;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(height / 2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C1413).withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: palette.ctaBackground,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const StadiumBorder(),
+          child: SizedBox(
+            height: height,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(LucideIcons.plus, size: 20, color: palette.ctaForeground),
+                const SizedBox(width: 8),
+                Text(
+                  'Tambahkan Listing',
+                  style: setupText(17, palette.ctaForeground, FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "OMZET 90 HARI" and what it did — the one number a seller opens this
 /// page for.
 class _RevenueBlock extends StatelessWidget {
   const _RevenueBlock({required this.summary});
@@ -310,9 +368,9 @@ class _RevenueBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final up = summary.delta30 >= 0;
-    final tone = up ? context.appSemantic.success : colors.error;
+    final palette = DesignPalette.of(context);
+    final up = summary.delta90 >= 0;
+    final tone = up ? palette.successText : palette.brand;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,56 +378,47 @@ class _RevenueBlock extends StatelessWidget {
         Row(
           children: [
             Text(
-              'OMZET 30 HARI',
-              style: AppTypography.overline(context.mutedForeground),
+              'OMZET 90 HARI',
+              style: setupText(
+                12,
+                palette.muted,
+                FontWeight.w600,
+              ).copyWith(letterSpacing: 1),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Tooltip(
               message:
-                  'Nilai transaksi selesai dalam 30 hari terakhir, '
-                  'dibandingkan 30 hari sebelumnya.',
+                  'Nilai transaksi selesai dalam 90 hari terakhir, '
+                  'dibandingkan 90 hari sebelumnya.',
               triggerMode: TooltipTriggerMode.tap,
-              child: Icon(
-                LucideIcons.info,
-                size: 13,
-                color: context.mutedForeground,
-              ),
+              child: Icon(LucideIcons.info, size: 14, color: palette.muted),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  formatRupiah(summary.last30),
+                  formatRupiah(summary.last90),
                   maxLines: 1,
-                  style: AppTypography.h2(colors.onSurface),
+                  style: setupHeading(38, palette.ink),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    up ? LucideIcons.trendingUp : LucideIcons.trendingDown,
-                    size: 15,
-                    color: tone,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${up ? '+' : ''}${summary.delta30.toStringAsFixed(0)}%',
-                    style: AppTypography.bodySmSemibold(tone),
-                  ),
-                ],
-              ),
+            const SizedBox(width: 10),
+            Icon(
+              up ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+              size: 14,
+              color: tone,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              '${up ? '+' : ''}${summary.delta90.toStringAsFixed(0)}%',
+              style: setupText(13, tone, FontWeight.w600),
             ),
           ],
         ),
@@ -378,9 +427,7 @@ class _RevenueBlock extends StatelessWidget {
   }
 }
 
-/// AKTIF / PESANAN / DRAFT / INAKTIF. Scrolls sideways rather than squeezing
-/// four columns onto a phone, which is what the design does: the first two
-/// are the ones that matter daily and they stay in view.
+/// AKTIF / PESANAN / DRAFT / INAKTIF, four across as the design has them.
 class _StatStrip extends StatelessWidget {
   const _StatStrip({
     required this.active,
@@ -405,7 +452,11 @@ class _StatStrip extends StatelessWidget {
         value: active,
         route: Routes.sellerProductsTab('active'),
       ),
-      (label: 'PESANAN', value: orders, route: Routes.sellerOrders),
+      (
+        label: 'PESANAN',
+        value: orders,
+        route: Routes.sellerOrdersFiltered(SellerOrderTab.all.filterKey),
+      ),
       (label: 'DRAFT', value: drafts, route: Routes.sellerProductsTab('draft')),
       (
         label: 'INAKTIF',
@@ -414,22 +465,19 @@ class _StatStrip extends StatelessWidget {
       ),
     ];
 
-    return SizedBox(
-      height: 66,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: tiles.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final tile = tiles[i];
-          return _StatTile(
-            label: tile.label,
-            value: tile.value,
-            onTap: () => context.push(tile.route),
-          );
-        },
-      ),
+    return Row(
+      children: [
+        for (final tile in tiles) ...[
+          if (tile != tiles.first) const SizedBox(width: 10),
+          Expanded(
+            child: _StatTile(
+              label: tile.label,
+              value: tile.value,
+              onTap: () => context.push(tile.route),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -451,48 +499,44 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        width: 100,
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-        decoration: BoxDecoration(
-          color: context.mutedForeground.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-        // Both lines scale down rather than overflow: the tile is a fixed
-        // height in a horizontal strip, so it has nowhere to grow, and the
-        // label is a word whose length varies with translation.
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Flexible(
-              child: FittedBox(
+    final palette = DesignPalette.of(context);
+    final radius = BorderRadius.circular(14);
+    return Material(
+      color: palette.chip,
+      borderRadius: radius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          // Scaled down rather than overflowing: four tiles share a phone's
+          // width, and "PESANAN" or a four-digit count has to fit either way.
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
                 child: Text(
                   label,
                   maxLines: 1,
-                  style: AppTypography.overline(context.mutedForeground),
+                  style: setupText(
+                    11,
+                    palette.muted,
+                    FontWeight.w600,
+                  ).copyWith(letterSpacing: 0.8),
                 ),
               ),
-            ),
-            Flexible(
-              child: FittedBox(
+              const SizedBox(height: 6),
+              FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
                 child: Text(
                   value == null ? '-' : '$value',
                   maxLines: 1,
-                  style: AppTypography.bodySemibold(
-                    context.appColors.onSurface,
-                  ),
+                  style: setupText(20, palette.ink, FontWeight.w700),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -504,61 +548,245 @@ class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.label,
     required this.count,
-    required this.urgent,
     required this.onTap,
   });
 
   final String label;
   final int count;
-  final bool urgent;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.appColors;
+    final palette = DesignPalette.of(context);
+    final urgent = count > 0;
+    final radius = BorderRadius.circular(14);
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: context.borderColor),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySm(colors.onSurface),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              constraints: const BoxConstraints(minWidth: 24),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                // Red only when there is something to do. A zero in the
-                // same red would train the seller to ignore the colour.
-                color: urgent
-                    ? colors.error
-                    : context.mutedForeground.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(AppRadius.full),
-              ),
-              child: Text(
-                '$count',
-                style: AppTypography.captionSemibold(
-                  urgent ? Colors.white : context.mutedForeground,
+    return Material(
+      color: palette.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: BorderSide(color: palette.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: setupText(15, palette.ink, FontWeight.w500),
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                decoration: BoxDecoration(
+                  // Red only when there is something to do. A zero in the
+                  // same red would train the seller to ignore the colour.
+                  color: urgent ? palette.brand : palette.chip,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+                child: Text(
+                  '$count',
+                  style: setupText(
+                    12,
+                    urgent ? Colors.white : palette.ink,
+                    FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A titled block under a hairline, as web's lower sections are.
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.child, this.trailing});
+
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: palette.border)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(title, style: setupHeading(22, palette.ink)),
+                ),
+                ?trailing,
+              ],
             ),
+            const SizedBox(height: 12),
+            child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Ports web's `ReliabilityCard`: the last 90 days at a glance, what is
+/// still between the seller and Top Seller over the last 30, and which
+/// orders were counted against them.
+class _ReliabilitySection extends StatelessWidget {
+  const _ReliabilitySection({required this.reliability});
+
+  final MyReliability reliability;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    final completion = reliability.completionPct;
+    final median = reliability.medianShipHours;
+
+    Widget metric(String label, String value, {Color? tone}) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: setupText(13, palette.muted),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: setupText(18, tone ?? palette.ink, FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+
+    return _Section(
+      title: 'Keandalan toko · 90 hari',
+      trailing: reliability.topRated ? const TopSellerBadge() : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              metric(
+                'Pesanan selesai',
+                completion == null ? '-' : '$completion%',
+              ),
+              const SizedBox(width: 8),
+              metric(
+                'Batal karena penjual',
+                '${reliability.cancelPct}%',
+                tone: reliability.belowStandard ? palette.error : null,
+              ),
+              const SizedBox(width: 8),
+              metric('Median kirim', median == null ? '-' : '$median jam'),
+            ],
+          ),
+          // Already there, nothing to work towards; web hides it too.
+          if (!reliability.topRated) ...[
+            const SizedBox(height: 12),
+            _TopSellerChecklist(
+              requirements: reliability.topSellerRequirements,
+            ),
+          ],
+          if (reliability.failures.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Pesanan yang dihitung gagal',
+              style: setupText(15, palette.ink, FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            for (final f in reliability.failures)
+              InkWell(
+                onTap: () => context.push(Routes.sellerOrderDetail(f.itemSlug)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          f.orderNumber,
+                          style: setupText(13, palette.ink, FontWeight.w500),
+                        ),
+                      ),
+                      Text(f.faultLabel, style: setupText(13, palette.muted)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// "Menuju Top Seller · 30 hari": each requirement ticked or not, with how
+/// far off it is.
+class _TopSellerChecklist extends StatelessWidget {
+  const _TopSellerChecklist({required this.requirements});
+
+  final List<TopSellerRequirement> requirements;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.chip,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Menuju Top Seller · 30 hari',
+            style: setupText(15, palette.ink, FontWeight.w600),
+          ),
+          for (final r in requirements) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    r.met ? LucideIcons.check : LucideIcons.x,
+                    size: 15,
+                    color: r.met ? palette.success : palette.muted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${r.label} · ${r.detail}',
+                    style: setupText(13, palette.muted),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

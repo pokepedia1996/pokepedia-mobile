@@ -73,6 +73,10 @@
     <!-- Android 13+ asks the user before an app may post notifications. The
          app requests it the first time it has one to show, not at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- "Pakai lokasiku" when a seller sets their pickup point (Buka Toko).
+         Requested only when that button is tapped. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 </manifest>

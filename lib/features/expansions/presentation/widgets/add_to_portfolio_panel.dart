@@ -12,13 +12,14 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_market_price.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../../home/repository/models/portfolio_value.dart';
 import '../../../home/usecase/portfolio_value_notifier.dart';
+import '../../../portfolio/presentation/widgets/collection_condition_field.dart';
 import '../../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
-import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../usecase/expansions_notifier.dart';
 
 /// How long the green tick sits on the button after a write lands, before
@@ -55,9 +56,13 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   /// The count the server last confirmed, which the delta is measured from.
   int _saved = 0;
 
-  /// The target [_saved] belongs to, so switching portfolios re-seeds rather
-  /// than carrying the previous shelf's count over.
-  PortfolioTarget? _seededFor;
+  /// Which condition the stepper counts. A card can be held as 2x NM and
+  /// 1x LP, and each is its own `collection_cards` row.
+  CardCondition _condition = CardCondition.nm;
+
+  /// The shelf and condition [_saved] belongs to, so switching either
+  /// re-seeds rather than carrying the previous count over.
+  ({PortfolioTarget target, CardCondition condition})? _seededFor;
 
   /// A write has landed and the provider hasn't caught up yet.
   ///
@@ -82,19 +87,16 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     super.dispose();
   }
 
-  /// The card's count in whichever portfolio is selected: the collection's
-  /// own for "Utama", the list's own quantity otherwise.
-  int? _serverQuantity(PortfolioTarget target) {
-    if (target.isPrimary) {
-      return ref.watch(ownedQuantityProvider(widget.card.id)).valueOrNull;
-    }
-    final cards = ref.watch(listCardsProvider(target.listId!)).valueOrNull;
-    if (cards == null) return null;
-    for (final card in cards) {
-      if (card.id == widget.card.id) return card.owned;
-    }
-    return 0;
-  }
+  /// Copies of the card in each condition, in whichever portfolio is
+  /// selected: the collection's own for "Utama", the list's otherwise.
+  Map<CardCondition, int>? _serverCounts(PortfolioTarget target) => ref
+      .watch(
+        conditionQuantitiesProvider((
+          listId: target.listId,
+          cardId: widget.card.id,
+        )),
+      )
+      .valueOrNull;
 
   /// A tap on one of the signs: the count moves, both buttons lock, and the
   /// write goes out immediately.
@@ -140,11 +142,13 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             userId: user.id,
             cardId: widget.card.id,
             delta: wanted - _saved,
+            condition: _condition,
           )
         : await controller.setListCardQuantity(
             listId: target.listId!,
             cardId: widget.card.id,
             quantity: wanted,
+            condition: _condition,
           );
     if (!mounted) return;
 
@@ -183,19 +187,21 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     // signed in, and the write would be dropped.
     ref.watch(authProvider);
     final target = ref.watch(selectedPortfolioProvider);
-    final server = _serverQuantity(target);
+    final counts = _serverCounts(target);
+    final server = counts == null ? null : counts[_condition] ?? 0;
+    final seedKey = (target: target, condition: _condition);
 
     // Seed from the server once per target, and re-seed whenever it moves
     // underneath us — an add from the scanner, or the same card edited on
     // the collection page.
     if (server != null) {
-      final switchedShelf = _seededFor != target;
+      final switchedShelf = _seededFor != seedKey;
       if (server == _saved) _awaitingRefresh = false;
       // While a write is on its way — or its refetch hasn't landed — the
       // local number is the truthful one.
       final pending = _busy != null || _awaitingRefresh;
       if (switchedShelf || (!pending && server != _saved)) {
-        _seededFor = target;
+        _seededFor = seedKey;
         _saved = server;
         _qty = server;
         _awaitingRefresh = false;
@@ -237,6 +243,34 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             ),
           ),
           Divider(height: 1, color: context.borderColor),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            child: Row(
+              children: [
+                Text(
+                  'Kondisi',
+                  style: AppTypography.bodySm(context.mutedForeground),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 200,
+                  child: CollectionConditionField(
+                    value: _condition,
+                    counts: counts,
+                    // Switching mid-write would count the landing write
+                    // against the wrong condition.
+                    onChanged: _busy != null
+                        ? null
+                        : (value) => setState(() {
+                            _condition = value;
+                            _done = null;
+                            _awaitingRefresh = false;
+                          }),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Row(

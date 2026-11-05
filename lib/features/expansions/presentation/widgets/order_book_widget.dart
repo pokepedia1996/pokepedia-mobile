@@ -529,6 +529,7 @@ class _LadderRow extends ConsumerWidget {
     if (error == null) {
       ref.invalidate(orderBookProvider);
       ref.invalidate(myBidsProvider);
+      ref.invalidate(proposalCardFeedProvider);
     }
     ScaffoldMessenger.of(context)
       ..clearSnackBars()

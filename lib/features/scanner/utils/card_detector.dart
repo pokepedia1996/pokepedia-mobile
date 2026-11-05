@@ -101,7 +101,7 @@ Float32List prepareInput(img.Image source, DetectRegion region) {
   if (downscale > _stagedResizeTrigger) {
     final scale =
         _stagedResizeIntermediateSide / math.max(region.width, region.height);
-    final cropped = img.copyCrop(
+    final cropped = _cropRegion(
       source,
       x: region.x.round(),
       y: region.y.round(),
@@ -122,7 +122,7 @@ Float32List prepareInput(img.Image source, DetectRegion region) {
     );
   }
 
-  final crop = img.copyCrop(
+  final crop = _cropRegion(
     working,
     x: rect.x.round(),
     y: rect.y.round(),
@@ -138,16 +138,26 @@ Float32List prepareInput(img.Image source, DetectRegion region) {
 
   const size = modelInputSize * modelInputSize;
   final out = Float32List(3 * size);
-  for (var y = 0; y < modelInputSize; y++) {
-    for (var x = 0; x < modelInputSize; x++) {
-      final p = resized.getPixel(x, y);
-      final i = y * modelInputSize + x;
-      out[i] = _normalize(p.r.toDouble(), 0);
-      out[size + i] = _normalize(p.g.toDouble(), 1);
-      out[2 * size + i] = _normalize(p.b.toDouble(), 2);
-    }
+  final rgb = resized.getBytes(order: img.ChannelOrder.rgb);
+  for (var i = 0; i < size; i++) {
+    out[i] = _normalize(rgb[i * 3].toDouble(), 0);
+    out[size + i] = _normalize(rgb[i * 3 + 1].toDouble(), 1);
+    out[2 * size + i] = _normalize(rgb[i * 3 + 2].toDouble(), 2);
   }
   return out;
+}
+
+img.Image _cropRegion(
+  img.Image source, {
+  required int x,
+  required int y,
+  required int width,
+  required int height,
+}) {
+  if (x == 0 && y == 0 && width == source.width && height == source.height) {
+    return source;
+  }
+  return img.copyCrop(source, x: x, y: y, width: width, height: height);
 }
 
 /// Applies the brightness/contrast filter, scales to 0–1, then ImageNet
@@ -237,13 +247,56 @@ bool passesGates(
   DetectRegion region, {
   double aspectTolerance = modelAspectTolerance,
 }) {
-  if (detection.present < minPresence) return false;
-  if (!plausibleCardAspect(detection.quad, tolerance: aspectTolerance)) {
-    return false;
+  return detectionRejection(
+        detection,
+        region,
+        aspectTolerance: aspectTolerance,
+      ) ==
+      null;
+}
+
+/// The first failed gate, shared by capture and live diagnostics.
+String? detectionRejection(
+  Detection detection,
+  DetectRegion region, {
+  double aspectTolerance = modelAspectTolerance,
+}) {
+  if (!detection.present.isFinite ||
+      detection.quad.corners.length != 4 ||
+      detection.quad.corners.any((p) => !p.x.isFinite || !p.y.isFinite)) {
+    return 'non_finite';
   }
-  if (isQuadTruncated(detection.quad, region)) return false;
-  if (isQuadKeystoned(detection.quad)) return false;
-  return true;
+  if (detection.present < minPresence) return 'presence';
+  if (!plausibleCardAspect(detection.quad, tolerance: aspectTolerance)) {
+    return 'aspect';
+  }
+  if (isQuadTruncated(detection.quad, region)) return 'truncated';
+  if (isQuadKeystoned(detection.quad)) return 'keystone';
+  // Reject folded or crossed predictions before attempting a homography.
+  final points = detection.quad.corners;
+  for (var i = 0; i < 4; i++) {
+    final a = points[i], b = points[(i + 1) % 4], c = points[(i + 2) % 4];
+    final cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (cross <= 0) return 'geometry';
+  }
+  return null;
+}
+
+/// A zoomed pass must still describe the same card, not a smaller artwork panel.
+bool refinementAgrees(Quad coarse, Quad refined) {
+  double area(Quad quad) {
+    var twiceArea = 0.0;
+    for (var i = 0; i < 4; i++) {
+      final a = quad.corners[i], b = quad.corners[(i + 1) % 4];
+      twiceArea += a.x * b.y - b.x * a.y;
+    }
+    return twiceArea.abs() / 2;
+  }
+
+  final base = area(coarse);
+  if (!base.isFinite || base <= 0) return false;
+  final ratio = area(refined) / base;
+  return ratio >= 0.8 && ratio <= 1.25 && coarse.driftFrom(refined) <= 0.1;
 }
 
 /// The stage-2 crop for a stage-1 quad: its bounding box, expanded, clamped to

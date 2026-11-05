@@ -134,6 +134,24 @@ final ownedQuantityProvider = FutureProvider.family<int, int>((
       .fetchOwnedQuantity(user.id, cardId);
 });
 
+/// How many copies of a card each condition holds in one portfolio — a null
+/// `listId` is the main collection. Empty for guests.
+final conditionQuantitiesProvider =
+    FutureProvider.family<
+      Map<CardCondition, int>,
+      ({String? listId, int cardId})
+    >((ref, key) async {
+      final user = ref.watch(authProvider).valueOrNull;
+      if (user == null) return const {};
+      return ref
+          .read(expansionsRepositoryProvider)
+          .fetchConditionQuantities(
+            user.id,
+            key.cardId,
+            collectionId: key.listId,
+          );
+    });
+
 /// The daily price series behind the market activity chart. [days] is null
 /// for the "1 Thn" range, matching `get_market_price_series`' own default.
 final marketPriceSeriesProvider =

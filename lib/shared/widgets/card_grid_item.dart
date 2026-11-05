@@ -4,11 +4,14 @@ import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/formatters.dart';
+import '../models/card_condition.dart';
 import '../models/card_model.dart';
+import 'condition_badge.dart';
 import 'card_art.dart';
 import 'card_language_badge.dart';
 import 'card_price_note.dart';
 import 'selection_mark.dart';
+import '../../core/utils/image_url.dart';
 
 /// Everything in a tile that isn't artwork or the variant line: the name,
 /// expansion and price rows, the gaps between them, and the tile's vertical
@@ -207,10 +210,16 @@ class CardGridItem extends StatelessWidget {
     required this.onTap,
     this.footer,
     this.selected,
+    this.condition,
   });
 
   final CardModel card;
   final VoidCallback onTap;
+
+  /// The condition these copies are held in, badged on the artwork — a
+  /// collection holds one tile per condition. Null where the grid is the
+  /// catalog and condition means nothing.
+  final CardCondition? condition;
 
   /// An extra row under the price — web's edit mode puts the quantity
   /// stepper here, in the tile's flow rather than floating over its text.
@@ -254,19 +263,28 @@ class CardGridItem extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (selected == null)
-                  CardArt(imageUrl: card.imageUrl)
+                if (selected == null && condition == null)
+                  CardArt(imageUrl: card.imageUrl, size: ImageSize.half)
                 else
                   Stack(
                     children: [
-                      CardArt(imageUrl: card.imageUrl),
+                      CardArt(imageUrl: card.imageUrl, size: ImageSize.half),
                       // Top-right: a Pokémon card's own art is busiest at the
                       // top-left, where the evolution box sits.
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: SelectionMark(selected: selected),
-                      ),
+                      if (selected != null)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: SelectionMark(selected: selected),
+                        ),
+                      // Bottom-right, clear of the selection mark: the foot
+                      // of a card is its flavour text, the quietest part.
+                      if (condition != null)
+                        Positioned(
+                          bottom: 6,
+                          right: 6,
+                          child: ConditionBadge(condition: condition!),
+                        ),
                     ],
                   ),
                 const SizedBox(height: 8),

@@ -30,6 +30,9 @@ void main() {
         ScanPillStatus.capturing: 'Memindai...',
         ScanPillStatus.processing: 'Memproses...',
         ScanPillStatus.paused: 'Dijeda',
+        ScanPillStatus.coolingDown: 'Menunggu untuk mencoba lagi...',
+        ScanPillStatus.recovering: 'Menyiapkan pemindai...',
+        ScanPillStatus.moveCard: 'Angkat kartu untuk melanjutkan',
       };
 
       for (final entry in expected.entries) {

@@ -19,6 +19,17 @@ class _FakeAuth extends AuthNotifier {
   Future<AppUser?> build() async => _me;
 }
 
+/// A feed already loaded with [groups] and nothing older to fetch.
+class _FixedFeed extends ProposalFeedNotifier {
+  _FixedFeed(this.groups);
+
+  final List<ProposalCardGroup> groups;
+
+  @override
+  Future<ProposalFeed> build() async =>
+      ProposalFeed(groups: groups, hasMore: false);
+}
+
 ProposalCardGroup _group({required int id, int needsAction = 0}) {
   final group = ProposalCardGroup(
     card: CardModel(
@@ -46,7 +57,7 @@ Future<void> _pump(WidgetTester tester, List<ProposalCardGroup> groups) async {
     ProviderScope(
       overrides: [
         authProvider.overrideWith(_FakeAuth.new),
-        proposalCardFeedProvider.overrideWith((ref) async => groups),
+        proposalCardFeedProvider.overrideWith(() => _FixedFeed(groups)),
         proposalsSummaryProvider.overrideWith(
           (ref) async => const ProposalsSummary(),
         ),

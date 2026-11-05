@@ -74,7 +74,13 @@ class DetectorWorker {
     final completer = Completer<Object?>();
     _pending[id] = completer;
     _commands.send(_Request(id, request));
-    return completer.future;
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _pending.remove(id);
+        throw TimeoutException('Scanner worker did not respond');
+      },
+    );
   }
 
   /// Decodes [frame], orients it, and returns the whole-frame tensor along
@@ -128,7 +134,8 @@ class DetectorWorker {
   }
 
   /// Starts a capture burst, forgetting whatever the last one kept.
-  Future<void> beginBurst() => _send(const _BeginBurst()).then((_) {});
+  Future<void> beginBurst({Quad? normalizedCard}) =>
+      _send(_BeginBurst(normalizedCard)).then((_) {});
 
   /// Scores one burst candidate and keeps it if it is the sharpest so far.
   ///
@@ -199,6 +206,12 @@ class DetectorWorker {
   Future<CardCapture?> warp(Quad quad) async {
     final result = await _send(_Warp(quad));
     return result as CardCapture?;
+  }
+
+  /// Copies the retained frame, then encodes it away from the detector worker.
+  Future<Uint8List?> snapshot() async {
+    final frame = await _send(const _Snapshot()) as img.Image?;
+    return frame == null ? null : compute(_encodeSnapshot, frame);
   }
 
   Future<void> dispose() async {
@@ -274,7 +287,8 @@ class _PrepareRegion {
 }
 
 class _BeginBurst {
-  const _BeginBurst();
+  const _BeginBurst(this.normalizedCard);
+  final Quad? normalizedCard;
 }
 
 class _OfferBurstFrame {
@@ -300,6 +314,10 @@ class _WarpBurst {
   final Quad quad;
 }
 
+class _Snapshot {
+  const _Snapshot();
+}
+
 class _Warp {
   const _Warp(this.quad);
   final Quad quad;
@@ -318,6 +336,7 @@ void _entryPoint(SendPort responses) {
   // The sharpest frame of the current capture burst, and its score.
   img.Image? best;
   var bestScore = -1.0;
+  Quad? burstCard;
 
   commands.listen((message) {
     if (message is! _Request) return;
@@ -340,9 +359,6 @@ void _entryPoint(SendPort responses) {
           // is the visible rect; this frame's relationship to the preview
           // box is not confirmed, and a wrong crop loses the card outright.
           final region = wholeFrame(decoded.width, decoded.height);
-          if (kDebugMode) {
-            debugPrint('[scan] frame ${decoded.width}x${decoded.height}');
-          }
           payload = FramePrep(
             tensor: prepareInput(decoded, region),
             region: region,
@@ -353,15 +369,20 @@ void _entryPoint(SendPort responses) {
       } else if (request is _BeginBurst) {
         best = null;
         bestScore = -1;
+        burstCard = request.normalizedCard;
       } else if (request is _OfferBurstFrame) {
         final decoded = decodePlanes(
           planes: request.planes,
           width: request.width,
           height: request.height,
           sensorOrientation: request.sensorOrientation,
+          // Tracking is cheap at 768px; uploads retain the actual 720p frame.
+          maxSide: 1280,
         );
         if (decoded != null) {
-          final score = scoreFrame(decoded).variance;
+          final score = burstCard == null
+              ? scoreFrame(decoded).variance
+              : scoreCardFocus(decoded, burstCard!);
           if (score > bestScore) {
             bestScore = score;
             best = decoded;
@@ -387,6 +408,9 @@ void _entryPoint(SendPort responses) {
       } else if (request is _PrepareRegion) {
         final held = frame;
         if (held != null) payload = prepareInput(held, request.region);
+      } else if (request is _Snapshot) {
+        final held = frame;
+        if (held != null) payload = held;
       } else if (request is _Warp) {
         final held = frame;
         if (held != null) payload = captureFromQuad(held, request.quad);
@@ -400,3 +424,5 @@ void _entryPoint(SendPort responses) {
     responses.send(_Response(message.id, payload));
   });
 }
+
+Uint8List _encodeSnapshot(img.Image frame) => img.encodeJpg(frame, quality: 80);

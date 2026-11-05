@@ -80,40 +80,46 @@ class _SellerListingOffersPageState
         },
         child: async.isLoading && offers.isEmpty
             ? const Center(child: PikachuLoader())
-            : ListView(
+            : async.hasError || offers.isEmpty
+            // Centred in the room under the header, and still pullable.
+            ? ScrollableEmptyState(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                children: [
+                header: [
                   if (offers.isNotEmpty) ...[
                     _ListingHeader(offer: offers.first),
                     const SizedBox(height: 16),
                   ],
-
-                  if (async.hasError)
-                    const EmptyState(
-                      icon: LucideIcons.circleAlert,
-                      title: 'Gagal memuat penawaran',
-                      description: 'Tarik ke bawah untuk mencoba lagi.',
-                    )
-                  else if (offers.isEmpty)
-                    const EmptyState(
-                      icon: LucideIcons.tag,
-                      title: 'Belum ada penawaran',
-                      description:
-                          'Penawaran untuk listing ini akan muncul di sini.',
-                    )
-                  else
-                    for (final bucket in OfferBucket.values) ...[
-                      _BucketSection(
-                        bucket: bucket,
-                        offers: grouped[bucket]!,
-                        expanded: _open.contains(bucket),
-                        onToggle: () => setState(() {
-                          if (!_open.remove(bucket)) _open.add(bucket);
-                        }),
-                        onSelect: _showOffer,
+                ],
+                child: async.hasError
+                    ? const EmptyState(
+                        icon: LucideIcons.circleAlert,
+                        title: 'Gagal memuat penawaran',
+                        description: 'Tarik ke bawah untuk mencoba lagi.',
+                      )
+                    : const EmptyState(
+                        icon: LucideIcons.tag,
+                        title: 'Belum ada penawaran',
+                        description:
+                            'Penawaran untuk listing ini akan muncul di sini.',
                       ),
-                      const SizedBox(height: 10),
-                    ],
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                children: [
+                  _ListingHeader(offer: offers.first),
+                  const SizedBox(height: 16),
+                  for (final bucket in OfferBucket.values) ...[
+                    _BucketSection(
+                      bucket: bucket,
+                      offers: grouped[bucket]!,
+                      expanded: _open.contains(bucket),
+                      onToggle: () => setState(() {
+                        if (!_open.remove(bucket)) _open.add(bucket);
+                      }),
+                      onSelect: _showOffer,
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                 ],
               ),
       ),

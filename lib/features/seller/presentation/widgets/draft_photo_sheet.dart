@@ -11,6 +11,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../expansions/usecase/trading_notifier.dart';
 import '../../repository/models/seller_listing.dart';
 import '../../repository/seller_listings_repository.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// Photos of the actual copy, behind the camera badge on a draft card.
 ///
@@ -148,7 +149,7 @@ class _DraftPhotoSheetState extends ConsumerState<_DraftPhotoSheet> {
                 children: [
                   for (final url in _existing)
                     _Thumb(
-                      image: Image.network(url, fit: BoxFit.cover),
+                      image: cachedNetworkImage(url, fit: BoxFit.cover),
                       onRemove: () => setState(() => _existing.remove(url)),
                     ),
                   for (final file in _added)

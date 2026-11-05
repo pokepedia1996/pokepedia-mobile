@@ -11,7 +11,9 @@ import '../../repository/models/order_model.dart';
 import '../../repository/models/order_rating.dart';
 import '../../usecase/orders_notifier.dart';
 
-/// Ports the "Penilaian" section of `order-detail.tsx`.
+/// Ports the "Penilaian" section of `order-detail.tsx`, for either side of
+/// the order: the buyer rating the seller, or — [asSeller] — the seller
+/// rating the buyer, which `submit_feedback` allows as positive only.
 ///
 /// Only shown once the whole order is settled and nothing is under
 /// complaint — web's `groupIsCompleteForReview`. Offers the rating until one
@@ -20,10 +22,18 @@ class OrderRatingSection extends ConsumerWidget {
   const OrderRatingSection({
     super.key,
     required this.order,
+    required this.rating,
     required this.child,
+    this.asSeller = false,
   });
 
   final OrderModel order;
+
+  /// The caller's own rating on [order] — `orderRatingProvider` for the
+  /// buyer, `sellerOrderRatingProvider` for the seller.
+  final FutureProvider<OrderRating?> rating;
+
+  final bool asSeller;
 
   /// The section shell to wrap the contents in, so this file doesn't need
   /// the detail page's private `_Section`.
@@ -42,7 +52,8 @@ class OrderRatingSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!isReviewable(order)) return const SizedBox.shrink();
-    final rating = ref.watch(orderRatingProvider(order.slug)).valueOrNull;
+    final async = ref.watch(rating);
+    final existing = async.valueOrNull;
 
     return child('Penilaian', [
       const Align(
@@ -54,16 +65,31 @@ class OrderRatingSection extends ConsumerWidget {
         ),
       ),
       const SizedBox(height: 12),
-      if (rating == null)
+      if (existing != null)
+        _SubmittedFeedback(rating: existing, asSeller: asSeller)
+      // The button waits for the read: offered before it lands, a rating
+      // that already exists could be submitted again.
+      else if (async.isLoading)
+        const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        )
+      else if (async.hasError)
+        TextButton(
+          onPressed: () => ref.invalidate(rating),
+          child: const Text('Gagal memuat penilaian. Coba lagi'),
+        )
+      else
         ElevatedButton(
           onPressed: () => _openSheet(context, ref),
           style: ElevatedButton.styleFrom(
             minimumSize: const Size.fromHeight(46),
           ),
-          child: const Text('Beri Penilaian'),
-        )
-      else
-        _SubmittedFeedback(rating: rating),
+          child: Text(asSeller ? 'Nilai Pembeli' : 'Beri Penilaian'),
+        ),
     ]);
   }
 
@@ -81,7 +107,7 @@ class OrderRatingSection extends ConsumerWidget {
               top: Radius.circular(AppRadius.xl),
             ),
           ),
-          builder: (_) => const _RatingSheet(),
+          builder: (_) => _RatingSheet(asSeller: asSeller),
         );
     if (result == null || !context.mounted) return;
 
@@ -99,15 +125,16 @@ class OrderRatingSection extends ConsumerWidget {
       ..showSnackBar(
         SnackBar(content: Text(error ?? 'Penilaian terkirim!'), persist: false),
       );
-    if (error == null) ref.invalidate(orderRatingProvider(order.slug));
+    if (error == null) ref.invalidate(rating);
   }
 }
 
 /// The review as it stands, once left.
 class _SubmittedFeedback extends StatelessWidget {
-  const _SubmittedFeedback({required this.rating});
+  const _SubmittedFeedback({required this.rating, required this.asSeller});
 
   final OrderRating rating;
+  final bool asSeller;
 
   @override
   Widget build(BuildContext context) {
@@ -151,8 +178,14 @@ class _SubmittedFeedback extends StatelessWidget {
               rating.comment!,
               style: AppTypography.bodySm(colors.onSurface),
             ),
+          ] else if (rating.isAuto) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Penilaian otomatis setelah transaksi selesai.',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
           ],
-          // The seller's answer, if they left one.
+          // The other side's answer, if they left one.
           if (rating.reply?.isNotEmpty ?? false) ...[
             const SizedBox(height: 10),
             Container(
@@ -165,7 +198,7 @@ class _SubmittedFeedback extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Balasan penjual',
+                    asSeller ? 'Balasan pembeli' : 'Balasan penjual',
                     style: AppTypography.caption(context.mutedForeground),
                   ),
                   const SizedBox(height: 2),
@@ -184,8 +217,13 @@ class _SubmittedFeedback extends StatelessWidget {
 }
 
 /// Ports `feedback-modal.tsx`: pick a verdict, optionally say why.
+///
+/// A seller gets positive only — `submit_feedback` refuses anything else
+/// from them — so the one option is offered already chosen.
 class _RatingSheet extends StatefulWidget {
-  const _RatingSheet();
+  const _RatingSheet({required this.asSeller});
+
+  final bool asSeller;
 
   @override
   State<_RatingSheet> createState() => _RatingSheetState();
@@ -193,7 +231,10 @@ class _RatingSheet extends StatefulWidget {
 
 class _RatingSheetState extends State<_RatingSheet> {
   final _note = TextEditingController();
-  FeedbackKind? _kind;
+  late FeedbackKind? _kind = widget.asSeller ? FeedbackKind.positive : null;
+
+  List<FeedbackKind> get _kinds =>
+      widget.asSeller ? const [FeedbackKind.positive] : FeedbackKind.values;
 
   @override
   void dispose() {
@@ -219,13 +260,16 @@ class _RatingSheetState extends State<_RatingSheet> {
               Text('Beri Penilaian', style: AppTypography.h3(colors.onSurface)),
               const SizedBox(height: 4),
               Text(
-                'Bagaimana transaksi dengan penjual ini?',
+                widget.asSeller
+                    ? 'Bagaimana transaksi dengan pembeli ini? Penjual hanya '
+                          'dapat memberi penilaian positif.'
+                    : 'Bagaimana transaksi dengan penjual ini?',
                 style: AppTypography.bodySm(context.mutedForeground),
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  for (final kind in FeedbackKind.values) ...[
+                  for (final kind in _kinds) ...[
                     Expanded(
                       child: _KindButton(
                         kind: kind,
@@ -233,7 +277,7 @@ class _RatingSheetState extends State<_RatingSheet> {
                         onTap: () => setState(() => _kind = kind),
                       ),
                     ),
-                    if (kind != FeedbackKind.values.last)
+                    if (kind != _kinds.last)
                       const SizedBox(width: 8),
                   ],
                 ],

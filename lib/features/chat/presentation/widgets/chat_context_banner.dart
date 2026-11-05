@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../repository/models/chat_models.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// Ports `features/chat/components/room/chat-context-banner.tsx` — the strip
 /// pinned under the header naming what the conversation is about.
@@ -38,7 +39,7 @@ class ChatContextBanner extends StatelessWidget {
               height: 40,
               child: listing.cardImage == null
                   ? Container(color: colors.secondary)
-                  : Image.network(
+                  : cachedNetworkImage(
                       listing.cardImage!,
                       fit: BoxFit.cover,
                       // `object-[center_15%]` on the web: a square crop of a

@@ -9,6 +9,7 @@ import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/models/store_model.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/seller_avatar.dart';
+import '../../../../core/utils/image_url.dart';
 
 /// Below this, the sold count is omitted from the poster entirely.
 const _minSoldToShow = 5;
@@ -325,7 +326,11 @@ class _PosterTile extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CardArt(imageUrl: listing.card.imageUrl, borderRadius: AppRadius.md),
+          CardArt(
+            imageUrl: listing.card.imageUrl,
+            borderRadius: AppRadius.md,
+            size: ImageSize.poster,
+          ),
 
           // Condition, abbreviated — "NM" reads at poster scale where "Near
           // Mint" would wrap or shrink. A sealed product has none to show, as

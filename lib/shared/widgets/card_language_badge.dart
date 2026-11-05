@@ -16,9 +16,10 @@ class CardLanguageBadge extends StatelessWidget {
   final CardLanguage language;
   final double size;
 
-  /// The same four files the web serves from `/public/flags`.
+  /// The same files the web serves from `/public/flags`. English shows the
+  /// US flag; its label stays "EN".
   String get _asset => switch (language) {
-    CardLanguage.en => 'assets/images/flags/gb.svg',
+    CardLanguage.en => 'assets/images/flags/us.svg',
     CardLanguage.jp => 'assets/images/flags/jp.svg',
     CardLanguage.id => 'assets/images/flags/id.svg',
   };

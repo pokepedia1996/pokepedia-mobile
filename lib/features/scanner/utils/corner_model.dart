@@ -57,7 +57,10 @@ class CornerModel {
   static Future<CornerModel> load() {
     final existing = _instance;
     if (existing != null) return Future.value(existing);
-    return _loading ??= _load();
+    return _loading ??= _load().catchError((Object e, StackTrace stack) {
+      _loading = null;
+      Error.throwWithStackTrace(e, stack);
+    });
   }
 
   static Future<CornerModel> _load() async {
@@ -163,5 +166,7 @@ Future<Detection?> detectCardTwoStage(
     region,
     aspectTolerance: stage2AspectTolerance,
   );
-  return refined ? stage2 : stage1;
+  return refined && refinementAgrees(stage1.quad, stage2.quad)
+      ? stage2
+      : stage1;
 }

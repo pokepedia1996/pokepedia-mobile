@@ -3,12 +3,12 @@ import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/utils/postgrest_embed.dart';
-import 'models/dispute_model.dart';
 import 'models/open_dispute.dart';
 import 'models/order_model.dart';
 import 'models/order_rating.dart';
 import 'models/order_ref.dart';
 import 'models/pending_checkout.dart';
+import 'models/seller_order.dart';
 import 'models/seller_order_detail.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../../core/errors/user_message.dart';
@@ -440,27 +440,35 @@ class OrdersRepository {
     );
   }
 
-  /// The rating this buyer already left on [order], if any.
+  /// The rating the caller already left on [order], as its buyer or its
+  /// seller, if any.
   ///
-  /// Read from `trade_ratings` joined back through `order_items` on the
-  /// item's slug, the same shape web's detail page checks — `ratings_select_public`
-  /// makes the row readable, and `rater_id` scopes it to the caller's own.
+  /// Read across every item of the order: the rating is one per order but
+  /// stored per item, and the automatic one lands on each item. A rating
+  /// the user wrote wins over an automatic sibling, as web's order-feedback
+  /// state does. `ratings_select_public` makes the rows readable, and
+  /// `rater_id` scopes them to the caller's own.
   Future<OrderRating?> fetchMyRating(OrderModel order) async {
     final me = _uid;
-    final itemSlug = order.items.isEmpty ? null : order.items.first.slug;
-    if (me == null || itemSlug == null) return null;
+    final itemIds = [
+      for (final item in order.items)
+        if (item.id case final id?) id,
+    ];
+    if (me == null || itemIds.isEmpty) return null;
 
-    final row = await _client
+    final rows = await _client
         .from('trade_ratings')
         .select(
-          'id, feedback, comment, reply, reply_at, created_at, '
-          'order_item_id, order_items!inner(slug)',
+          'id, feedback, comment, reply, reply_at, created_at, is_auto, '
+          'order_item_id',
         )
-        .eq('order_items.slug', itemSlug)
-        .eq('rater_id', me)
-        .maybeSingle();
-    if (row == null) return null;
-    return OrderRating.fromRow(row);
+        .inFilter('order_item_id', itemIds)
+        .eq('rater_id', me);
+    final ratings = [
+      for (final row in rows) OrderRating.fromRow(row),
+    ];
+    if (ratings.isEmpty) return null;
+    return ratings.firstWhere((r) => !r.isAuto, orElse: () => ratings.first);
   }
 
   /// Ports `POST /api/feedback` — the route only resolves the item's slug to
@@ -491,13 +499,18 @@ class OrdersRepository {
     }
   }
 
-  /// Ports `feedbackErrorMessage`.
+  /// Ports `FEEDBACK_ERROR_MESSAGES` — keyed by the codes `submit_feedback`
+  /// actually returns.
   String _feedbackErrorMessage(String? code) => switch (code) {
-    'not_authenticated' => 'Masuk dulu untuk memberi penilaian',
-    'not_participant' => 'Kamu bukan bagian dari transaksi ini',
-    'not_completed' => 'Penilaian bisa diberi setelah transaksi selesai',
-    'already_rated' => 'Kamu sudah memberi penilaian untuk pesanan ini',
-    'window_expired' => 'Waktu penilaian sudah lewat',
+    'forbidden' => 'Tidak diizinkan',
+    'invalid_feedback_value' => 'Nilai penilaian tidak valid',
+    'comment_too_long' => 'Komentar terlalu panjang (maksimum 500 karakter)',
+    'match_not_found' => 'Transaksi tidak ditemukan',
+    'match_not_completed' => 'Transaksi belum selesai',
+    'seller_must_be_positive' =>
+      'Penjual hanya dapat memberi penilaian positif',
+    'window_expired' => 'Jendela penilaian sudah berakhir (60 hari)',
+    'duplicate' => 'Kamu sudah memberi penilaian untuk transaksi ini',
     _ => 'Gagal mengirim penilaian',
   };
 
@@ -678,11 +691,10 @@ class OrdersRepository {
     }
   }
 
-  /// The dispute on an order, if one was opened. Disputes hang off the
-  /// settlement rather than the order, so this walks the order's items.
-  /// The open dispute on an order, by any reference the order screens take
-  /// — they watch this with whatever the link handed them.
-  Future<DisputeModel?> fetchDispute(String orderSlug) async {
+  /// The dispute an order's "Lihat komplain" opens, by any reference the
+  /// order screens take. Disputes hang off the order's items, so this walks
+  /// them: the newest unresolved one wins, then the newest of any kind.
+  Future<String?> fetchDisputeSlug(String orderSlug) async {
     if (_uid == null) return null;
 
     final order = await _orderRowByRef(orderSlug, 'id, slug, order_items(id)');
@@ -693,20 +705,16 @@ class OrdersRepository {
     ).map((item) => (item['id'] as num).toInt()).toList();
     if (itemIds.isEmpty) return null;
 
-    final row = await _client
+    final rows = await _client
         .from('disputes')
-        .select(
-          'slug, current_status, reason, reason_category, outcome, opened_at,'
-          'response_deadline_at, proposed_refund_amount,'
-          'dispute_events(event_type, actor_role, payload, created_at)',
-        )
+        .select('slug, current_status')
         .inFilter('order_item_id', itemIds)
-        .order('opened_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
-    if (row == null) return null;
-
-    return DisputeModel.fromRow(row, orderSlug: orderSlug);
+        .order('opened_at', ascending: false);
+    if (rows.isEmpty) return null;
+    final open = rows.where(
+      (r) => activeDisputeStatuses.contains(r['current_status']),
+    );
+    return (open.firstOrNull ?? rows.first)['slug'] as String?;
   }
 
   /// Ports `uploadEntryPhotos` — every photo of one entry goes under the

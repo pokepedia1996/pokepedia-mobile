@@ -606,7 +606,13 @@ class ChatRepository {
           ),
           callback: (_) => onChange(),
         )
-        .subscribe();
+        // Also on every (re)join: the socket drops while the app is in the
+        // background or the network blips, and the messages sent meanwhile
+        // never arrive as events. Catching up on rejoin is what keeps the
+        // inbox current without a pull to refresh.
+        .subscribe((status, _) {
+          if (status == RealtimeSubscribeStatus.subscribed) onChange();
+        });
   }
 
   /// Live inserts for one room. `chat_messages` is in the realtime

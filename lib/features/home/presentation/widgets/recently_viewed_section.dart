@@ -66,7 +66,7 @@ class _RecentPackChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return InkWell(
-      onTap: () => context.push(Routes.packDetail(pack.slug)),
+      onTap: () => context.go(Routes.packDetail(pack.slug)),
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
         width: 88,

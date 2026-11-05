@@ -135,6 +135,10 @@ class Routes {
   /// path web uses for the profile; kept as `/seller/store/profile` here so
   /// the section reads as a hierarchy on a stack-based navigator.
   static const sellerStore = '/seller/store';
+
+  /// Buka Toko — opening a store, a step at a time. Outside the Jual tab's
+  /// branch: it is a flow with its own back button, not a page of the tab.
+  static const openStore = '/buka-toko';
   static const sellerStoreProfile = '/seller/store/profile';
   static const sellerCouriers = '/seller/store/couriers';
 
@@ -151,7 +155,9 @@ class Routes {
   static const support = '/support';
   static const tutorial = '/tutorial';
 
-  static String packDetail(String slug) => '/expansions/$slug';
+  /// Inside the Pencarian branch, so the nav pill stays put and only the
+  /// content slides. `/expansions/<slug>` still resolves by redirecting here.
+  static String packDetail(String slug) => '$search/expansions/$slug';
   static String cardDetail(String packSlug, int cardId) =>
       '/expansions/$packSlug/$cardId';
   static String storeDetail(String handle) => '/market/$handle';
@@ -169,6 +175,10 @@ class Routes {
 
   /// File a new dispute.
   static String orderOpenDispute(String slug) => '/orders/$slug/open-dispute';
+
+  /// One dispute by its `disputes.slug` — the seller's way in, and where a
+  /// buyer lands from a sibling in the same package.
+  static String dispute(String slug) => '/disputes/$slug';
 
   /// A room, optionally naming the listing it was opened about.
   ///

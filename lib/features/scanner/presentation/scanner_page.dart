@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/card_model.dart';
@@ -17,12 +18,18 @@ import '../usecase/scan_session_notifier.dart';
 import '../usecase/scanner_notifier.dart';
 import '../usecase/scan_sound.dart';
 import '../utils/auto_capture.dart';
+import '../utils/card_appearance.dart';
+import '../utils/scanner_camera_session.dart';
+import '../utils/scan_debug_dump.dart';
+import '../utils/scan_retry.dart';
 import '../utils/card_detector.dart';
 import '../utils/detector_worker.dart';
 import '../utils/card_capture.dart';
 import '../utils/corner_model.dart';
 import '../utils/warp_quad.dart';
 import 'widgets/scan_hint.dart';
+import 'widgets/scan_candidate_sheet.dart';
+import 'widgets/scan_card_search_sheet.dart';
 import 'widgets/scan_result_sheet.dart';
 import 'widgets/scan_session_sheet.dart';
 import 'widgets/scan_price_burst.dart';
@@ -58,31 +65,10 @@ class ScannerPage extends ConsumerStatefulWidget {
 
 class _ScannerPageState extends ConsumerState<ScannerPage>
     with WidgetsBindingObserver {
-  /// How long a result stays up before the shutter re-arms. Ports
-  /// `SCAN_RESULT_SETTLE_MS`.
-  static const _resultSettle = Duration(milliseconds: 900);
-
   /// How often the detector samples the stream. Ports the web's poll rate.
   static const _tickInterval = Duration(milliseconds: 120);
 
-  /// Web's `CAPTURE_BURST_FRAMES` / `CAPTURE_BURST_GAP_MS`.
-  /// Past this, the quad that locked the overlay is too old to stand in for
-  /// a fresh detection — well over the burst window it normally crosses, so
-  /// this is a backstop rather than a limit anything reaches. Ports
-  /// `STALE_QUAD_MAX_AGE_MS`.
-  static const _staleQuadMaxAge = Duration(milliseconds: 1500);
-
   static const _burstFrames = 2;
-  static const _burstGap = Duration(milliseconds: 80);
-
-  /// Up to 40% of [_resultSettle] added at random on each re-arm.
-  ///
-  /// Not cosmetic: the scan tier is 30 requests per 60s per user, and the
-  /// embedder sheds load above ~32 concurrent requests. Without jitter a room
-  /// of phones scanning at a natural pace re-arms in lockstep and arrives in
-  /// waves, tripping that shedding far earlier than the same total volume
-  /// spread out would. Ports the web's own capture jitter.
-  static const _rearmJitterFraction = 0.4;
 
   final _jitter = math.Random();
 
@@ -139,7 +125,35 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// the user can reposition a binder without it firing on every page.
   var _paused = false;
 
-  CameraController? _controller;
+  late final _cameraSession = ScannerCameraSession<CameraController>(
+    open: _openCamera,
+    close: (controller) async {
+      try {
+        if (controller.value.isStreamingImages) {
+          await controller.stopImageStream();
+        }
+      } finally {
+        await controller.dispose();
+      }
+    },
+  );
+  CameraController? get _controller => _cameraSession.current;
+  var _foreground = true;
+  int _lastFrameSequence = 0;
+  int _frameSequence = 0;
+  DateTime? _frameAt;
+  DateTime? _lastFocusAt;
+  DateTime? _lastDiagnosticAt;
+  int _diagnosticTicks = 0;
+  double _prepareMsTotal = 0;
+  double _inferenceMsTotal = 0;
+  final _gateCounts = <String, int>{};
+  String? _detectorError;
+  bool _retrying = false;
+  Timer? _recoveryTimer;
+  int _recoveryAttempts = 0;
+  int _cameraRecoveryAttempts = 0;
+  Future<void>? _detectorStartup;
   Future<void>? _initialization;
   String? _cameraError;
 
@@ -159,158 +173,186 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_keepAwake(true));
     _initialization = _startCamera();
-    DetectorWorker.spawn()
-        .then((worker) {
-          if (mounted) {
-            _worker = worker;
-          } else {
-            worker.dispose();
-          }
-        })
-        .catchError((Object e) {
-          debugPrint('[scan] worker spawn failed: $e');
-          // Said out loud. Without the worker the tick returns early on
-          // every frame, so the scanner is alive, streaming, and incapable
-          // of ever detecting anything — which looks like a camera that
-          // cannot see rather than a fault.
-          if (mounted) {
-            setState(() {
-              _cameraError = 'Pemindai gagal disiapkan. Tutup dan buka lagi.';
-            });
-          }
-        });
-    // ~6 MB to parse; the camera's own startup is dead time anyway.
-    CornerModel.load()
-        .then((model) {
-          if (mounted) {
-            _model = model;
-          } else {
-            model.dispose();
-          }
-        })
-        .catchError((Object e) {
-          debugPrint('[scan] model load failed: $e');
-          // Same reasoning as the worker: without the model `_tick` returns
-          // early forever, and a scanner that streams but never detects
-          // reads as a camera problem rather than the fault it is.
-          if (mounted) {
-            setState(() {
-              _cameraError = 'Pemindai gagal disiapkan. Tutup dan buka lagi.';
-            });
-          }
-        });
+    unawaited(_prepareDetector());
+  }
+
+  Future<void> _keepAwake(bool enabled) async {
+    try {
+      await WakelockPlus.toggle(enable: enabled);
+    } catch (e) {
+      debugPrint('[scan] keep-awake failed: $e');
+    }
+  }
+
+  void _scheduleDetectorRecovery() {
+    if (!mounted || (_recoveryTimer?.isActive ?? false)) return;
+    // Back off repeated startup faults; keep the camera preview visible.
+    final delay = Duration(seconds: _recoveryAttempts < 3 ? 1 : 5);
+    _recoveryTimer = Timer(delay, () async {
+      if (!mounted || !_foreground) return;
+      if (_detecting || _capturing || _retrying) {
+        _scheduleDetectorRecovery();
+        return;
+      }
+      _recoveryAttempts++;
+      await _worker?.dispose();
+      _worker = null;
+      _autoCapture.reset();
+      if (mounted) await _prepareDetector();
+    });
+  }
+
+  Future<void> _prepareDetector() => _detectorStartup ??= _loadDetector()
+      .whenComplete(() => _detectorStartup = null);
+
+  Future<void> _loadDetector() async {
+    try {
+      _worker ??= await DetectorWorker.spawn();
+      _model ??= await CornerModel.load();
+      if (!mounted) {
+        await _worker?.dispose();
+        return;
+      }
+      setState(() => _detectorError = null);
+    } catch (e) {
+      debugPrint('[scan] detector startup failed: $e');
+      if (mounted) {
+        setState(() => _detectorError = 'Menyiapkan pemindai...');
+        _scheduleDetectorRecovery();
+      }
+    }
   }
 
   @override
   void dispose() {
+    unawaited(_keepAwake(false));
+    _recoveryTimer?.cancel();
     _worker?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _rearmTimer?.cancel();
     _burstTimer?.cancel();
     _hintTimer?.cancel();
     _tickTimer?.cancel();
-    final controller = _controller;
-    if (controller != null) {
-      unawaited(
-        controller
-            .stopImageStream()
-            .catchError((_) {})
-            .whenComplete(controller.dispose),
-      );
-    }
+    unawaited(
+      _cameraSession.stop().catchError((Object e) {
+        debugPrint('[scan] camera release failed: $e');
+      }),
+    );
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    // Android reclaims the camera when the app leaves the foreground; holding
-    // a dead controller across resume shows a frozen last frame forever.
-    if (lifecycleState == AppLifecycleState.inactive) {
-      _controller = null;
-      // Stop the tick first, or it runs against a camera that no longer
-      // exists; and stop the stream before disposing, or Android keeps
-      // delivering frames to a dead listener.
+    if (lifecycleState == AppLifecycleState.resumed) {
+      if (_foreground) return;
+      _foreground = true;
+      unawaited(_keepAwake(true));
+      if (_detectorError != null) _scheduleDetectorRecovery();
+      setState(() => _initialization = _startCamera());
+    } else if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      if (!_foreground) return;
+      _foreground = false;
+      unawaited(_keepAwake(false));
       _tickTimer?.cancel();
-      _tickTimer = null;
       _latestFrame = null;
+      _frameAt = null;
       _autoCapture.reset();
       unawaited(
-        controller
-            .stopImageStream()
-            .catchError((_) {})
-            .whenComplete(controller.dispose),
+        _cameraSession.stop().catchError((Object e) {
+          debugPrint('[scan] camera release failed: $e');
+        }),
       );
-      if (mounted) {
-        setState(() {
-          _cardDetected = false;
-          _locking = false;
-        });
-      }
-    } else if (lifecycleState == AppLifecycleState.resumed) {
-      setState(() => _initialization = _startCamera());
+      setState(() {
+        _cardDetected = false;
+        _locking = false;
+      });
     }
   }
 
   Future<void> _startCamera() async {
+    final opening = _cameraSession.start();
+    final generation = _cameraSession.generation;
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        if (mounted) setState(() => _cameraError = 'Kamera tidak tersedia');
+      await opening;
+      if (!mounted || !_foreground || !_cameraSession.isCurrent(generation)) {
         return;
       }
-      final back = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-      final controller = CameraController(
-        back,
-        // `veryHigh` (~1080p) rather than `max`: the server downscales to a
-        // 1000px working side regardless, so a larger still would only cost
-        // decode time and memory on the isolate for detail the embedder
-        // immediately discards.
-        ResolutionPreset.veryHigh,
-        enableAudio: false,
-        // Streaming formats, not `jpeg` — `startImageStream` delivers YUV420
-        // on Android and BGRA on iOS.
-        imageFormatGroup: Platform.isAndroid
-            ? ImageFormatGroup.yuv420
-            : ImageFormatGroup.bgra8888,
-      );
-      await controller.initialize();
-      // Locked so the guide box and the still stay in the same coordinate
-      // space — a rotation between framing and capture would offset every crop.
-      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
-      // Pinned to 1x. A device that restores a previous zoom frames the card
-      // differently from the guide box the crop is measured against, and
-      // digital zoom softens exactly the printed detail the embedder reads.
-      // Best-effort: a camera that refuses is still usable as it opened.
-      try {
-        await controller.setZoomLevel(1);
-      } on CameraException {
-        // Left at the device default.
-      }
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
+      final controller = _controller;
+      if (controller == null) return;
       setState(() {
-        _controller = controller;
         _cameraError = null;
+        _torchOn = false;
       });
       _hintTimer ??= Timer(_hintVisibleFor, () {
         if (mounted) setState(() => _hintVisible = false);
       });
       await _startDetection(controller);
-    } on CameraException catch (e) {
-      if (!mounted) return;
+    } catch (e) {
+      if (!mounted || !_foreground || !_cameraSession.isCurrent(generation)) {
+        return;
+      }
+      debugPrint('[scan] camera startup failed: $e');
       setState(() {
-        _cameraError = e.code == 'CameraAccessDenied'
+        _cameraError = e is CameraException && e.code == 'CameraAccessDenied'
             ? 'Izin kamera ditolak. Aktifkan di pengaturan aplikasi.'
-            : 'Kamera gagal dimulai (${e.code})';
+            : 'Kamera gagal dimulai. Coba lagi.';
       });
+    }
+  }
+
+  Future<CameraController> _openCamera() async {
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      throw CameraException('NoCamera', 'Kamera tidak tersedia');
+    }
+    final back = cameras.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.back,
+      orElse: () => cameras.first,
+    );
+    final controller = CameraController(
+      back,
+      // 720p retains more detail than the 768px working frame while reducing
+      // native-to-Dart camera traffic by over half versus 1080p.
+      ResolutionPreset.high,
+      // Request a smooth preview; detection samples the latest frame separately.
+      fps: Platform.isIOS ? 60 : 30,
+      enableAudio: false,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.yuv420
+          : ImageFormatGroup.bgra8888,
+    );
+    try {
+      await controller.initialize();
+      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      try {
+        await controller.setFocusMode(FocusMode.auto);
+        await controller.setFocusPoint(const Offset(0.5, 0.5));
+        await controller.setExposureMode(ExposureMode.auto);
+      } on CameraException {
+        // Fixed-focus cameras still support scanning.
+      }
+      try {
+        await controller.setZoomLevel(1);
+      } on CameraException {
+        // Some devices do not expose zoom controls.
+      }
+      await controller.startImageStream((frame) {
+        if (!mounted || !_foreground || !identical(controller, _controller)) {
+          return;
+        }
+        _latestFrame = frame;
+        _frameAt = DateTime.now();
+        _frameSequence++;
+        _cameraRecoveryAttempts = 0;
+      });
+      return controller;
+    } catch (_) {
+      await controller.dispose();
+      rethrow;
     }
   }
 
@@ -318,16 +360,14 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// Frames stream in; a timer samples the newest one every
   /// [_tickInterval].
   ///
-  /// Separate stream and tick on purpose: frames arrive at 30fps and
-  /// detection cannot keep up, so sampling on a timer keeps the cadence
+  /// Separate stream and tick on purpose: frames arrive faster than detection
+  /// can keep up, so sampling on a timer keeps the cadence
   /// predictable and always works on the most recent pose.
   Future<void> _startDetection(CameraController controller) async {
-    try {
-      await controller.startImageStream((frame) => _latestFrame = frame);
-    } on CameraException catch (e) {
-      debugPrint('[scan] image stream failed: $e');
-      return;
-    }
+    _latestFrame = null;
+    _frameAt = DateTime.now();
+    _lastDiagnosticAt = null;
+    if (!mounted || !_foreground || !identical(controller, _controller)) return;
     _tickTimer?.cancel();
     _tickTimer = Timer.periodic(_tickInterval, (_) => _tick());
   }
@@ -344,15 +384,76 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   int _frameRotation(CameraController controller) =>
       Platform.isIOS ? 0 : controller.description.sensorOrientation;
 
+  Future<void> _focusOnCard(Quad quad, FramePrep prep) async {
+    final controller = _controller;
+    final now = DateTime.now();
+    if (controller == null ||
+        (_lastFocusAt != null &&
+            now.difference(_lastFocusAt!) < const Duration(seconds: 2))) {
+      return;
+    }
+    _lastFocusAt = now;
+    final bounds = quad.bounds;
+    try {
+      await controller.setFocusPoint(
+        Offset(
+          ((bounds.left + bounds.right) / (2 * prep.width)).clamp(0.0, 1.0),
+          ((bounds.top + bounds.bottom) / (2 * prep.height)).clamp(0.0, 1.0),
+        ),
+      );
+    } on CameraException {
+      // Continuous autofocus remains active if point focus isn't supported.
+    }
+  }
+
   Future<void> _tick() async {
-    if (!mounted || _detecting || _capturing || _paused) return;
+    if (!mounted ||
+        !_foreground ||
+        _detecting ||
+        _capturing ||
+        _paused ||
+        _sessionOpen ||
+        (_rearmTimer?.isActive ?? false) ||
+        _detectorError != null) {
+      return;
+    }
     final model = _model;
     final frame = _latestFrame;
     final controller = _controller;
+    if (_frameAt != null &&
+        DateTime.now().difference(_frameAt!) > const Duration(seconds: 3)) {
+      _tickTimer?.cancel();
+      unawaited(
+        recordScanEvent({
+          'stage': 'camera_stalled',
+          'attempt': _cameraRecoveryAttempts + 1,
+        }),
+      );
+      if (_cameraRecoveryAttempts++ < 3) {
+        // A live detector cannot recover a stopped native image stream.
+        // Reopen the camera automatically, preserving the scan session.
+        _latestFrame = null;
+        _autoCapture.reset();
+        setState(() => _initialization = _startCamera());
+      } else {
+        setState(() => _cameraError = 'Kamera terhenti. Coba lagi.');
+      }
+      return;
+    }
     if (model == null || frame == null || controller == null) return;
     if (ref.read(scannerProvider) is ScanLoading) return;
-
+    if (_frameSequence == _lastFrameSequence) return;
+    _lastFrameSequence = _frameSequence;
+    final generation = _cameraSession.generation;
+    bool current() =>
+        mounted &&
+        _foreground &&
+        _cameraSession.isCurrent(generation) &&
+        !_paused &&
+        !_sessionOpen;
+    final capturedAt = _frameAt!;
     _detecting = true;
+    final watch = Stopwatch()..start();
     try {
       // Decode, orient and build the first tensor on the worker's isolate.
       // This is the pixel work that used to block the UI thread every tick.
@@ -360,51 +461,143 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         frame,
         _frameRotation(controller),
       );
-      if (prep == null || !mounted) return;
+      if (prep == null || !current()) return;
 
+      _recoveryAttempts = 0;
+      final prepareMs = watch.elapsedMicroseconds / 1000;
       // Coarse only: the second stage is for the frame about to be sent,
-      // not for tracking. See [_detectCoarse].
-      final detection = await _detectCoarse(model, prep);
-      if (!mounted) return;
-
-      final result = _autoCapture.tick(detection?.quad, DateTime.now());
+      // not for tracking.
+      final raw = await model.run(prep.tensor, prep.region);
+      final inferenceMs = watch.elapsedMicroseconds / 1000 - prepareMs;
+      if (!current()) return;
+      final rejection = raw == null
+          ? 'inference'
+          : detectionRejection(raw, prep.region);
+      final detection = rejection == null ? raw : null;
+      if (detection != null && !_cardDetected) {
+        unawaited(_focusOnCard(detection.quad, prep));
+      }
+      _recordDiagnostic(
+        prep,
+        raw,
+        rejection,
+        prepareMs,
+        inferenceMs,
+        DateTime.now().difference(capturedAt).inMilliseconds,
+      );
+      if (!current()) return;
+      final wasWaiting = _autoCapture.waitingForRemoval;
+      final result = _autoCapture.tick(
+        detection?.quad,
+        DateTime.now(),
+        appearance: detection == null
+            ? null
+            : cardAppearance(prep.tensor, prep.region, detection.quad),
+      );
       final detected = result.quad != null;
       final locking = result.progress > 0 && result.progress < 1;
-      if (detected != _cardDetected || locking != _locking) {
+      final clearPrevious =
+          _activeTempId != null &&
+          (!detected ||
+              !_autoCapture.waitingForRemoval ||
+              _autoCapture.replacingCapturedCard);
+      if (detected != _cardDetected ||
+          locking != _locking ||
+          clearPrevious ||
+          wasWaiting != _autoCapture.waitingForRemoval) {
         setState(() {
           _cardDetected = detected;
           _locking = locking;
+          if (clearPrevious) {
+            _activeTempId = null;
+            _burstCardId = null;
+          }
         });
       }
 
       if (result.action == AutoCaptureAction.capture && result.quad != null) {
         await _captureQuad(
           model,
-          liveQuad: result.quad!,
-          liveQuadAt: DateTime.now(),
-          presence: detection?.present ?? 0,
+          normalizedCard: result.quad!.offsetBy(
+            0,
+            0,
+            scaleX: 1 / prep.width,
+            scaleY: 1 / prep.height,
+          ),
         );
+      }
+    } catch (e) {
+      debugPrint('[scan] detection failed: $e');
+      unawaited(recordScanEvent({'stage': 'error', 'error': e.toString()}));
+      _autoCapture.reset();
+      if (current()) {
+        setState(() {
+          _cardDetected = false;
+          _locking = false;
+          _detectorError = 'Menyiapkan pemindai...';
+        });
+        _scheduleDetectorRecovery();
       }
     } finally {
       _detecting = false;
     }
   }
 
-  /// Stage one alone — what the live loop tracks with.
-  ///
-  /// Two reasons the tick does not refine, both web's (`detectCardCoarse`).
-  /// The refined quad and the coarse one disagree by a few pixels every
-  /// tick, and that disagreement is movement as far as the lock's drift
-  /// check is concerned: the stability timer restarts on a card that is
-  /// being held perfectly still, and the lock never fires. And the second
-  /// stage costs another crop, another resize, another 150k pixel reads and
-  /// another inference — per tick, eight times a second, for a quad that is
-  /// only ever drawn as an outline. Precision is what capture needs, and
-  /// capture re-runs the full two-stage detector on its own frame.
-  Future<Detection?> _detectCoarse(CornerModel model, FramePrep prep) async {
-    final detection = await model.run(prep.tensor, prep.region);
-    if (detection == null || !passesGates(detection, prep.region)) return null;
-    return detection;
+  void _recordDiagnostic(
+    FramePrep prep,
+    Detection? detection,
+    String? rejection,
+    double prepareMs,
+    double inferenceMs,
+    int frameAgeMs,
+  ) {
+    if (!scanDiagnosticsEnabled) return;
+    _diagnosticTicks++;
+    _prepareMsTotal += prepareMs;
+    _inferenceMsTotal += inferenceMs;
+    final gate = rejection ?? 'accepted';
+    _gateCounts[gate] = (_gateCounts[gate] ?? 0) + 1;
+    final now = DateTime.now();
+    if (_lastDiagnosticAt != null &&
+        now.difference(_lastDiagnosticAt!) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastDiagnosticAt = now;
+    final meta = <String, dynamic>{
+      'stage': 'live',
+      'rejection': rejection,
+      'prepareMs': prepareMs,
+      'inferenceMs': inferenceMs,
+      'frameAgeMs': frameAgeMs,
+      'ticks': _diagnosticTicks,
+      'meanPrepareMs': _prepareMsTotal / _diagnosticTicks,
+      'meanInferenceMs': _inferenceMsTotal / _diagnosticTicks,
+      'gates': Map.of(_gateCounts),
+      'width': prep.width,
+      'height': prep.height,
+      'presence': detection?.present.isFinite == true
+          ? detection?.present
+          : null,
+      'corners': detection?.quad.corners
+          .map((p) => [p.x.isFinite ? p.x : null, p.y.isFinite ? p.y : null])
+          .toList(),
+      'waitingForRemoval': _autoCapture.waitingForRemoval,
+    };
+    _diagnosticTicks = 0;
+    _prepareMsTotal = 0;
+    _inferenceMsTotal = 0;
+    _gateCounts.clear();
+    unawaited(recordScanEvent(meta));
+    // Optional frame dumps never block the live detector or fail its tick.
+    if (scanSaveFrames && _worker != null) {
+      unawaited(
+        saveDiagnosticSnapshot(
+          _worker!,
+          meta,
+          tag: rejection == null ? 'scan_live' : 'scan_rejected',
+        ),
+      );
+    }
   }
 
   /// One pass over the whole frame, then a tighter re-run around what it
@@ -432,39 +625,36 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     // Accepted only on the stricter bar: stage 2's input is already zoomed
     // and mostly frontal, so a large aspect error there is a wrong answer
     // rather than foreshortening.
-    return passesGates(stage2, region, aspectTolerance: stage2AspectTolerance)
+    return passesGates(
+              stage2,
+              region,
+              aspectTolerance: stage2AspectTolerance,
+            ) &&
+            refinementAgrees(stage1.quad, stage2.quad)
         ? stage2
         : stage1;
   }
 
-  /// Warps the locked quad out of the frame it was detected in and scans it.
-  ///
-  /// The same frame detection ran on, not a fresh still: the quad's
-  /// coordinates only mean anything there, and a `takePicture` between lock
-  /// and capture would move the card out from under them.
-  /// Captures, then finds the card in what it captured — web's crop cascade.
-  ///
-  /// The quad that tripped the lock came from an older frame. Warping the
-  /// new capture with it assumes the card has not moved in the meantime,
-  /// which is exactly the assumption a hand holding a card breaks. So the
-  /// detector runs again on the frame about to be sent, and the live quad is
-  /// only the fallback.
-  ///
-  /// A miss is a miss: if no tier finds a card, nothing is sent. An unwarped
-  /// frame reaches the embedder as a photo of a desk with a card on it, and
-  /// scores against the catalog accordingly.
+  /// Keeps a detailed burst frame, re-detects on that exact frame, then warps.
+  /// The live quad only identifies the region to compare focus in; it is
+  /// never reused for cropping a later frame or a different resolution.
   Future<void> _captureQuad(
     CornerModel model, {
-    required Quad liveQuad,
-    required DateTime liveQuadAt,
-    required double presence,
+    required Quad normalizedCard,
   }) async {
     if (_capturing) return;
     setState(() {
       _capturing = true;
+      _activeTempId = null;
       _hintVisible = false;
     });
     _rearmTimer?.cancel();
+    final generation = _cameraSession.generation;
+    bool current() =>
+        mounted && _foreground && _cameraSession.isCurrent(generation);
+    var keepDisarmed = false;
+    Duration? retryAfter;
+    final captureWatch = Stopwatch()..start();
 
     try {
       final worker = _worker;
@@ -476,48 +666,65 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       // The burst: two frames a gap apart, sharpest kept. A hand is never
       // still, and one grab lands on the blurred half of that wobble often
       // enough to be the difference between a match and a miss.
-      await worker.beginBurst();
+      await worker.beginBurst(normalizedCard: normalizedCard);
+      if (!current()) return;
+      int? offeredSequence;
       for (var i = 0; i < _burstFrames; i++) {
+        final wait = Stopwatch()..start();
+        while (_frameSequence == offeredSequence &&
+            current() &&
+            wait.elapsedMilliseconds < 250) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        if (_frameSequence == offeredSequence) break;
         final frame = _latestFrame;
-        if (frame == null || !mounted) return;
+        if (frame == null || !current()) return;
+        offeredSequence = _frameSequence;
         await worker.offerBurstFrame(frame, orientation);
-        if (i < _burstFrames - 1) await Future<void>.delayed(_burstGap);
       }
-      if (!mounted) return;
+      if (!current()) return;
 
       final prep = await worker.burstTensor();
-      if (prep == null || !mounted) return;
+      if (prep == null || !current()) return;
 
+      final burstMs = captureWatch.elapsedMilliseconds;
       // Tier one: detect on the frame being sent.
-      var quad = (await _detect(model, prep))?.quad;
-      var tier = 'model';
-      var tierPresence = presence;
-
-      // Tier two: the quad that locked the overlay, if it still describes a
-      // card-shaped thing inside this frame. Aspect alone cannot vouch for
-      // it — it is a copy of a quad that already passed — so bounds are what
-      // this tier actually checks.
-      if (quad == null &&
-          DateTime.now().difference(liveQuadAt) <= _staleQuadMaxAge &&
-          _quadWithinFrame(liveQuad, prep) &&
-          passesGates(
-            Detection(present: presence, quad: liveQuad),
-            prep.region,
-          )) {
-        quad = liveQuad;
-        tier = 'model_stale_quad';
-      }
+      final fresh = await _detect(model, prep);
+      final detectMs = captureWatch.elapsedMilliseconds - burstMs;
+      if (!current()) return;
+      final quad = fresh?.quad;
+      const tier = 'model';
+      final tierPresence = fresh?.present ?? 0;
 
       if (quad == null) {
         // Web's miss branch: re-arm and say so rather than sending anything.
-        _showError('Kartu tidak terdeteksi, posisikan ulang');
         _autoCapture.reset();
         return;
       }
 
       final capture = await worker.warpBurst(quad);
-      if (capture == null || !mounted) return;
+      if (capture == null || !current()) return;
 
+      if (scanDiagnosticsEnabled) {
+        final meta = <String, dynamic>{
+          'stage': 'capture',
+          'burstMs': burstMs,
+          'detectMs': detectMs,
+          'warpMs': captureWatch.elapsedMilliseconds - burstMs - detectMs,
+          'tier': tier,
+          'presence': tierPresence,
+          'sharpness': capture.sharpness,
+          'luma': capture.luma,
+          'bytes': capture.bytes.length,
+          'corners': quad.corners.map((p) => [p.x, p.y]).toList(),
+          'width': prep.width,
+          'height': prep.height,
+        };
+        unawaited(recordScanEvent(meta));
+        if (scanSaveFrames) {
+          unawaited(saveDiagnosticSnapshot(worker, meta, tag: 'scan_source'));
+        }
+      }
       final result = await ref
           .read(scannerProvider.notifier)
           .scan(
@@ -532,16 +739,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
               tier,
             ),
           );
-      if (!mounted) return;
+      if (!current()) return;
 
       if (result is ScanMatched) {
+        keepDisarmed = true;
+        final chosen = result.confident
+            ? result.card
+            : await _chooseUncertainMatch(result);
+        if (!current() || chosen == null) return;
         // The same card twice in a row is usually the scanner having fired
         // again on a card still in shot, not someone holding two copies. It
         // is a real case though — playsets are four of one card — so it is a
         // question rather than a refusal, and the answer is theirs.
-        if (result.card.id == _lastCapturedCardId) {
-          final again = await _confirmDuplicate(result.card);
-          if (!mounted || !again) {
+        if (chosen.id == _lastCapturedCardId) {
+          final again = await _confirmDuplicate(chosen);
+          if (!current() || !again) {
             // Declined: nothing is added, and the machine is left as the
             // fire put it — suspended until the card moves or leaves. A
             // `reset()` here would re-arm on the card still sitting in shot
@@ -549,32 +761,71 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
             return;
           }
         }
-        _addMatch(result);
+        _addMatch(result, chosen);
       } else if (result is ScanFailed) {
+        retryAfter = result.retryAfter;
         _showError(result.message);
         // Let the same card be retried without moving it.
         _autoCapture.reset();
       }
+    } catch (e) {
+      debugPrint('[scan] capture failed: $e');
+      if (current()) _showError('Pindai gagal. Tahan kartu dan coba lagi.');
     } finally {
-      if (mounted) setState(() => _capturing = false);
-      _scheduleRearm();
+      if (!keepDisarmed) _autoCapture.reset();
+      if (mounted) {
+        setState(() => _capturing = false);
+        _scheduleRearm(after: retryAfter);
+      }
     }
   }
 
-  /// Files a match into the session and says so.
-  void _addMatch(ScanMatched result) {
+  Future<ScanCard?> _chooseUncertainMatch(ScanMatched result) =>
+      showModalBottomSheet<ScanCard>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => ScanCandidateSheet(
+          candidates: result.matches.map((match) => match.card).toList(),
+          onSelect: (card) => Navigator.of(sheetContext).pop(card),
+          onSearch: () async {
+            final picked = await showModalBottomSheet<ScanCard>(
+              context: sheetContext,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (searchContext) => ScanCardSearchSheet(
+                language: ref.read(scanLanguageProvider),
+                onSelect: (card) => Navigator.of(searchContext).pop(card),
+              ),
+            );
+            if (picked != null && sheetContext.mounted) {
+              Navigator.of(sheetContext).pop(picked);
+            }
+          },
+        ),
+      );
+
+  /// Only a confident response or an explicit selection reaches this point.
+  void _addMatch(ScanMatched result, ScanCard chosen) {
+    if (!result.confident && result.logId != null) {
+      unawaited(
+        ref
+            .read(scannerRepositoryProvider)
+            .confirmChoice(logId: result.logId!, chosenCardId: chosen.id),
+      );
+    }
     final tempId = ref
         .read(scanSessionProvider.notifier)
         .addItem(
-          card: result.card,
-          variants: result.variants,
-          needsReview: !result.confident,
+          card: chosen,
+          variants: chosen.id == result.card.id ? result.variants : [chosen],
+          needsReview: false,
           logId: result.logId,
         );
     setState(() {
       _activeTempId = tempId;
-      _lastCapturedCardId = result.card.id;
-      _burstCardId = result.card.id;
+      _lastCapturedCardId = chosen.id;
+      _burstCardId = chosen.id;
     });
     _burstTimer?.cancel();
     _burstTimer = Timer(_burstVisible, () {
@@ -610,19 +861,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     return again;
   }
 
-  /// Whether [quad] still lands inside [prep]'s frame, with web's 10% slack.
-  bool _quadWithinFrame(Quad quad, FramePrep prep) {
-    final slackX = prep.width * 0.1;
-    final slackY = prep.height * 0.1;
-    return quad.corners.every(
-      (p) =>
-          p.x >= -slackX &&
-          p.x <= prep.width + slackX &&
-          p.y >= -slackY &&
-          p.y <= prep.height + slackY,
-    );
-  }
-
   Map<String, dynamic> _quadCaptureMeta(
     int frameWidth,
     int frameHeight,
@@ -656,18 +894,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// so the status pill and shutter reflect "ready" again.
   void _scheduleRearm({Duration? after}) {
     _rearmTimer?.cancel();
-    final base = after ?? _resultSettle;
-    final delay =
-        base +
-        Duration(
-          milliseconds:
-              (base.inMilliseconds *
-                      _rearmJitterFraction *
-                      _jitter.nextDouble())
-                  .round(),
-        );
+    final delay = scanRetryDelay(
+      retryAfter: after,
+      jitter: _jitter.nextDouble(),
+    );
     _rearmTimer = Timer(delay, () {
-      if (mounted) ref.read(scannerProvider.notifier).reset();
+      if (mounted) {
+        ref.read(scannerProvider.notifier).reset();
+        setState(() {});
+      }
     });
   }
 
@@ -698,10 +933,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     ref.read(scanLanguageProvider.notifier).set(language);
     // A result tagged with the old language shouldn't stay on screen implying
     // it was scanned under the new one.
-    _rearmTimer?.cancel();
+    _autoCapture.reset();
     ref.read(scannerProvider.notifier).reset();
     setState(() {
       _activeTempId = null;
+      _cardDetected = false;
+      _locking = false;
       // Web clears this here and only here — not on the per-scan re-arm,
       // which would wipe it 900ms after every capture and leave the
       // duplicate prompt with nothing to compare against.
@@ -815,12 +1052,24 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   /// quad is still locked on screen, and "Mengunci..." over a request in
   /// flight would say the scanner was still deciding.
   ScanPillStatus _pillStatus(ScanState scanState) {
-    if (_capturing) return ScanPillStatus.capturing;
-    if (scanState is ScanLoading) return ScanPillStatus.processing;
-    if (_paused) return ScanPillStatus.paused;
-    if (_activeTempId != null) return ScanPillStatus.done;
-    if (_locking || _cardDetected) return ScanPillStatus.locking;
-    return ScanPillStatus.searching;
+    if (_detectorError != null) return ScanPillStatus.recovering;
+    if (!_capturing &&
+        scanState is! ScanLoading &&
+        _autoCapture.waitingForRemoval &&
+        _activeTempId == null) {
+      return ScanPillStatus.moveCard;
+    }
+    return scannerPillStatus(
+      processing: scanState is ScanLoading,
+      capturing: _capturing,
+      paused: _paused,
+      coolingDown: scanState is ScanFailed && (_rearmTimer?.isActive ?? false),
+      capturedCardPresent:
+          _cardDetected &&
+          _autoCapture.waitingForRemoval &&
+          _activeTempId != null,
+      tracking: _locking || _cardDetected,
+    );
   }
 
   /// Web's `handleTogglePause`. Resuming starts the lock from scratch: a
@@ -846,7 +1095,23 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     if (error != null) {
       return _CameraUnavailable(
         message: error,
-        onRetry: () => setState(() => _initialization = _startCamera()),
+        onRetry: () async {
+          if (_retrying || _detecting || _capturing) return;
+          _retrying = true;
+          try {
+            await _detectorStartup;
+            await _worker?.dispose();
+            _worker = null;
+            _autoCapture.reset();
+            if (!mounted) return;
+            await _prepareDetector();
+            if (mounted && _foreground) {
+              setState(() => _initialization = _startCamera());
+            }
+          } finally {
+            _retrying = false;
+          }
+        },
       );
     }
 
