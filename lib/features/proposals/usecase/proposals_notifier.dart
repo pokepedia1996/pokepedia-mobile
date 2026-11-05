@@ -26,31 +26,46 @@ final proposalsSummaryProvider = FutureProvider<ProposalsSummary>((ref) {
   return ref.read(proposalsRepositoryProvider).fetchSummary();
 });
 
-/// Everything the per-card Proposal page shows, filtered out of the user's
-/// full bid and proposal lists.
-///
-/// The feed no longer holds those lists — it loads a batch at a time — so
-/// opening a card reads them whole. Card-scoped queries would be lighter
-/// for an account with a long history.
+/// Everything the per-card Proposal page shows.
 typedef CardProposalData = ({
   List<MyBidModel> bids,
   List<BidProposalModel> received,
   List<SentProposalModel> sent,
 });
 
-final cardProposalsProvider = FutureProvider.family<CardProposalData, int>((
-  ref,
-  cardId,
-) async {
-  final bids = await ref.watch(myBidsProvider.future);
-  final received = await ref.watch(receivedProposalsProvider.future);
-  final sent = await ref.watch(sentProposalsProvider.future);
-  return (
-    bids: bids.where((b) => b.card.id == cardId).toList(),
-    received: received.where((p) => p.card.id == cardId).toList(),
-    sent: sent.where((p) => p.card.id == cardId).toList(),
-  );
-});
+/// One card's bids and proposals, for the per-card Proposal page.
+///
+/// Bids and received proposals are asked for by card, and all three reads
+/// run at once: this page used to load the buyer's whole bid and proposal
+/// history, one list after another, to show a single card's slice of it.
+/// Sent proposals stay on the shared list — the bid they hang off can be
+/// closed and unreadable, so there is no card to filter them by on the
+/// server.
+///
+/// Auto-disposed so each visit reads afresh; the page invalidates it with
+/// the shared lists after anything it does.
+final cardProposalsProvider = FutureProvider.autoDispose
+    .family<CardProposalData, int>((ref, cardId) async {
+      final user = ref.watch(authProvider).valueOrNull;
+      if (user == null) {
+        return (
+          bids: <MyBidModel>[],
+          received: <BidProposalModel>[],
+          sent: <SentProposalModel>[],
+        );
+      }
+      final repo = ref.read(proposalsRepositoryProvider);
+      final (bids, received, sent) = await (
+        repo.fetchMyBids(cardId: cardId),
+        repo.fetchBidProposals(cardId: cardId),
+        ref.watch(sentProposalsProvider.future),
+      ).wait;
+      return (
+        bids: bids,
+        received: received,
+        sent: sent.where((p) => p.card.id == cardId).toList(),
+      );
+    });
 
 /// Which status filter the card feed is showing.
 final proposalFeedFilterProvider = StateProvider<ProposalFeedFilter>(

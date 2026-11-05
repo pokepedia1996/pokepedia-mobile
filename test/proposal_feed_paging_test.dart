@@ -65,7 +65,7 @@ class _PagedRepository extends ProposalsRepository {
       (rows: const <SentProposalModel>[], hasMore: false);
 
   @override
-  Future<List<MyBidModel>> fetchMyBids() async {
+  Future<List<MyBidModel>> fetchMyBids({int? cardId}) async {
     fullWalks++;
     return const [];
   }

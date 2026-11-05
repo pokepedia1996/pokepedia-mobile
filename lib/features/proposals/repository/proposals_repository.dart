@@ -274,16 +274,24 @@ class ProposalsRepository {
   /// from the same policy-scoped `bid_proposals` read the summary uses, so
   /// the number on a row and the number in the market banner can't
   /// disagree.
-  Future<List<MyBidModel>> fetchMyBids() async {
+  ///
+  /// [cardId] narrows it to one card's bids, and the counts to theirs — the
+  /// card's own page has no use for the rest of the buyer's history.
+  Future<List<MyBidModel>> fetchMyBids({int? cardId}) async {
     final userId = _userId;
     if (userId == null) return const [];
 
     final rows = await fetchAllPages<Map<String, dynamic>>(
-      (from, to) => _bidsQuery(userId).range(from, to),
+      (from, to) => _bidsQuery(userId, cardId: cardId).range(from, to),
       keyOf: (row) => row['slug'] as String,
     );
     if (rows.isEmpty) return const [];
-    return _bidModels(rows, await _proposalCountsByBid());
+    final counts = await _proposalCountsByBid(
+      bidIds: cardId == null
+          ? null
+          : [for (final row in rows) (row['id'] as num).toInt()],
+    );
+    return _bidModels(rows, counts);
   }
 
   /// One slice of [fetchMyBids], newest first, for the Proposal feed. The
@@ -303,17 +311,24 @@ class ProposalsRepository {
     return (rows: _bidModels(rows, counts), hasMore: rows.length == limit);
   }
 
-  PostgrestTransformBuilder<PostgrestList> _bidsQuery(String userId) => _client
-      .from('listings')
-      .select(
-        'id, slug, price, condition, quantity, qty_locked,'
-        'created_at, expires_at, cards!inner($_cardColumns)',
-      )
-      .eq('user_id', userId)
-      .eq('side', 'bid')
-      .eq('status', 'open')
-      .order('created_at', ascending: false)
-      .order('id', ascending: false);
+  PostgrestTransformBuilder<PostgrestList> _bidsQuery(
+    String userId, {
+    int? cardId,
+  }) {
+    var query = _client
+        .from('listings')
+        .select(
+          'id, slug, price, condition, quantity, qty_locked,'
+          'created_at, expires_at, cards!inner($_cardColumns)',
+        )
+        .eq('user_id', userId)
+        .eq('side', 'bid')
+        .eq('status', 'open');
+    if (cardId != null) query = query.eq('card_id', cardId);
+    return query
+        .order('created_at', ascending: false)
+        .order('id', ascending: false);
+  }
 
   List<MyBidModel> _bidModels(
     List<Map<String, dynamic>> rows,
@@ -466,11 +481,17 @@ class ProposalsRepository {
 
   /// Proposals against this user's own WTB bids — the buyer accepts or
   /// rejects them. RLS lets the bid's owner read these rows.
-  Future<List<BidProposalModel>> fetchBidProposals() async {
+  ///
+  /// [cardId] narrows it to proposals on that card's bids.
+  Future<List<BidProposalModel>> fetchBidProposals({int? cardId}) async {
     final userId = _userId;
     if (userId == null) return const [];
 
-    final mine = await _fetchReceivedProposalRows(userId, _proposalColumns);
+    final mine = await _fetchReceivedProposalRows(
+      userId,
+      _proposalColumns,
+      cardId: cardId,
+    );
     if (mine.isEmpty) return const [];
 
     final storeNames = await _storeNamesFor(
@@ -562,6 +583,7 @@ class ProposalsRepository {
     String columns, {
     bool openBidsOnly = false,
     List<int>? bidIds,
+    int? cardId,
   }) async {
     // Proposals from someone on either side of a block stay hidden, as
     // web's received-proposals route excludes them.
@@ -573,6 +595,7 @@ class ProposalsRepository {
           .eq('bid.user_id', userId);
       if (openBidsOnly) query = query.eq('bid.status', 'open');
       if (bidIds != null) query = query.inFilter('bid_order_id', bidIds);
+      if (cardId != null) query = query.eq('bid.card_id', cardId);
       if (blocked.isNotEmpty) {
         query = query.not('seller_id', 'in', '(${blocked.join(',')})');
       }

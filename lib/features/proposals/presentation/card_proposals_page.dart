@@ -128,6 +128,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
             return RefreshIndicator(
               onRefresh: () async {
                 ref.invalidate(myBidsProvider);
+                ref.invalidate(cardProposalsProvider(widget.cardId));
                 ref.invalidate(receivedProposalsProvider);
                 ref.invalidate(sentProposalsProvider);
                 ref.invalidate(proposalCardFeedProvider);
@@ -228,6 +229,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
       ref.invalidate(receivedProposalsProvider);
       ref.invalidate(sentProposalsProvider);
       ref.invalidate(myBidsProvider);
+      ref.invalidate(cardProposalsProvider(widget.cardId));
       ref.invalidate(proposalCardFeedProvider);
       ref.invalidate(proposalsSummaryProvider);
     }
@@ -253,6 +255,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     ref.invalidate(receivedProposalsProvider);
     ref.invalidate(sentProposalsProvider);
     ref.invalidate(myBidsProvider);
+    ref.invalidate(cardProposalsProvider(widget.cardId));
     ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(proposalsSummaryProvider);
     ref.invalidate(myPendingCheckoutsProvider);
@@ -279,6 +282,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
     await Navigator.of(context).push(dealCheckoutRoute([externalId]));
     if (!mounted) return;
     ref.invalidate(myBidsProvider);
+    ref.invalidate(cardProposalsProvider(widget.cardId));
     ref.invalidate(proposalCardFeedProvider);
     ref.invalidate(myPendingCheckoutsProvider);
     ref.invalidate(cartDealsProvider);
