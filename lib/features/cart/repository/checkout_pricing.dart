@@ -5,7 +5,7 @@ import 'models/checkout_models.dart';
 /// `lib/payments/pricing.ts`.
 const insuranceMandatoryThresholdIdr = 500000;
 const platformBuyerFeeFlatIdr = 2000;
-const qrisMaxIdr = 600000;
+const qrisMaxIdr = 1450000;
 
 bool isInsuranceMandatory(int sellerSubtotal) =>
     sellerSubtotal > insuranceMandatoryThresholdIdr;

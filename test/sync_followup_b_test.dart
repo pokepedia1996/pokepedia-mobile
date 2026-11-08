@@ -376,7 +376,7 @@ void main() {
         notifier.selectAddress(_address);
         await Future<void>.delayed(const Duration(milliseconds: 450));
         await pumpEventQueue();
-        notifier.selectXendit(PaymentChannel.bni);
+        notifier.selectXendit(PaymentChannel.qris);
         expect(notifier.blockedReason, isNull);
 
         await notifier.submit();

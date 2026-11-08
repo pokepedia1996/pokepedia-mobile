@@ -5,12 +5,12 @@ import 'package:pokepedia_mobile/features/cart/repository/models/checkout_models
 void main() {
   group('availablePaymentChannels', () {
     test('QRIS below the cap, VA banks at or above it', () {
-      expect(availablePaymentChannels(599999), [PaymentChannel.qris]);
+      expect(availablePaymentChannels(1449999), [PaymentChannel.qris]);
       expect(
-        availablePaymentChannels(600000),
+        availablePaymentChannels(1450000),
         isNot(contains(PaymentChannel.qris)),
       );
-      expect(availablePaymentChannels(600000), [
+      expect(availablePaymentChannels(1450000), [
         PaymentChannel.bni,
         PaymentChannel.bri,
         PaymentChannel.mandiri,
@@ -20,18 +20,18 @@ void main() {
     });
 
     test('the cap is exclusive, matching web\'s `<` comparison', () {
-      // Exactly Rp600.000 is a VA cart, not a QRIS one. Off by one here and
+      // Exactly Rp1.450.000 is a VA cart, not a QRIS one. Off by one here and
       // the app offers a channel the server will refuse.
-      expect(isChannelAllowedForAmount(PaymentChannel.qris, 599999), isTrue);
-      expect(isChannelAllowedForAmount(PaymentChannel.qris, 600000), isFalse);
-      expect(isChannelAllowedForAmount(PaymentChannel.bni, 599999), isFalse);
-      expect(isChannelAllowedForAmount(PaymentChannel.bni, 600000), isTrue);
+      expect(isChannelAllowedForAmount(PaymentChannel.qris, 1449999), isTrue);
+      expect(isChannelAllowedForAmount(PaymentChannel.qris, 1450000), isFalse);
+      expect(isChannelAllowedForAmount(PaymentChannel.bni, 1449999), isFalse);
+      expect(isChannelAllowedForAmount(PaymentChannel.bni, 1450000), isTrue);
     });
 
     test('every total has at least one channel to offer', () {
       // The auto-select rule depends on this: an empty list would leave the
       // buyer with no channel and a permanently disabled pay button.
-      for (final total in [1, 100000, 599999, 600000, 5000000]) {
+      for (final total in [1, 100000, 1449999, 1450000, 5000000]) {
         expect(
           availablePaymentChannels(total),
           isNotEmpty,
@@ -48,10 +48,10 @@ void main() {
     });
 
     test('crossing it can push a QRIS cart over the QRIS cap', () {
-      // The sequence the picker had no answer for: a Rp560.000 cart is QRIS
+      // The sequence the picker had no answer for: a Rp1.420.000 cart is QRIS
       // eligible, mandatory insurance lands on top, and the total crosses
-      // Rp600.000 while QRIS is still selected.
-      const sellerSubtotal = 560000;
+      // Rp1.450.000 while QRIS is still selected.
+      const sellerSubtotal = 1420000;
       expect(isInsuranceMandatory(sellerSubtotal), isTrue);
       expect(
         isChannelAllowedForAmount(PaymentChannel.qris, sellerSubtotal),
@@ -95,14 +95,14 @@ void main() {
     });
 
     test('an empty wallet on a big bill lands on a VA bank', () {
-      final pick = autoSelectPayment(grandTotalIdr: 750000, walletBalance: 0);
+      final pick = autoSelectPayment(grandTotalIdr: 1500000, walletBalance: 0);
       expect(pick.method, PaymentMethod.xendit);
       expect(pick.channel, PaymentChannel.bni);
     });
 
     test('the bank last paid with is preferred over the first in the list', () {
       final pick = autoSelectPayment(
-        grandTotalIdr: 750000,
+        grandTotalIdr: 1500000,
         walletBalance: 0,
         lastPaidChannel: PaymentChannel.mandiri,
       );
@@ -113,7 +113,7 @@ void main() {
       // The case the request names outright: last time was a VA bank, but
       // this bill is small, so VA is not on offer at all.
       final pick = autoSelectPayment(
-        grandTotalIdr: 599999,
+        grandTotalIdr: 1449999,
         walletBalance: 0,
         lastPaidChannel: PaymentChannel.bni,
       );
@@ -122,7 +122,7 @@ void main() {
 
     test('a QRIS habit gives way to VA at the cap', () {
       final pick = autoSelectPayment(
-        grandTotalIdr: 600000,
+        grandTotalIdr: 1450000,
         walletBalance: 0,
         lastPaidChannel: PaymentChannel.qris,
       );
@@ -131,8 +131,8 @@ void main() {
 
     test('saldo outranks a VA habit', () {
       final pick = autoSelectPayment(
-        grandTotalIdr: 700000,
-        walletBalance: 700000,
+        grandTotalIdr: 1500000,
+        walletBalance: 1500000,
         lastPaidChannel: PaymentChannel.bri,
       );
       expect(pick.method, PaymentMethod.wallet);
@@ -142,8 +142,8 @@ void main() {
       // Saldo pays no gateway fee, so switching would void the coupon the
       // buyer just applied.
       final pick = autoSelectPayment(
-        grandTotalIdr: 700000,
-        walletBalance: 700000,
+        grandTotalIdr: 1500000,
+        walletBalance: 1500000,
         lastPaidChannel: PaymentChannel.bri,
         holdsFeeWaiver: true,
       );
