@@ -243,34 +243,37 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             ),
           ),
           Divider(height: 1, color: context.borderColor),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-            child: Row(
-              children: [
-                Text(
-                  'Kondisi',
-                  style: AppTypography.bodySm(context.mutedForeground),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: 200,
-                  child: CollectionConditionField(
-                    value: _condition,
-                    counts: counts,
-                    // Switching mid-write would count the landing write
-                    // against the wrong condition.
-                    onChanged: _busy != null
-                        ? null
-                        : (value) => setState(() {
-                            _condition = value;
-                            _done = null;
-                            _awaitingRefresh = false;
-                          }),
+          // A sealed product has no condition to grade; it is kept as NM,
+          // which [_condition] already is.
+          if (!widget.card.isSealed)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+              child: Row(
+                children: [
+                  Text(
+                    'Kondisi',
+                    style: AppTypography.bodySm(context.mutedForeground),
                   ),
-                ),
-              ],
+                  const Spacer(),
+                  SizedBox(
+                    width: 200,
+                    child: CollectionConditionField(
+                      value: _condition,
+                      counts: counts,
+                      // Switching mid-write would count the landing write
+                      // against the wrong condition.
+                      onChanged: _busy != null
+                          ? null
+                          : (value) => setState(() {
+                              _condition = value;
+                              _done = null;
+                              _awaitingRefresh = false;
+                            }),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Row(
