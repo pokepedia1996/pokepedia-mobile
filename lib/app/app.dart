@@ -10,6 +10,7 @@ import '../features/notifications/usecase/notifications_notifier.dart';
 import '../core/providers/theme_mode_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../features/onboarding/presentation/onboarding_page.dart';
+import '../features/notifications/presentation/widgets/in_app_banner_host.dart';
 import '../features/notifications/usecase/notification_push_notifier.dart';
 import '../shared/widgets/dismiss_keyboard_on_tap_outside.dart';
 import 'router/app_router.dart';
@@ -70,9 +71,13 @@ class _PokepediaAppState extends ConsumerState<PokepediaApp>
       // Above the router rather than on a route: a social sign-in lands
       // wherever the user already was, and the username is owed either way.
       // The keyboard rule sits above it too, so every route, sheet and the
-      // onboarding modal close the keyboard on a tap outside.
+      // onboarding modal close the keyboard on a tap outside. The
+      // notification banner sits inside the gate: onboarding covers it, and
+      // it covers every route.
       builder: (context, child) => DismissKeyboardOnTapOutside(
-        child: OnboardingGate(child: child ?? const SizedBox.shrink()),
+        child: OnboardingGate(
+          child: InAppBannerHost(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }
