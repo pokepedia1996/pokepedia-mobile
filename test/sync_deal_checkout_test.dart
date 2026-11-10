@@ -271,7 +271,7 @@ void main() {
         RatesReason.sellerRestrictedPartial,
       );
 
-      notifier.selectXendit(PaymentChannel.bni);
+      notifier.selectXendit(PaymentChannel.qris);
       expect(notifier.blockedReason, isNull);
 
       final result = await notifier.submit();
