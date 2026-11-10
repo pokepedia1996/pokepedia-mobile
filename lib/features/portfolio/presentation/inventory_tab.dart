@@ -33,6 +33,7 @@ import '../usecase/portfolio_notifier.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
 import '../../home/repository/models/portfolio_value.dart';
 import '../../../core/utils/image_url.dart';
+import '../../../shared/widgets/rupiah_prefix.dart';
 
 enum _InventorySection { database, add, remove, activity }
 
@@ -2206,8 +2207,12 @@ class _DraftRowState extends ConsumerState<_DraftRow> {
           onEditingComplete: _commit,
           onTapOutside: (_) => _commit(),
           style: AppTypography.caption(colors.onSurface),
-          decoration: const InputDecoration(
-            prefixText: 'Rp ',
+          decoration: InputDecoration(
+            prefixIcon: RupiahPrefix(
+              inset: 8,
+              style: AppTypography.caption(colors.onSurface),
+            ),
+            prefixIconConstraints: RupiahPrefix.constraints,
             hintText: '0',
             isDense: true,
             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -2376,7 +2381,10 @@ class _AddDraftSheetState extends State<_AddDraftSheet> {
           TextField(
             controller: _priceController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(prefixText: 'Rp '),
+            decoration: const InputDecoration(
+              prefixIcon: RupiahPrefix(),
+              prefixIconConstraints: RupiahPrefix.constraints,
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(

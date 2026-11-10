@@ -16,6 +16,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
+import '../../../../shared/utils/price_input_formatter.dart';
 import '../../../../shared/widgets/condition_grade_picker.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../../cart/presentation/checkout_webview_page.dart';
@@ -23,6 +24,7 @@ import '../../../market/presentation/widgets/share_store_prompt.dart';
 import '../../../market/presentation/widgets/store_poster.dart';
 import '../../repository/models/trading_models.dart';
 import '../../usecase/trading_notifier.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// Opens the bid/ask form for [card]. Resolves true once an order was
 /// actually placed, so the caller can refresh the book.
@@ -107,7 +109,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
   void initState() {
     super.initState();
     if (widget.bestPrice != null) {
-      _price.text = widget.bestPrice.toString();
+      _price.text = formatCountId(widget.bestPrice!);
     }
   }
 
@@ -431,10 +433,14 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
         TextField(
           controller: _price,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            const PriceInputFormatter(),
+          ],
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            prefixText: 'Rp ',
+            prefixIcon: const RupiahPrefix(),
+            prefixIconConstraints: RupiahPrefix.constraints,
             hintText: '0',
             helperText: widget.bestPrice == null
                 ? null
