@@ -35,12 +35,17 @@ class OrdersRepository {
   String? get _uid => _client.auth.currentUser?.id;
 
   /// Kept on one line: PostgREST takes `select` as a query parameter.
-  static const _orderColumns =
+  ///
+  /// [koin] adds the buyer's Koin share of each settlement. Only the buyer
+  /// asks for it: the seller's totals never include Koin, and leaving the
+  /// columns out keeps them at 0 in the model.
+  static String _orderColumns({required bool koin}) =>
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
       'status, created_at, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'shipping_discount_idr, insurance_fee_idr,'
+      '${koin ? 'koin_idr, koin_refunded_idr,' : ''}'
       'paid_at, payment_deadline, cancel_status, cancel_reason,'
       'carts(total_amount, gateway_fee, gateway_fee_charged)),'
       // Only an active dispute changes what the seller sees; the filter is
@@ -66,6 +71,8 @@ class OrdersRepository {
       'status, created_at, cards($_cardColumns),'
       'settlements(slug, condition, escrow_amount, shipping_cost, status,'
       'shipping_discount_idr, insurance_fee_idr,'
+      // What the buyer paid with Koin, and what a refund already returned.
+      'koin_idr, koin_refunded_idr, partial_refund_amount,'
       'paid_at, released_at, payment_deadline, cancel_status, cancel_reason,'
       // The invoice lives on the checkout, not the settlement, so an unpaid
       // order can only offer "Bayar Sekarang" by reaching through `cart_id`.
@@ -93,7 +100,7 @@ class OrdersRepository {
     final rows =
         await _client
                 .from('orders')
-                .select(_orderColumns)
+                .select(_orderColumns(koin: !asSeller))
                 .eq(asSeller ? 'seller_id' : 'buyer_id', me)
                 .order('created_at', ascending: false)
                 .limit(limit)
@@ -464,9 +471,7 @@ class OrdersRepository {
         )
         .inFilter('order_item_id', itemIds)
         .eq('rater_id', me);
-    final ratings = [
-      for (final row in rows) OrderRating.fromRow(row),
-    ];
+    final ratings = [for (final row in rows) OrderRating.fromRow(row)];
     if (ratings.isEmpty) return null;
     return ratings.firstWhere((r) => !r.isAuto, orElse: () => ratings.first);
   }

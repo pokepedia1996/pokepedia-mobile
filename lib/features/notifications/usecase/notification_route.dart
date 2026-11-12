@@ -49,6 +49,12 @@ String? appRouteForActionUrl(String? actionUrl) {
           : Routes.expansions;
     case 'portfolio':
       return path;
+    case 'referral':
+      // `/referral` and `/referral/pack/<uuid>` (referral_pack_ready).
+      if (segments.length > 2 && segments[1] == 'pack') {
+        return Routes.referralPack(segments[2]);
+      }
+      return Routes.referral;
     default:
       return null;
   }

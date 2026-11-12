@@ -33,12 +33,19 @@ void main() {
       int actions = 0,
       int notifications = 0,
       int chat = 0,
+      int packs = 0,
     }) => showsAccountIndicator(
       signedIn: signedIn,
       buyerActionTotal: actions,
       notificationUnread: notifications,
       chatUnread: chat,
+      readyPacks: packs,
     );
+
+    test('an unopened referral pack lights the dot', () {
+      expect(shows(packs: 2), isTrue);
+      expect(shows(signedIn: false, packs: 2), isFalse);
+    });
 
     test('nothing pending, no dot', () => expect(shows(), isFalse));
 

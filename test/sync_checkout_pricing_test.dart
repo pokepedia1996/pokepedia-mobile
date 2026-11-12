@@ -54,7 +54,8 @@ void main() {
       expect(totals.gatewayFeeCharged, platformBuyerFeeFlatIdr);
       expect(totals.shippingDiscount, 0);
       expect(totals.totalDiscount, 0);
-      expect(totals.grandTotal, 122000);
+      // The server charges no buyer fee since 2026-10-21.
+      expect(totals.grandTotal, 120000);
       expect(totals.walletAmountDue, 120000);
     });
 
@@ -68,7 +69,7 @@ void main() {
         coupons: const CouponSelection(shipping: _freeShipping),
       );
       expect(totals.shippingDiscount, 15000);
-      expect(totals.grandTotal, 120000 + 2000 - 15000);
+      expect(totals.grandTotal, 120000 - 15000);
       expect(totals.totalDiscount, 15000);
     });
 
@@ -82,7 +83,7 @@ void main() {
         coupons: const CouponSelection(shipping: _freeShipping),
       );
       expect(totals.shippingDiscount, 9000);
-      expect(totals.grandTotal, 100000 + 2000);
+      expect(totals.grandTotal, 100000);
     });
 
     test('the fee waiver zeroes the charged fee and counts as a saving', () {
@@ -290,6 +291,52 @@ void main() {
           'slot': 'items',
         }),
         isNull,
+      );
+    });
+  });
+
+  group('Koin preview (09 §4)', () {
+    test('off or empty applies nothing', () {
+      expect(
+        koinAppliedFor(useKoin: false, koinBalance: 30000, total: 50000),
+        0,
+      );
+      expect(koinAppliedFor(useKoin: true, koinBalance: 0, total: 50000), 0);
+    });
+
+    test('partial: Koin less than the total', () {
+      expect(
+        koinAppliedFor(useKoin: true, koinBalance: 30000, total: 50000),
+        30000,
+      );
+    });
+
+    test('full: capped at the total, so nothing is left to pay', () {
+      expect(
+        koinAppliedFor(useKoin: true, koinBalance: 30000, total: 22000),
+        22000,
+      );
+    });
+
+    test('a tiny cash remainder is raised to the Xendit floor', () {
+      int koin(int balance, int total) => koinAppliedFor(
+        useKoin: true,
+        koinBalance: balance,
+        total: total,
+        minRemainder: koinMinCashRemainder,
+      );
+      // Rp500 left would be too small: take less Koin, leave Rp1.500.
+      expect(koin(9500, 10000), 8500);
+      // Covering everything is still allowed.
+      expect(koin(10000, 10000), 10000);
+      // Already above the floor: untouched.
+      expect(koin(5000, 10000), 5000);
+      // Bill under the floor itself: no Koin rather than a negative amount.
+      expect(koin(900, 1000), 0);
+      // Saldo has no floor.
+      expect(
+        koinAppliedFor(useKoin: true, koinBalance: 9500, total: 10000),
+        9500,
       );
     });
   });

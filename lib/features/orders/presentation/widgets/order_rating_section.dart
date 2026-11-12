@@ -277,8 +277,7 @@ class _RatingSheetState extends State<_RatingSheet> {
                         onTap: () => setState(() => _kind = kind),
                       ),
                     ),
-                    if (kind != _kinds.last)
-                      const SizedBox(width: 8),
+                    if (kind != _kinds.last) const SizedBox(width: 8),
                   ],
                 ],
               ),

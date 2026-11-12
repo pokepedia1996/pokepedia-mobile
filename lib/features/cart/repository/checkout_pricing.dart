@@ -4,7 +4,11 @@ import 'models/checkout_models.dart';
 /// `features/checkout/model/pricing.ts` and the relevant bits of
 /// `lib/payments/pricing.ts`.
 const insuranceMandatoryThresholdIdr = 500000;
-const platformBuyerFeeFlatIdr = 2000;
+
+/// The server dropped the Rp2.000 buyer fee on 2026-10-21
+/// (`compute_buyer_gateway_fee` returns 0); kept as a constant so the
+/// fee-waiver coupon plumbing still compiles.
+const platformBuyerFeeFlatIdr = 0;
 const qrisMaxIdr = 1450000;
 
 bool isInsuranceMandatory(int sellerSubtotal) =>
@@ -147,3 +151,26 @@ CheckoutTotals computeCheckoutTotals({
 }
 
 int _atLeastZero(int value) => value < 0 ? 0 : value;
+
+/// Smallest cash remainder the server leaves for a Xendit invoice, mirroring
+/// web's `KOIN_MIN_CASH_REMAINDER_IDR`.
+const koinMinCashRemainder = 1500;
+
+/// Display-only preview of the Koin the server will take: it applies
+/// `min(spendable Koin, invoice amount)` after locking the cart, then takes
+/// less Koin when the cash left would be between Rp1 and [minRemainder].
+int koinAppliedFor({
+  required bool useKoin,
+  required int koinBalance,
+  required int total,
+  int minRemainder = 0,
+}) {
+  if (!useKoin || koinBalance <= 0 || total <= 0) return 0;
+  final koin = koinBalance < total ? koinBalance : total;
+  final remainder = total - koin;
+  if (remainder > 0 && remainder < minRemainder) {
+    final reduced = total - minRemainder;
+    return reduced < 0 ? 0 : reduced;
+  }
+  return koin;
+}

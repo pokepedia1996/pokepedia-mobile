@@ -17,6 +17,8 @@ import '../../chat/usecase/chat_notifier.dart';
 import '../../notifications/usecase/notifications_notifier.dart';
 import '../../wallet/usecase/wallet_notifier.dart';
 import '../usecase/buyer_action_notifier.dart';
+import '../../referral/presentation/referral_banner.dart';
+import '../../referral/usecase/referral_providers.dart';
 
 /// Ports `app/account/account-list.tsx` — the Akun tab: the identity header
 /// over grouped link rows (Portofolio, Aktivitas, Informasi, Pengaturan).
@@ -33,6 +35,13 @@ class AccountPage extends ConsumerWidget {
     final user = authAsync.valueOrNull;
     final isGuest = user == null;
     final buyerActions = ref.watch(buyerActionCountsProvider);
+    final referralEnabled =
+        ref
+            .watch(referralDashboardProvider(ReferralFilter.all))
+            .valueOrNull
+            ?.enabled ??
+        false;
+    final readyPacks = ref.watch(referralReadyPackCountProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Akun')),
@@ -56,6 +65,7 @@ class AccountPage extends ConsumerWidget {
                   children: [
                     _IdentityHeader(user: user),
                     if (!isGuest) const _QuickActions(),
+                    if (!isGuest) const ReferralBanner(),
                     if (!isGuest)
                       _Group(
                         title: 'Portofolio',
@@ -93,6 +103,14 @@ class AccountPage extends ConsumerWidget {
                             badge: buyerActions.proposals,
                             onTap: () => context.push(Routes.proposals),
                           ),
+                          if (referralEnabled)
+                            _Row(
+                              icon: LucideIcons.gift,
+                              label: 'Ajak Teman',
+                              accent: true,
+                              pill: readyPacks > 0 ? '$readyPacks pack' : null,
+                              onTap: () => context.push(Routes.referral),
+                            ),
                           _Row(
                             icon: LucideIcons.send,
                             label: 'Penawaranku',
@@ -213,6 +231,8 @@ class AccountPage extends ConsumerWidget {
   Future<void> _refresh(WidgetRef ref) async {
     ref.invalidate(walletBalanceProvider);
     ref.invalidate(chatThreadsProvider);
+    ref.invalidate(koinBalanceProvider);
+    ref.invalidate(referralDashboardProvider);
     try {
       // Awaited so the spinner stays until the figures are back; snapping
       // straight back reads as a refresh that did nothing.
@@ -407,6 +427,12 @@ class _QuickActions extends ConsumerWidget {
                 value: ref
                     .watch(walletBalanceProvider)
                     .maybeWhen(data: formatRupiah, orElse: () => 'Rp–'),
+                // Koin is shown apart from Saldo: it can't be withdrawn.
+                subValue: switch (ref.watch(koinBalanceProvider).valueOrNull) {
+                  final k? when k.balance > 0 =>
+                    'Koin ${formatRupiah(k.balance)}',
+                  _ => null,
+                },
                 onTap: () => context.push(Routes.wallet),
               ),
             ),
@@ -442,6 +468,7 @@ class _QuickAction extends StatelessWidget {
     required this.onTap,
     this.badge = 0,
     this.value,
+    this.subValue,
   });
 
   final IconData icon;
@@ -451,6 +478,9 @@ class _QuickAction extends StatelessWidget {
 
   /// A figure worth reading at a glance, under the label.
   final String? value;
+
+  /// A second, smaller figure under [value].
+  final String? subValue;
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +538,13 @@ class _QuickAction extends StatelessWidget {
                 style: AppTypography.bodySmSemibold(colors.onSurface),
               ),
             ],
+            if (subValue != null)
+              Text(
+                subValue!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption(context.mutedForeground),
+              ),
           ],
         ),
       ),
@@ -562,6 +599,8 @@ class _Row extends StatelessWidget {
     this.hint,
     this.badge = 0,
     this.destructive = false,
+    this.accent = false,
+    this.pill,
   });
 
   final IconData icon;
@@ -573,48 +612,77 @@ class _Row extends StatelessWidget {
   final int badge;
   final bool destructive;
 
+  /// Ajak Teman styling: red icon on a warm tint.
+  final bool accent;
+
+  /// Text pill on the right ("2 pack").
+  final String? pill;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final fg = destructive ? colors.error : colors.onSurface;
+    final tinted = accent && Theme.of(context).brightness == Brightness.light;
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 20,
-              color: destructive ? colors.error : context.mutedForeground,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(label, style: AppTypography.bodySmSemibold(fg)),
-            ),
-            if (badge > 0) ...[
-              Container(
-                constraints: const BoxConstraints(minWidth: 18),
-                height: 18,
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                decoration: BoxDecoration(
-                  color: colors.primary,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  badge > 99 ? '99+' : '$badge',
-                  style: AppTypography.badge(colors.onPrimary),
-                ),
+      child: Ink(
+        color: tinted ? const Color(0xFFFDF6EA) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: destructive
+                    ? colors.error
+                    : accent
+                    ? colors.primary
+                    : context.mutedForeground,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(label, style: AppTypography.bodySmSemibold(fg)),
+              ),
+              if (badge > 0) ...[
+                Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  height: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: colors.primary,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    badge > 99 ? '99+' : '$badge',
+                    style: AppTypography.badge(colors.onPrimary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (pill != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4B63F),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    pill!,
+                    style: AppTypography.badge(const Color(0xFF5A3A00)),
+                  ),
+                ),
+              if (hint != null)
+                Text(
+                  hint!,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
             ],
-            if (hint != null)
-              Text(
-                hint!,
-                style: AppTypography.caption(context.mutedForeground),
-              ),
-          ],
+          ),
         ),
       ),
     );

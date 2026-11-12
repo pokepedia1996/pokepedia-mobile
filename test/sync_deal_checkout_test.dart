@@ -120,6 +120,7 @@ class _DealGateway implements CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool useKoin = false,
   }) async {
     submitted.add(dealExternalIds);
     return const CheckoutResult(invoiceUrl: 'https://checkout.xendit.co/x');
@@ -188,6 +189,21 @@ void main() {
       expect(body.containsKey('selectedCartItemIds'), isFalse);
       expect(body.containsKey('selectedDealExternalIds'), isFalse);
       expect(body['paymentMethod'], 'wallet');
+    });
+
+    test('useKoin is sent only when on (09 §4: omitted keeps today)', () {
+      Map<String, dynamic> body({required bool useKoin}) =>
+          CheckoutGateway.checkoutRequestBody(
+            courierChoices: const [],
+            deliveryAddressSlug: _address.slug,
+            paymentMethod: PaymentMethod.xendit,
+            paymentChannel: PaymentChannel.qris,
+            useKoin: useKoin,
+          );
+      expect(body(useKoin: false).containsKey('useKoin'), isFalse);
+      expect(body(useKoin: true)['useKoin'], isTrue);
+      // The channel is still sent: the server validates it pre-Koin.
+      expect(body(useKoin: true)['paymentChannel'], PaymentChannel.qris.code);
     });
 
     test('coupons are priced with the deals named', () async {

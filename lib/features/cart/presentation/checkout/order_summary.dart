@@ -24,6 +24,11 @@ class OrderSummary extends StatelessWidget {
     required this.submitting,
     required this.payDisabled,
     required this.onCheckout,
+    this.koinBalance = 0,
+    this.useKoin = false,
+    this.koinApplied = 0,
+    this.amountToPay,
+    this.onUseKoin,
   });
 
   final int itemsSubtotal;
@@ -40,6 +45,15 @@ class OrderSummary extends StatelessWidget {
   final bool submitting;
   final bool payDisabled;
   final VoidCallback onCheckout;
+
+  /// Spendable Koin; the toggle only shows when there is some.
+  final int koinBalance;
+  final bool useKoin;
+  final int koinApplied;
+
+  /// Total after Koin; [totals.grandTotal] when null.
+  final int? amountToPay;
+  final ValueChanged<bool>? onUseKoin;
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +91,9 @@ class OrderSummary extends StatelessWidget {
               label: 'Asuransi pengiriman',
               value: formatRupiah(insuranceTotal),
             ),
-          if (paymentMethod == PaymentMethod.xendit)
+          // The buyer fee is 0 server-side; the row returns if it ever isn't.
+          if (paymentMethod == PaymentMethod.xendit &&
+              platformBuyerFeeFlatIdr > 0)
             _Row(
               label: 'Biaya Platform',
               value: !hasChannel ? '-' : formatRupiah(totals.gatewayFee),
@@ -88,6 +104,28 @@ class OrderSummary extends StatelessWidget {
             child: Divider(height: 1, color: context.borderColor),
           ),
           couponSlot,
+          if (koinBalance > 0 && onUseKoin != null)
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: useKoin,
+              onChanged: submitting ? null : onUseKoin,
+              secondary: Icon(
+                LucideIcons.coins,
+                size: 18,
+                color: colors.onSurface,
+              ),
+              title: Text(
+                'Pakai Koin (${formatRupiah(koinBalance)})',
+                style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
+            ),
+          if (koinApplied > 0)
+            _Row(
+              label: 'Koin Pokepedia',
+              value: '- ${formatRupiah(koinApplied)}',
+              color: success,
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),
@@ -100,7 +138,7 @@ class OrderSummary extends StatelessWidget {
                 style: AppTypography.bodySemibold(colors.onSurface),
               ),
               Text(
-                formatRupiah(totals.grandTotal),
+                formatRupiah(amountToPay ?? totals.grandTotal),
                 style: AppTypography.bodySemibold(colors.primary),
               ),
             ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../chat/usecase/chat_notifier.dart';
 import '../../notifications/usecase/notifications_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 import 'buyer_action_notifier.dart';
 
 /// Web's `accountIndicator` in `mobile-bottom-nav.tsx`: the Akun tab lights
@@ -12,9 +13,10 @@ bool showsAccountIndicator({
   required int buyerActionTotal,
   required int notificationUnread,
   required int chatUnread,
+  int readyPacks = 0,
 }) {
   if (!signedIn) return false;
-  return buyerActionTotal + notificationUnread + chatUnread > 0;
+  return buyerActionTotal + notificationUnread + chatUnread + readyPacks > 0;
 }
 
 /// Whether the bottom nav draws the dot on Akun.
@@ -28,5 +30,7 @@ final accountNavIndicatorProvider = Provider<bool>((ref) {
     buyerActionTotal: ref.watch(buyerActionCountsProvider).total,
     notificationUnread: ref.watch(unreadNotificationCountProvider),
     chatUnread: ref.watch(chatUnreadCountProvider),
+    // An unopened Pack Hadiah waits under Akun > Ajak Teman.
+    readyPacks: ref.watch(referralReadyPackCountProvider),
   );
 });

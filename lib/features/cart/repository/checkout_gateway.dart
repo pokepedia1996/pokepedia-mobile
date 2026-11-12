@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -30,6 +31,7 @@ class CheckoutResult {
     this.redirect,
     this.externalId,
     this.totalAmount,
+    this.koinAmount,
     this.droppedItems = const [],
   });
 
@@ -42,6 +44,10 @@ class CheckoutResult {
   final String? externalId;
 
   final int? totalAmount;
+
+  /// Koin the server actually took. Only a partial-Koin invoice carries it;
+  /// the saldo / full-Koin reply has just `{ok, redirect, externalId}`.
+  final int? koinAmount;
 
   /// Lines the server refused at lock time — sold out underneath the buyer,
   /// price moved, seller went on vacation. The order went ahead without
@@ -56,6 +62,7 @@ class CheckoutResult {
   String toString() =>
       'CheckoutResult(externalId: $externalId, invoiceUrl: $invoiceUrl, '
       'redirect: $redirect, totalAmount: $totalAmount, '
+      'koinAmount: $koinAmount, '
       'droppedItems: ${droppedItems.length})';
 }
 
@@ -315,6 +322,7 @@ class CheckoutGateway {
     String buyerNote = '',
     List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
+    bool useKoin = false,
   }) async {
     final json = await _postCheckout(
       checkoutRequestBody(
@@ -324,6 +332,7 @@ class CheckoutGateway {
         paymentChannel: paymentChannel,
         buyerNote: buyerNote,
         couponIds: couponIds,
+        useKoin: useKoin,
         selectedCartItemIds: selectedCartItemIds.isEmpty
             ? null
             : selectedCartItemIds,
@@ -346,6 +355,7 @@ class CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool useKoin = false,
   }) async {
     final json = await _postCheckout(
       checkoutRequestBody(
@@ -355,6 +365,7 @@ class CheckoutGateway {
         paymentChannel: paymentChannel,
         buyerNote: buyerNote,
         couponIds: couponIds,
+        useKoin: useKoin,
         selectedCartItemIds: selectedCartItemIds,
         selectedDealExternalIds: dealExternalIds,
       ),
@@ -376,6 +387,7 @@ class CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool useKoin = false,
   }) async {
     final json = await _postCheckout(
       checkoutRequestBody(
@@ -385,6 +397,7 @@ class CheckoutGateway {
         paymentChannel: paymentChannel,
         buyerNote: buyerNote,
         couponIds: couponIds,
+        useKoin: useKoin,
         selectedCartItemIds: const [],
         selectedDealExternalIds: dealExternalIds,
       ),
@@ -403,6 +416,7 @@ class CheckoutGateway {
     List<int> couponIds = const [],
     List<int>? selectedCartItemIds,
     List<String> selectedDealExternalIds = const [],
+    bool useKoin = false,
   }) => {
     'courierChoices': [
       for (final choice in courierChoices)
@@ -424,14 +438,36 @@ class CheckoutGateway {
     if (selectedCartItemIds != null) 'selectedCartItemIds': selectedCartItemIds,
     if (selectedDealExternalIds.isNotEmpty)
       'selectedDealExternalIds': selectedDealExternalIds,
+    // Omitted when off, so the request is exactly today's.
+    if (useKoin) 'useKoin': true,
   };
+
+  /// Money fields read leniently: this runs after the payment went through,
+  /// so a number sent as a string (Postgres numeric) or junk must not throw
+  /// and strand the buyer. Junk reads as absent.
+  static int? _lenientInt(Object? raw) {
+    final value = switch (raw) {
+      num n => n.round(),
+      String s => num.tryParse(s)?.round(),
+      _ => null,
+    };
+    if (raw != null && value == null) {
+      debugPrint('[checkout] unreadable amount in reply: $raw');
+    }
+    return value == null || value < 0 ? null : value;
+  }
+
+  @visibleForTesting
+  static CheckoutResult resultFromJson(Map<String, dynamic> json) =>
+      _resultFrom(json);
 
   static CheckoutResult _resultFrom(Map<String, dynamic> json) =>
       CheckoutResult(
         invoiceUrl: json['invoiceUrl'] as String?,
         redirect: json['redirect'] as String?,
         externalId: json['externalId'] as String?,
-        totalAmount: (json['totalAmount'] as num?)?.round(),
+        totalAmount: _lenientInt(json['totalAmount']),
+        koinAmount: _lenientInt(json['koinAmount']),
         droppedItems: parseDroppedItems(json['droppedItems']),
       );
 

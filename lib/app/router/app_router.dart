@@ -26,6 +26,8 @@ import '../../features/market/presentation/store_card_listing_page.dart';
 import '../../features/market/presentation/store_detail_page.dart';
 import '../../features/moderation/presentation/blocked_users_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
+import '../../features/referral/presentation/referral_page.dart';
+import '../../features/referral/presentation/referral_pack_page.dart';
 import '../../features/orders/presentation/dispute_detail_page.dart';
 import '../../features/orders/presentation/order_detail_page.dart';
 import '../../features/orders/presentation/order_dispute_page.dart';
@@ -296,6 +298,7 @@ final appRouter = GoRouter(
         cardCount: int.tryParse(state.uri.queryParameters['cards'] ?? '') ?? 0,
         totalAmount:
             int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
+        koinAmount: int.tryParse(state.uri.queryParameters['koin'] ?? '') ?? 0,
       ),
     ),
     GoRoute(
@@ -351,6 +354,17 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
+    GoRoute(
+      path: Routes.referral,
+      builder: (_, __) => const ReferralPage(),
+      routes: [
+        GoRoute(
+          path: 'pack/:id',
+          builder: (_, state) =>
+              ReferralPackPage(packId: state.pathParameters['id'] ?? ''),
+        ),
+      ],
+    ),
 
     // Seller. The dashboard is the Jual tab and lives in the shell above;
     // the rest stay pushed pages.

@@ -36,6 +36,7 @@ import 'checkout/seller_group_card.dart';
 import 'checkout_status_page.dart';
 import 'payment_webview_page.dart';
 import '../../account/usecase/buyer_action_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 
 /// Ports `features/checkout`'s buyer flow for WTS (ask) listings natively:
 /// the order grouped per seller, delivery address, live courier quotes,
@@ -186,6 +187,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       }
     }
 
+    // Read before the request: the toggle or the balance can move while it
+    // is in flight, and this decides which success path to take.
+    final koinPreview = notifier.koinApplied;
+    final koinUsed = koinPreview > 0;
     try {
       final result = await notifier.submit();
       if (!mounted) return;
@@ -207,8 +212,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               .fold<int>(0, (sum, deal) => sum + deal.quantity);
       // Totals derive from the same selection, so this has to be read here
       // too — after the refresh below it prices an empty cart.
-      final paidFromSaldo = notifier.totals.walletAmountDue;
+      final walletDue = notifier.totals.walletAmountDue;
       final method = ref.read(checkoutProvider).paymentMethod;
+      // Koin that covered the whole bill comes back like a saldo payment —
+      // `{ok, redirect, externalId}` with no invoice — even on xendit. Decided
+      // from the reply, not the preview: the balance can move in flight, and
+      // the server is what actually took the Koin.
+      final paidByKoin =
+          koinUsed &&
+          method != PaymentMethod.wallet &&
+          invoiceUrl == null &&
+          result.redirect != null;
       final paidDeals = ref.read(checkoutProvider).deals.isNotEmpty;
       final channel = ref.read(checkoutProvider).paymentChannel;
 
@@ -217,7 +231,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // thank-you screen rather than dropping the buyer into Pesanan with no
       // confirmation that anything happened. `submit` has already revalidated
       // the wallet and the order list; the saldo is spent.
-      if (method == PaymentMethod.wallet) {
+      if (method == PaymentMethod.wallet || paidByKoin) {
         if (paidDeals) {
           ref.invalidate(myPendingCheckoutsProvider);
           ref.invalidate(cartDealsProvider);
@@ -227,7 +241,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           context.goHomeThen(
             Routes.checkoutSuccessFor(
               cards: checkedOutCardCount,
-              total: paidFromSaldo,
+              // What left the wallet: the bill minus the Koin that paid
+              // part of it, and nothing at all when Koin covered it.
+              total: paidByKoin
+                  ? 0
+                  : (walletDue - koinPreview).clamp(0, walletDue),
+              koin: result.koinAmount ?? koinPreview,
             ),
           );
         }
@@ -341,7 +360,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       await _offerPendingInvoice(e);
     } on ApiException catch (e) {
       if (!mounted) return;
-      _toast(userFacingError(e));
+      // The server released the cart (coupon and Koin returned), so a retry
+      // is all it takes — against a fresh balance, since a stale one is the
+      // likely reason Koin failed.
+      if (e.code == 'koin_failed') ref.invalidate(koinBalanceProvider);
+      _toast(
+        e.code == 'koin_failed'
+            ? 'Gagal memakai Koin. Coba lagi.'
+            : userFacingError(e),
+      );
+    } catch (e, st) {
+      // Anything else (a malformed reply, say) may have come after the money
+      // moved, so the buyer is sent to Pesanan to see what actually happened
+      // rather than left on a checkout they might pay twice.
+      debugPrint('[checkout] unexpected failure: $e\n$st');
+      if (!mounted) return;
+      _toast('Terjadi kendala. Cek status pesananmu di Pesanan.');
+      context.goHomeThen(Routes.orders);
     }
   }
 
@@ -533,7 +568,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
                   PaymentSection(
                     grandTotalBeforeFee: totals.grandTotalBeforeFee,
-                    walletAmountDue: totals.walletAmountDue,
+                    // Saldo only needs to cover what Koin doesn't.
+                    walletAmountDue:
+                        (totals.walletAmountDue - notifier.koinApplied).clamp(
+                          0,
+                          totals.walletAmountDue,
+                        ),
                     paymentMethod: state.paymentMethod,
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
@@ -555,6 +595,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     totals: totals,
                     coupons: notifier.coupons,
                     couponSlot: const CouponSection(),
+                    koinBalance: state.koinBalance,
+                    useKoin: state.useKoin,
+                    koinApplied: notifier.koinApplied,
+                    amountToPay: notifier.amountToPay,
+                    onUseKoin: notifier.setUseKoin,
                     submitting: state.submitting,
                     payDisabled: blockedReason != null,
                     onCheckout: _pay,

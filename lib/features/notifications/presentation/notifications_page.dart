@@ -42,6 +42,15 @@ class NotificationsPage extends ConsumerWidget {
         return LucideIcons.messageCircle;
       case NotificationType.userReported:
         return LucideIcons.flag;
+      case NotificationType.referralJoined:
+      case NotificationType.referralPackReady:
+        return LucideIcons.gift;
+      case NotificationType.referralCouponActive:
+      case NotificationType.referralCouponExpiring:
+      case NotificationType.referralReminder:
+        return LucideIcons.ticket;
+      case NotificationType.koinExpiring:
+        return LucideIcons.coins;
       case NotificationType.other:
         return LucideIcons.bell;
     }

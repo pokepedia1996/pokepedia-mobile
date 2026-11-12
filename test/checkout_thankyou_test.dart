@@ -46,7 +46,38 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _pumpPage(WidgetTester tester, int total, int koin) async {
+  tester.view.physicalSize = const Size(1200, 2400);
+  tester.view.devicePixelRatio = 2;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.light,
+      home: CheckoutThankYouPage(
+        cardCount: 2,
+        totalAmount: total,
+        koinAmount: koin,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('partial Koin shows the saldo charged and the Koin used', (
+    tester,
+  ) async {
+    await _pumpPage(tester, 250000, 50000);
+    expect(find.text('Dibayar dari saldo: Rp250.000'), findsOneWidget);
+    expect(find.text('Koin dipakai: Rp50.000'), findsOneWidget);
+  });
+
+  testWidgets('Koin covering everything shows no saldo line', (tester) async {
+    await _pumpPage(tester, 0, 20000);
+    expect(find.textContaining('Dibayar dari saldo'), findsNothing);
+    expect(find.text('Dibayar dengan Koin: Rp20.000'), findsOneWidget);
+  });
+
   testWidgets('a saldo checkout lands on the thank-you screen', (tester) async {
     await _pump(tester);
 

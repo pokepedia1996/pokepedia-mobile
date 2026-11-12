@@ -15,6 +15,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/payout_pricing.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../usecase/wallet_notifier.dart';
 import 'widgets/bank_form_sheet.dart';
 import 'widgets/withdraw_sheet.dart';
@@ -39,6 +40,8 @@ class WalletPage extends ConsumerWidget {
             ref.invalidate(walletBalanceProvider);
             ref.invalidate(walletDestinationsProvider);
             ref.invalidate(walletActivityProvider);
+            ref.invalidate(koinBalanceProvider);
+            ref.invalidate(koinHistoryProvider);
             // The balance is the headline, so the spinner waits for it. The
             // other two land alongside; without an await here the indicator
             // snapped back before any of them had answered, which reads as a
@@ -82,6 +85,7 @@ class WalletPage extends ConsumerWidget {
                 const _BankListCard(),
                 const SizedBox(height: 16),
                 const _ActivityFeedCard(),
+                const _KoinCard(),
               ],
             );
           }(),
@@ -713,6 +717,165 @@ class _WalletCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
       child: child,
+    );
+  }
+}
+
+/// Koin Pokepedia, kept apart from Saldo: it can only be spent at checkout,
+/// never withdrawn. Hidden for accounts that have never had any.
+class _KoinCard extends ConsumerStatefulWidget {
+  const _KoinCard();
+
+  @override
+  ConsumerState<_KoinCard> createState() => _KoinCardState();
+}
+
+class _KoinCardState extends ConsumerState<_KoinCard> {
+  final _more = <KoinEntry>[];
+  bool? _hasMore;
+  var _loadingMore = false;
+
+  /// The first page the later pages were fetched against. A refetch (pull to
+  /// refresh, a checkout that spent Koin) shifts the offsets, so pages held
+  /// from before it are dropped rather than mixed in.
+  KoinHistoryPage? _pagedFrom;
+
+  Future<void> _loadMore(int shown) async {
+    final from = _pagedFrom;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await ref
+          .read(referralRepositoryProvider)
+          .fetchKoinHistory(offset: shown);
+      if (!mounted || !identical(from, _pagedFrom)) return;
+      setState(() {
+        _more.addAll(page.rows);
+        _hasMore = page.hasMore;
+      });
+    } catch (_) {
+      // Leave the button for another try.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final first = ref.watch(koinHistoryProvider).valueOrNull;
+    final balance = ref.watch(koinBalanceProvider).valueOrNull;
+    if (first == null || first.rows.isEmpty) return const SizedBox.shrink();
+    if (!identical(first, _pagedFrom)) {
+      _pagedFrom = first;
+      _more.clear();
+      _hasMore = null;
+    }
+    // Deduped by ledger id, like the Saldo feed above.
+    final rows = {
+      for (final e in [...first.rows, ..._more]) e.id: e,
+    }.values.toList();
+    final hasMore = _hasMore ?? first.hasMore;
+    final expiry = balance?.nextExpiryAt;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: _WalletCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.coins, size: 16, color: colors.onSurface),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Riwayat Koin',
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
+                ),
+                if (balance != null)
+                  Text(
+                    formatRupiah(balance.balance),
+                    style: AppTypography.bodySmSemibold(colors.onSurface),
+                  ),
+              ],
+            ),
+            if (expiry != null && balance?.nextExpiryAmount != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${formatRupiah(balance!.nextExpiryAmount!)} hangus '
+                  '${formatShortDateId(expiry)}',
+                  style: AppTypography.caption(colors.error),
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              'Koin dipakai untuk belanja di Pokepedia dan tidak bisa ditarik.',
+              style: AppTypography.caption(context.mutedForeground),
+            ),
+            const SizedBox(height: 8),
+            for (final entry in rows) _KoinRow(entry),
+            if (hasMore)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _loadingMore
+                      ? null
+                      : () => _loadMore(first.rows.length + _more.length),
+                  child: Text(_loadingMore ? 'Memuat...' : 'Muat lebih banyak'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KoinRow extends StatelessWidget {
+  const _KoinRow(this.entry);
+
+  final KoinEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final credit = entry.delta > 0;
+    final sub = [
+      if (entry.createdAt != null) formatSaleDate(entry.createdAt!),
+      if (entry.showsExpiry) 'hangus ${formatSaleDate(entry.expiresAt!)}',
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(LucideIcons.coins, size: 18, color: colors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.label,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
+                if (sub.isNotEmpty)
+                  Text(
+                    sub,
+                    style: AppTypography.caption(context.mutedForeground),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            '${credit ? '+' : '-'}${formatRupiah(entry.delta.abs())}',
+            style: AppTypography.bodySmSemibold(
+              credit ? context.appSemantic.success : colors.onSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

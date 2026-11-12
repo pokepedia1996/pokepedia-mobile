@@ -28,6 +28,14 @@ enum NotificationType {
   /// Admins only: someone reported a user (`report_user`).
   userReported,
 
+  // Ajak Teman + Koin.
+  referralJoined,
+  referralPackReady,
+  referralCouponActive,
+  referralCouponExpiring,
+  referralReminder,
+  koinExpiring,
+
   /// Anything outside the curated list above — still shown, just with the
   /// generic icon. The constraint carries ~48 types and grows server-side.
   other,
@@ -70,6 +78,18 @@ extension NotificationTypeX on NotificationType {
         return 'chat_message';
       case NotificationType.userReported:
         return 'user_reported';
+      case NotificationType.referralJoined:
+        return 'referral_joined';
+      case NotificationType.referralPackReady:
+        return 'referral_pack_ready';
+      case NotificationType.referralCouponActive:
+        return 'referral_coupon_active';
+      case NotificationType.referralCouponExpiring:
+        return 'referral_coupon_expiring';
+      case NotificationType.referralReminder:
+        return 'referral_reminder';
+      case NotificationType.koinExpiring:
+        return 'koin_expiring';
       case NotificationType.other:
         return 'other';
     }

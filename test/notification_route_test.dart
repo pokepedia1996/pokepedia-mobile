@@ -88,6 +88,22 @@ void main() {
     });
   });
 
+  group('referral', () {
+    test('dashboard and pack screen', () {
+      expect(appRouteForActionUrl('/referral'), '/referral');
+      expect(
+        appRouteForActionUrl(
+          '/referral/pack/8923eca0-1111-2222-3333-444455556666',
+        ),
+        '/referral/pack/8923eca0-1111-2222-3333-444455556666',
+      );
+    });
+
+    test('Koin and coupon reminders go to the market', () {
+      expect(appRouteForActionUrl('/market'), '/market');
+    });
+  });
+
   group('anything else', () {
     test('is not navigated to', () {
       // A path with no screen here would land on the router's error page.

@@ -219,7 +219,8 @@ class _StockBadge extends StatelessWidget {
       ),
       child: Text(
         '$available/$total',
-        style: AppTypography.badge(Colors.white),
+        // Inverse of the onSurface fill: white was unreadable on cream in dark.
+        style: AppTypography.badge(context.appColors.surface),
       ),
     );
   }

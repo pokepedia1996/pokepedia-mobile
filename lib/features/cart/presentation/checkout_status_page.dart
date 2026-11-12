@@ -11,6 +11,8 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/usecase/orders_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../repository/checkout_gateway.dart';
 import '../usecase/cart_notifier.dart';
 
@@ -82,6 +84,13 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
         // The cart is emptied server-side at lock time; pull that through so
         // the badge doesn't keep showing items that are now an order.
         await ref.read(cartProvider.notifier).refresh();
+        // The webhook just created the order; the cached Pesanan list
+        // predates it and would otherwise hide it until a pull-to-refresh.
+        ref.invalidate(ordersProvider);
+        ref.invalidate(myPendingCheckoutsProvider);
+        // Paid spends the Koin for good; cancelled or expired returns it.
+        ref.invalidate(koinBalanceProvider);
+        ref.invalidate(koinHistoryProvider);
       }
     } catch (e) {
       if (!mounted) return;

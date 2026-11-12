@@ -8,6 +8,7 @@ import '../../../core/notifications/local_push.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../chat/usecase/chat_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../repository/models/notification_model.dart';
 import 'notification_route.dart';
 import 'notifications_notifier.dart';
@@ -79,6 +80,11 @@ class NotificationPushNotifier extends Notifier<void> {
     // The list and its badge first: the bell should be right whether or not
     // the OS lets us post anything.
     ref.read(notificationsProvider.notifier).refresh();
+    // Koin moves server-side on things the app never initiated (a seller
+    // cancel, a refund, a pack, an expiry), and each of those writes a
+    // notification row. Refetching the balance on any row is one cheap RPC.
+    ref.invalidate(koinBalanceProvider);
+    ref.invalidate(koinHistoryProvider);
     // A chat message also moves the chat counters (Akun, the inbox). The
     // inbox has its own channel, but this row is the signal that reliably
     // arrives, so it is not left to that channel alone.

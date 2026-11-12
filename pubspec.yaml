@@ -119,6 +119,9 @@ flutter:
     - assets/images/elements/
     - assets/images/flags/
     - assets/images/social/
+    - assets/images/referral/
+    - assets/images/referral/kartu-polos/
+    - assets/images/referral/kartu-hadiah/
     - assets/animation/
     - assets/data/
     - assets/tutorials/

@@ -23,6 +23,7 @@ class TermsPage extends StatefulWidget {
     'syarat-dan-ketentuan': 'Syarat & Ketentuan',
     'kebijakan-privasi': 'Kebijakan Privasi',
     'kondisi-kartu': 'Panduan Kondisi Kartu',
+    'ajak-teman': 'S&K Ajak Teman',
   };
 
   @override
