@@ -9,43 +9,14 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
-import '../repository/models/notification_model.dart';
+import '../usecase/notification_push_notifier.dart';
 import '../usecase/notification_route.dart';
 import '../usecase/notifications_notifier.dart';
+import 'widgets/notification_icon.dart';
 
 /// Ports `app/notifications/notifications-client.tsx`.
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
-
-  IconData _iconFor(NotificationType type) {
-    switch (type) {
-      case NotificationType.listingSold:
-      case NotificationType.paymentReceived:
-      case NotificationType.tradeCompleted:
-      case NotificationType.orderCancelled:
-      case NotificationType.shipmentPickedUp:
-      case NotificationType.shipmentDelivered:
-        return LucideIcons.truck;
-      case NotificationType.disputeOpened:
-      case NotificationType.disputeResolved:
-      case NotificationType.disputeMessage:
-        return LucideIcons.gavel;
-      case NotificationType.bidProposalReceived:
-      case NotificationType.bidProposalAccepted:
-      case NotificationType.offerReceived:
-      case NotificationType.offerAccepted:
-      case NotificationType.offerCountered:
-        return LucideIcons.tag;
-      case NotificationType.ratingReceived:
-        return LucideIcons.star;
-      case NotificationType.chatMessage:
-        return LucideIcons.messageCircle;
-      case NotificationType.userReported:
-        return LucideIcons.flag;
-      case NotificationType.other:
-        return LucideIcons.bell;
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -99,7 +70,9 @@ class NotificationsPage extends ConsumerWidget {
                         onTap: () {
                           notifier.markRead(item.id);
                           final route = appRouteForActionUrl(item.actionUrl);
-                          if (route != null) context.push(route);
+                          if (route != null) {
+                            ref.read(notificationRouteOpenerProvider)(route);
+                          }
                         },
                         child: Container(
                           color: item.isRead
@@ -120,7 +93,7 @@ class NotificationsPage extends ConsumerWidget {
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
-                                  _iconFor(item.type),
+                                  notificationIcon(item.type),
                                   size: 17,
                                   color: colors.primary,
                                 ),

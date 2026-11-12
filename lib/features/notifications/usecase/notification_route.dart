@@ -1,4 +1,7 @@
+import 'package:go_router/go_router.dart';
+
 import '../../../app/router/routes.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 
 /// Where tapping a notification should land, given the `action_url` the
 /// server wrote.
@@ -31,6 +34,9 @@ String? appRouteForActionUrl(String? actionUrl) {
           : Routes.orders;
     case 'proposals':
       return _proposalsRoute(uri);
+    case 'cart':
+      // An accepted offer or proposal lands in the cart to be paid for.
+      return Routes.cart;
     case 'chat':
       return segments.length > 1 ? Routes.chatThread(segments[1]) : Routes.chat;
     case 'market':
@@ -51,6 +57,21 @@ String? appRouteForActionUrl(String? actionUrl) {
       return path;
     default:
       return null;
+  }
+}
+
+/// Opens [route], which [appRouteForActionUrl] resolved, from anywhere —
+/// a notification arrives over whatever screen is up.
+///
+/// A bottom-tab root is switched to rather than pushed: pushed from a
+/// root-navigator page, a shell branch lands underneath it, out of sight,
+/// and the tap looks like it did nothing. Same rule as the promo popup.
+void openAppRoute(GoRouter router, String route) {
+  if (route.isEmpty) return;
+  if (AppBottomNav.tabPaths.contains(route)) {
+    router.go(route);
+  } else {
+    router.push(route);
   }
 }
 

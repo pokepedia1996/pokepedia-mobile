@@ -29,6 +29,11 @@ const _authTimeout = Duration(seconds: 15);
 /// that a sheet which never returns still releases the button.
 const _interactiveTimeout = Duration(minutes: 3);
 
+/// How many times the `profiles` lookup is tried before giving up until the
+/// next rebuild, and the step between tries (1s, then 2s).
+const _profileAttempts = 3;
+const _profileRetryDelay = Duration(seconds: 1);
+
 /// Scopes asked for alongside sign-in. `email` and `profile` are what
 /// Supabase needs to populate the user record.
 const _googleScopes = <String>['email', 'profile'];
@@ -43,6 +48,7 @@ class AppUser {
     this.avatarUrl,
     this.isAdmin = false,
     this.onboarded,
+    this.profilePending = false,
   });
 
   final String id;
@@ -63,6 +69,12 @@ class AppUser {
   /// false default would flash the modal over every launch before the real
   /// answer arrived. Only an explicit false opens it.
   final bool? onboarded;
+
+  /// True for the bare session user, before the `profiles` row has filled in
+  /// [username], [avatarUrl] and [isAdmin]. A null username means "not
+  /// chosen" only once this is false — until then it means "not here yet",
+  /// and the account header shimmers rather than asking for one.
+  final bool profilePending;
 }
 
 enum SignUpOutcome { signedIn, needsEmailConfirmation, error }
@@ -87,6 +99,16 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
   /// previous build write its result over the new one — a sign-out followed
   /// quickly by a sign-in could land the wrong user.
   int _generation = 0;
+
+  /// The last profile-backed user, carried across rebuilds for the same
+  /// account.
+  ///
+  /// Every rebuild — a sign-in event, `userUpdated`, settings invalidating
+  /// after an edit — starts from the bare session user and fills the
+  /// profile in after. Starting from nothing blanked the username in the
+  /// meantime, and for good when that lookup failed: the account header sat
+  /// on "Belum ada username" for someone who has one.
+  AppUser? _enriched;
 
   @override
   FutureOr<AppUser?> build() {
@@ -146,10 +168,15 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     // The username, avatar and admin flag are decoration on top of that
     // answer, so they arrive after, without holding it up.
     final user = client.auth.currentUser;
-    if (user == null) return null;
+    if (user == null) {
+      _enriched = null;
+      return null;
+    }
 
     unawaited(_enrich(client, generation));
-    return AppUser(id: user.id, email: user.email ?? '');
+    final known = _enriched;
+    if (known != null && known.id == user.id) return known;
+    return AppUser(id: user.id, email: user.email ?? '', profilePending: true);
   }
 
   /// Replaces the bare session user with the profile-backed one.
@@ -157,10 +184,25 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
   /// Failure is not fatal: the bare user already says the true thing about
   /// being signed in, and a missing username is better than a screen claiming
   /// nobody is logged in.
+  ///
+  /// A failed lookup is retried, a few times and further apart each time:
+  /// one dropped request on a flaky connection — a resume, a sign-in on
+  /// mobile data — used to leave the username blank until something else
+  /// happened to rebuild the provider.
   Future<void> _enrich(SupabaseClient client, int generation) async {
-    final full = await _load(client);
-    if (_disposed || generation != _generation || full == null) return;
-    state = AsyncData(full);
+    for (var attempt = 0; attempt < _profileAttempts; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(_profileRetryDelay * attempt);
+      }
+      if (_disposed || generation != _generation) return;
+      final full = await _load(client);
+      if (_disposed || generation != _generation) return;
+      if (full != null) {
+        _enriched = full;
+        state = AsyncData(full);
+        return;
+      }
+    }
   }
 
   Future<AppUser?> _load(SupabaseClient client) async {
@@ -182,9 +224,11 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       isAdmin = profile?['role'] == 'admin';
       onboarded = profile?['onboarded'] as bool?;
     } catch (_) {
-      // A failed profile lookup shouldn't block showing the signed-in state.
-      // `onboarded` stays null, so a dropped request never traps someone
-      // behind the onboarding modal.
+      // Null, not a user without a profile: what is on screen — the bare
+      // session user, or the profile from before — stays, and [_enrich]
+      // asks again. `onboarded` never reads false off a dropped request, so
+      // nobody is trapped behind the onboarding modal by one.
+      return null;
     }
     return AppUser(
       id: user.id,
@@ -519,6 +563,18 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
       // not worth sending the user back through onboarding.
     }
 
+    // What was just written, so the rebuild below carries it rather than
+    // the profile from before onboarding — whose `onboarded: false` would
+    // put the modal straight back up until the lookup returned.
+    final known = _enriched;
+    _enriched = AppUser(
+      id: user.id,
+      email: user.email ?? '',
+      username: username,
+      avatarUrl: known?.id == user.id ? known?.avatarUrl : null,
+      isAdmin: known?.id == user.id && (known?.isAdmin ?? false),
+      onboarded: true,
+    );
     ref.invalidateSelf();
     return null;
   }

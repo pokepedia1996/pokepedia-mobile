@@ -6,7 +6,9 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/utils/price_input_formatter.dart';
 import '../../repository/models/listing_offer.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// What the seller countered with.
 class CounterOfferInput {
@@ -121,10 +123,14 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                 controller: _price,
                 autofocus: true,
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  const PriceInputFormatter(),
+                ],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  prefixText: 'Rp ',
+                  prefixIcon: const RupiahPrefix(),
+                  prefixIconConstraints: RupiahPrefix.constraints,
                   hintText: '0',
                   errorText: hint,
                   border: OutlineInputBorder(

@@ -338,12 +338,16 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            CollectionConditionField(
-              label: 'Kondisi',
-              value: _condition,
-              onChanged: (value) => setState(() => _condition = value),
-            ),
+            // A sealed product has no condition to grade; it is kept as NM,
+            // which [_condition] already is.
+            if (!widget.card.isSealed) ...[
+              const SizedBox(height: 14),
+              CollectionConditionField(
+                label: 'Kondisi',
+                value: _condition,
+                onChanged: (value) => setState(() => _condition = value),
+              ),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => Navigator.of(
