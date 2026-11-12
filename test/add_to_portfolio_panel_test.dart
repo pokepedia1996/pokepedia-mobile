@@ -72,6 +72,7 @@ MarketPricePoint _point(CardCondition condition, int daysAgo, int price) =>
 
 Future<_FakeOwnership> _pump(
   WidgetTester tester, {
+  CardModel card = _card,
   int owned = 0,
   Map<CardCondition, int>? held,
   List<MarketPricePoint> series = const [],
@@ -92,11 +93,11 @@ Future<_FakeOwnership> _pump(
         listsProvider.overrideWith((ref) async => []),
         conditionQuantitiesProvider((
           listId: null,
-          cardId: _card.id,
+          cardId: card.id,
         )).overrideWith((ref) async => held ?? {CardCondition.nm: owned}),
-        cardMarketPriceProvider(_card.id).overrideWith((ref) async => price),
+        cardMarketPriceProvider(card.id).overrideWith((ref) async => price),
         marketPriceSeriesProvider((
-          cardId: _card.id,
+          cardId: card.id,
           days: null,
         )).overrideWith((ref) async => series),
       ],
@@ -104,8 +105,8 @@ Future<_FakeOwnership> _pump(
         theme: AppTheme.light,
         // Scrolling, as on the card page: open, the picker is taller than
         // the test screen.
-        home: const Scaffold(
-          body: SingleChildScrollView(child: AddToPortfolioPanel(card: _card)),
+        home: Scaffold(
+          body: SingleChildScrollView(child: AddToPortfolioPanel(card: card)),
         ),
       ),
     ),
@@ -452,6 +453,39 @@ void main() {
       await tester.tap(find.text('LP ×1'));
       await tester.pumpAndSettle();
       expect(find.text('Lightly Played'), findsOneWidget);
+    });
+  });
+
+  group('a sealed product', () {
+    const box = CardModel(
+      id: 43,
+      category: CardCategory.sealed,
+      nameId: 'Booster Box Kobaran Biru',
+      expansionCode: 'MA2',
+      packSlug: 'ma2',
+      collectorNumber: '',
+      rarity: '',
+      variant: 'normal',
+    );
+
+    testWidgets('has no condition to pick, and is counted as NM', (
+      tester,
+    ) async {
+      final ownership = await _pump(
+        tester,
+        card: box,
+        held: {CardCondition.nm: 2},
+      );
+
+      expect(find.text('Near Mint'), findsNothing);
+      expect(find.text('Di koleksi'), findsNothing);
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.plus));
+      await tester.pump();
+      expect(ownership.conditions, [CardCondition.nm]);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
     });
   });
 

@@ -261,8 +261,8 @@ class ListingModel {
     return ListingModel(
       id: (row['id'] as num).toInt(),
       // The RPC returns this and it was being dropped, which left every row
-      // from this path with an empty seller — `excludeOwnListings` compares
-      // against it, so the marketplace was showing you your own listings.
+      // from this path with an empty seller — and no way to tell your own
+      // tile from anyone else's.
       sellerId: row['user_id'] as String? ?? '',
       slug: row['slug'] as String? ?? '',
       side: (row['side'] as String?) == 'bid'

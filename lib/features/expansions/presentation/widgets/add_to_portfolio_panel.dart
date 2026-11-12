@@ -224,6 +224,10 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
     final target = ref.watch(selectedPortfolioProvider);
     final counts = _serverCounts(target);
 
+    // A sealed product has no condition to grade: it is kept as NM, and the
+    // condition trigger, picker and "Di koleksi" row are left out.
+    final sealed = widget.card.isSealed;
+
     // The condition the row opens on: the one held most in this portfolio,
     // chosen once its counts are in — and again for another portfolio. A
     // guest's counts are empty, so theirs is Near Mint.
@@ -231,7 +235,9 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
       _conditionFor = target;
       _condition = defaultPickerCondition(counts);
     }
-    final condition = _condition ?? CardCondition.nm;
+    final condition = sealed
+        ? CardCondition.nm
+        : _condition ?? CardCondition.nm;
     final server = counts == null ? null : counts[condition] ?? 0;
     final seedKey = (target: target, condition: condition);
 
@@ -323,7 +329,7 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
-            child: OwnedConditionsRow.shouldShow(held)
+            child: !sealed && OwnedConditionsRow.shouldShow(held)
                 ? OwnedConditionsRow(owned: held, onTap: locked ? null : _pick)
                 : const SizedBox(width: double.infinity),
           ),
@@ -332,17 +338,19 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             child: Row(
               children: [
                 Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConditionTrigger(
-                      condition: condition,
-                      open: _open,
-                      onTap: () => setState(() {
-                        _closeTimer?.cancel();
-                        _open = !_open;
-                      }),
-                    ),
-                  ),
+                  child: sealed
+                      ? const SizedBox.shrink()
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: ConditionTrigger(
+                            condition: condition,
+                            open: _open,
+                            onTap: () => setState(() {
+                              _closeTimer?.cancel();
+                              _open = !_open;
+                            }),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 10),
                 // The stepper keeps its shape while the count is still
@@ -369,7 +377,7 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             alignment: Alignment.topCenter,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
-              child: _open
+              child: _open && !sealed
                   ? IgnorePointer(
                       // Locked while a count is being written.
                       ignoring: locked,

@@ -25,6 +25,9 @@ import '../../expansions/presentation/widgets/bid_proposal_sheet.dart';
 import '../../expansions/presentation/widgets/place_order_sheet.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../../expansions/utils/untradeable_expansions.dart';
+import '../../proposals/presentation/widgets/bid_edit_sheet.dart';
+import '../../proposals/repository/models/my_bid.dart';
+import '../../proposals/usecase/proposals_notifier.dart';
 import '../usecase/market_notifier.dart';
 
 /// The WTB half of [StoreCardListingPage] — one buyer's wanted-ad for one
@@ -253,6 +256,66 @@ class _BidPanel extends ConsumerWidget {
       );
   }
 
+  /// The buyer's own bid: change its price or quantity, as the card's
+  /// Proposal page does.
+  ///
+  /// Read fresh rather than taken from [listing]: a bid that has had a
+  /// proposal is fixed — the seller answered *that* price — and only the
+  /// proposal counts say whether it has. With one, the buyer is told why
+  /// and pointed at the proposals instead.
+  Future<void> _editBid(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(proposalsRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    void say(String message, {SnackBarAction? action}) => messenger
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(content: Text(message), action: action, persist: false),
+      );
+
+    final MyBidModel? bid;
+    try {
+      final bids = await repo.fetchMyBids(cardId: card.id);
+      bid = bids.where((b) => b.slug == listing.slug).firstOrNull;
+    } catch (_) {
+      say('Gagal memuat bid. Coba lagi.');
+      return;
+    }
+    if (!context.mounted) return;
+    if (bid == null) {
+      say('Bid ini sudah tidak aktif.');
+      ref.invalidate(bidListingProvider(listing.slug));
+      return;
+    }
+    if (bid.totalProposals > 0) {
+      say(
+        'Bid ini sudah menerima proposal — tidak bisa diubah.',
+        action: SnackBarAction(
+          label: 'Lihat',
+          onPressed: () => context.push(Routes.cardProposals(card.id)),
+        ),
+      );
+      return;
+    }
+
+    final edit = await showBidEditSheet(context, bid: bid);
+    if (edit == null || edit.isEmpty || !context.mounted) return;
+
+    final error = await repo.updateBid(
+      slug: bid.slug,
+      price: edit.price,
+      quantity: edit.quantity,
+    );
+    if (!context.mounted) return;
+    if (error != null) {
+      say(error);
+      return;
+    }
+    ref.invalidate(bidListingProvider(listing.slug));
+    ref.invalidate(orderBookProvider);
+    ref.invalidate(myBidsProvider);
+    say('Bid diperbarui');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
@@ -325,26 +388,41 @@ class _BidPanel extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: ownBid || untradeable || soldOut
-                            ? null
-                            : () => _fulfilBid(context, ref),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: semantic.success,
-                          minimumSize: const Size(0, 40),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        child: const Text(
-                          'Penuhi Bid',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                // Nobody fills their own bid; what its owner can do is
+                // change it.
+                if (ownBid)
+                  OutlinedButton.icon(
+                    onPressed: () => _editBid(context, ref),
+                    icon: const Icon(LucideIcons.pencil, size: 16),
+                    label: const Text(
+                      'Edit Bid',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: untradeable || soldOut
+                              ? null
+                              : () => _fulfilBid(context, ref),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: semantic.success,
+                            minimumSize: const Size(0, 40),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          child: const Text(
+                            'Penuhi Bid',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
               ],
             ),
           ),

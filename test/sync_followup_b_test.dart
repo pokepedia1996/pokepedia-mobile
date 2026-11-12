@@ -20,6 +20,7 @@ import 'package:pokepedia_mobile/features/cart/usecase/checkout_notifier.dart';
 import 'package:pokepedia_mobile/features/expansions/usecase/expansions_notifier.dart';
 import 'package:pokepedia_mobile/features/proposals/presentation/card_proposals_page.dart';
 import 'package:pokepedia_mobile/features/proposals/repository/models/bid_proposal_model.dart';
+import 'package:pokepedia_mobile/features/proposals/repository/models/my_bid.dart';
 import 'package:pokepedia_mobile/features/proposals/repository/proposals_repository.dart';
 import 'package:pokepedia_mobile/features/proposals/usecase/proposals_notifier.dart';
 import 'package:pokepedia_mobile/features/wallet/usecase/wallet_notifier.dart';
@@ -230,6 +231,16 @@ class _AcceptingRepository extends ProposalsRepository {
 
   @override
   Future<void> markProposalsSeen(Iterable<String> slugs) async {}
+
+  // The card page asks for its own card's rows rather than reading the
+  // shared lists, so they come from here.
+  @override
+  Future<List<MyBidModel>> fetchMyBids({int? cardId}) async => const [];
+
+  @override
+  Future<List<BidProposalModel>> fetchBidProposals({int? cardId}) async => [
+    _proposal(),
+  ];
 }
 
 BidProposalModel _proposal() => BidProposalModel(

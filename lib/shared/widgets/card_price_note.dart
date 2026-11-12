@@ -54,7 +54,7 @@ class CardPriceNote extends StatelessWidget {
       // grid cell is ~150pt wide with a price already in it, so the noun is
       // dropped and the superlative — the half that says which end of the
       // book the number is from — is kept. The card detail page has the room
-      // for the full wording and still uses it.
+      // to name the side too: "WTS termurah", "WTB tertinggi".
       CardPriceSource.ask => _SourceBadge(
         label: 'Termurah',
         color: context.mutedForeground,
