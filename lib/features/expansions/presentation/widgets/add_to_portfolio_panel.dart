@@ -612,11 +612,18 @@ class _TargetButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Menambah ke: ',
-            style: AppTypography.bodySm(context.mutedForeground),
+          // Both give way on a narrow phone or with large text, rather than
+          // push the total off the panel; the label goes first.
+          Flexible(
+            child: Text(
+              'Menambah ke: ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
           ),
           Flexible(
+            flex: 2,
             child: Text(
               target.name,
               maxLines: 1,

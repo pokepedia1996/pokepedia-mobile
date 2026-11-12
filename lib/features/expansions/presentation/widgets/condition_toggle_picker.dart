@@ -29,12 +29,13 @@ class ConditionPickerGroup {
   bool get isRaw => label != null;
 }
 
-/// Whether a collection can hold graded copies yet.
+/// Whether a collection can hold graded copies.
 ///
-/// Off until the backend takes them: `collection_cards_condition_check`
-/// allows NM, LP, MP, HP and DMG only, so a PSA 10 would be refused on save.
-/// The graded rows are built and ready; turning this on shows them.
-const collectionTakesGraded = false;
+/// On since `collection_cards_condition_check` takes every Market condition
+/// (pokepedia-web `20261112160738_collection_graded_conditions`). Before that
+/// migration is applied a graded copy is refused on save, so a build with
+/// this on must not ship ahead of it; turning it off hides the graded rows.
+const collectionTakesGraded = true;
 
 /// Order and grouping as designed: RAW first, then PSA, EGS, CGC, Beckett.
 /// This is the picker's own order; `conditionCompanies` (used by the market
@@ -189,7 +190,12 @@ class ConditionTrigger extends StatelessWidget {
   }
 }
 
-/// The open picker: RAW chips stretched across, then one row per grader.
+/// A graded chip's share of its row: double for a worded grade ("Pristine
+/// 10", "Black 10"), single for a number.
+int _chipFlex(CardCondition c) => pickerChipLabel(c).length > 4 ? 2 : 1;
+
+/// The open picker: RAW chips stretched across, then one row per grader,
+/// stretched the same way.
 class ConditionTogglePicker extends StatelessWidget {
   const ConditionTogglePicker({
     super.key,
@@ -268,10 +274,19 @@ class ConditionTogglePicker extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Wrap(
-                spacing: 5,
-                runSpacing: 5,
-                children: [for (final c in group.conditions) chipFor(c)],
+              // Stretched across the row like RAW's, each chip's share
+              // weighted by its label, so "Pristine 10" gets the room
+              // "9" doesn't need.
+              child: Row(
+                children: [
+                  for (var i = 0; i < group.conditions.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 5),
+                    Expanded(
+                      flex: _chipFlex(group.conditions[i]),
+                      child: chipFor(group.conditions[i], stretch: true),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -363,13 +378,17 @@ class _ConditionChip extends StatelessWidget {
         border: Border.all(color: selected ? primary : context.borderColor),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        label,
-        maxLines: 1,
-        style: GoogleFonts.urbanist(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: selected ? primary : fg,
+      // Shrinks rather than clips when a stretched row is tight.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          style: GoogleFonts.urbanist(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? primary : fg,
+          ),
         ),
       ),
     );
@@ -436,7 +455,7 @@ class _OwnedBadge extends StatelessWidget {
   }
 }
 
-/// "Di koleksi  NM ×2  PSA 10 ×1" — only when more than one condition is held.
+/// "Di koleksi  NM ×2  PSA 10 ×1" — whenever anything is held.
 class OwnedConditionsRow extends StatelessWidget {
   const OwnedConditionsRow({super.key, required this.owned, this.onTap});
 
@@ -445,9 +464,11 @@ class OwnedConditionsRow extends StatelessWidget {
   /// Optional: tapping a pill selects that condition in the row below.
   final ValueChanged<CardCondition>? onTap;
 
-  /// Shown only for 2+ distinct conditions; 0 or 1 hides the row.
+  /// Shown as soon as any copy is held, so what the user already owns is
+  /// always in sight above the counter. (The handoff hid it for a single
+  /// condition; the product owner wants it for one too.)
   static bool shouldShow(Map<CardCondition, int> owned) =>
-      owned.values.where((q) => q > 0).length > 1;
+      owned.values.any((q) => q > 0);
 
   @override
   Widget build(BuildContext context) {

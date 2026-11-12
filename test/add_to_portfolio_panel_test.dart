@@ -102,7 +102,11 @@ Future<_FakeOwnership> _pump(
       ],
       child: MaterialApp(
         theme: AppTheme.light,
-        home: const Scaffold(body: AddToPortfolioPanel(card: _card)),
+        // Scrolling, as on the card page: open, the picker is taller than
+        // the test screen.
+        home: const Scaffold(
+          body: SingleChildScrollView(child: AddToPortfolioPanel(card: _card)),
+        ),
       ),
     ),
   );
@@ -283,11 +287,17 @@ void main() {
       expect(find.text('3'), findsOneWidget);
     });
 
-    testWidgets('"Di koleksi" only once two conditions are held', (
+    testWidgets('nothing held, no "Di koleksi"', (tester) async {
+      await _pump(tester, held: const {});
+      expect(find.text('Di koleksi'), findsNothing);
+    });
+
+    testWidgets('"Di koleksi" lists what is held, from the first copy', (
       tester,
     ) async {
       await _pump(tester, held: {CardCondition.nm: 2});
-      expect(find.text('Di koleksi'), findsNothing);
+      expect(find.text('Di koleksi'), findsOneWidget);
+      expect(find.text('NM ×2'), findsOneWidget);
 
       await tester.tap(find.text('Near Mint'));
       await tester.pumpAndSettle();
@@ -320,9 +330,64 @@ void main() {
       // Damaged copies are a condition of their own.
       expect(find.bySemanticsLabel('Damaged, 1 di koleksi'), findsOneWidget);
       expect(find.bySemanticsLabel('Lightly Played'), findsOneWidget);
-      // Graded copies wait for the backend to take them.
-      expect(find.text('GRADED'), findsNothing);
+      // And every grader's row, under GRADED.
+      expect(find.text('GRADED'), findsOneWidget);
+      expect(find.bySemanticsLabel('PSA 10'), findsOneWidget);
+      expect(find.bySemanticsLabel('CGC Pristine 10'), findsOneWidget);
+      expect(find.bySemanticsLabel('BGS Black 10'), findsOneWidget);
       semantics.dispose();
+    });
+
+    testWidgets('every graded row stretches to the edge, as RAW does', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      // A phone's width, where "Pristine 10" has least room.
+      tester.view.physicalSize = const Size(360 * 3, 1600 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      await tester.tap(find.text('Near Mint'));
+      await tester.pumpAndSettle();
+
+      // RAW's last chip is DMG.
+      final edge = tester.getRect(find.bySemanticsLabel('Damaged')).right;
+      for (final last in ['PSA ≤8', 'EGS ≤8', 'CGC ≤8', 'BGS ≤8']) {
+        expect(
+          tester.getRect(find.bySemanticsLabel(last)).right,
+          moreOrLessEquals(edge, epsilon: 1),
+          reason: last,
+        );
+      }
+      // A worded grade gets the wider share.
+      expect(
+        tester.getRect(find.bySemanticsLabel('CGC Pristine 10')).width,
+        greaterThan(tester.getRect(find.bySemanticsLabel('CGC 10')).width),
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('a graded copy is counted and written as its grade', (
+      tester,
+    ) async {
+      final ownership = await _pump(tester, held: {CardCondition.nm: 1});
+
+      await tester.tap(find.text('Near Mint'));
+      await tester.pumpAndSettle();
+      // PSA's row: 10, 9, ≤8 — the first "10" on screen is PSA's.
+      await tester.tap(find.text('10').first);
+      await tester.pumpAndSettle();
+      expect(find.text('PSA 10'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.plus));
+      await tester.pump();
+      expect(ownership.conditions, [CardCondition.psa10]);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      // Held as NM and PSA 10 now: both show, by their own labels.
+      expect(find.text('NM ×1'), findsOneWidget);
+      expect(find.text('PSA 10 ×1'), findsOneWidget);
     });
 
     testWidgets('the total is every condition at its own price', (
