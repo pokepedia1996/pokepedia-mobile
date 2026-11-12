@@ -18,6 +18,7 @@ import '../../repository/models/open_dispute.dart';
 import '../../usecase/orders_notifier.dart';
 import '../../utils/dispute_gating.dart';
 import '../../utils/dispute_reasons.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// What the buyer can do on a dispute — web's `BuyerDisputeActions`.
 class BuyerDisputeActionsPanel extends StatelessWidget {
@@ -861,7 +862,8 @@ class _PartialRefundFormState extends ConsumerState<_PartialRefundForm> {
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             hintText: 'Masukkan nominal',
-            prefixText: 'Rp ',
+            prefixIcon: const RupiahPrefix(),
+            prefixIconConstraints: RupiahPrefix.constraints,
             errorText: value != null && !valid
                 ? 'Nominal harus 1 - ${formatRupiah(escrow - 1)}'
                 : null,

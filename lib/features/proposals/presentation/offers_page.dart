@@ -7,6 +7,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/utils/price_input_formatter.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
@@ -14,6 +15,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/listing_offer_model.dart';
 import '../usecase/proposals_notifier.dart';
 import '../../cart/usecase/cart_notifier.dart';
+import '../../../shared/widgets/rupiah_prefix.dart';
 
 /// Offers this user made on sellers' ask listings (`listing_offers`).
 ///
@@ -274,7 +276,7 @@ Future<int?> showCounterPriceDialog(
   required String title,
   required int initialPrice,
 }) {
-  final controller = TextEditingController(text: '$initialPrice');
+  final controller = TextEditingController(text: formatCountId(initialPrice));
   return showDialog<int>(
     context: context,
     builder: (context) => AlertDialog(
@@ -287,8 +289,15 @@ Future<int?> showCounterPriceDialog(
         controller: controller,
         autofocus: true,
         keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(prefixText: 'Rp ', hintText: '0'),
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          const PriceInputFormatter(),
+        ],
+        decoration: const InputDecoration(
+          prefixIcon: RupiahPrefix(),
+          prefixIconConstraints: RupiahPrefix.constraints,
+          hintText: '0',
+        ),
       ),
       actions: [
         TextButton(
@@ -297,7 +306,9 @@ Future<int?> showCounterPriceDialog(
         ),
         FilledButton(
           onPressed: () {
-            final value = int.tryParse(controller.text) ?? 0;
+            final value =
+                int.tryParse(controller.text.replaceAll(RegExp(r'\D'), '')) ??
+                0;
             Navigator.of(context).pop(value > 0 ? value : null);
           },
           child: const Text('Kirim'),

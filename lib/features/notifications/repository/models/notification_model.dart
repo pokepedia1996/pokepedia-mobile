@@ -4,9 +4,9 @@ import '../../../../core/utils/formatters.dart';
 /// enum in `supabase/migrations/00000000000000_baseline.sql`.
 enum NotificationCategory { actionRequired, statusUpdate, social, admin }
 
-/// A curated, buyer-relevant subset of `notifications.type`'s ~48-value
-/// check constraint — the full list also covers seller/admin-only events
-/// out of scope for this pass.
+/// A curated subset of `notifications.type`'s check constraint (67 values
+/// as of `20261028090834_dispute_sla_fixes`) — the rest are shown all the
+/// same, as [NotificationType.other].
 enum NotificationType {
   listingSold,
   paymentReceived,
@@ -29,7 +29,7 @@ enum NotificationType {
   userReported,
 
   /// Anything outside the curated list above — still shown, just with the
-  /// generic icon. The constraint carries ~48 types and grows server-side.
+  /// generic icon. The constraint grows server-side.
   other,
 }
 

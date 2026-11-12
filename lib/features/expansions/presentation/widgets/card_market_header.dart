@@ -129,12 +129,12 @@ class _Headline extends StatelessWidget {
           ),
           if (fallback.source == CardPriceSource.ask)
             _SourceTag(
-              label: 'Listing termurah',
+              label: 'WTS termurah',
               color: context.mutedForeground,
             ),
           if (fallback.source == CardPriceSource.bid)
             _SourceTag(
-              label: 'Penawaran tertinggi',
+              label: 'WTB tertinggi',
               color: context.appSemantic.gold,
             ),
         ],

@@ -12,6 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/shimmer_box.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../chat/usecase/chat_notifier.dart';
 import '../../notifications/usecase/notifications_notifier.dart';
@@ -278,6 +279,13 @@ class _IdentityHeader extends StatelessWidget {
     final username = user?.username;
     final hasUsername = username != null && username.isNotEmpty;
 
+    // The session answers before the profile does, so for a moment a
+    // signed-in user has no username for want of the row, not for want of
+    // one. Asking them to pick one then is wrong for everyone who has.
+    if (user != null && user.profilePending) {
+      return const _IdentityHeaderShimmer();
+    }
+
     // The username, never the email. This used to fall back to the email's
     // local part, which reads as a username without being one and puts part
     // of the address on a screen the user may well be showing someone else.
@@ -378,6 +386,77 @@ class _IdentityHeader extends StatelessWidget {
   }
 }
 
+/// [_IdentityHeader] while the profile row is still on its way: the same box,
+/// with the avatar, name and link line shimmering where they will land.
+class _IdentityHeaderShimmer extends StatelessWidget {
+  const _IdentityHeaderShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(bottom: BorderSide(color: context.borderColor)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox.square(
+            dimension: 48,
+            child: ShimmerBox(
+              borderRadius: BorderRadius.all(Radius.circular(24)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TextShimmer(
+                width: 128,
+                style: AppTypography.bodySemibold(context.appColors.onSurface),
+              ),
+              _TextShimmer(
+                width: 72,
+                style: AppTypography.caption(context.mutedForeground),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A shimmer bar exactly one line of [style] tall, so the text it stands in
+/// for arrives without the row changing height.
+class _TextShimmer extends StatelessWidget {
+  const _TextShimmer({required this.width, required this.style});
+
+  final double width;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Stack(
+        children: [
+          // Invisible, for its line height alone.
+          Opacity(opacity: 0, child: Text(' ', style: style)),
+          const Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 3),
+              child: ShimmerBox(
+                borderRadius: BorderRadius.all(Radius.circular(AppRadius.xs)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The three things people open this tab for, as a row of tiles under the
 /// profile — the rest of the page is a list you scan, this is the part you
 /// tap without reading.
@@ -386,6 +465,8 @@ class _QuickActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final balance = ref.watch(walletBalanceProvider);
+
     return Container(
       margin: const EdgeInsets.only(top: 16),
       decoration: BoxDecoration(
@@ -402,11 +483,14 @@ class _QuickActions extends ConsumerWidget {
                 icon: LucideIcons.wallet,
                 label: 'Saldo',
                 // The number is the reason to look, so it's shown here
-                // rather than behind a tap. A dash until it loads, not
-                // Rp0 — a zero balance and an unknown one aren't the same.
-                value: ref
-                    .watch(walletBalanceProvider)
-                    .maybeWhen(data: formatRupiah, orElse: () => 'Rp–'),
+                // rather than behind a tap.
+                // A shimmer while it loads, a dash if it failed — not Rp0:
+                // a zero balance and an unknown one aren't the same.
+                value: balance.maybeWhen(
+                  data: formatRupiah,
+                  orElse: () => 'Rp–',
+                ),
+                valueLoading: balance.isLoading && !balance.hasValue,
                 onTap: () => context.push(Routes.wallet),
               ),
             ),
@@ -442,6 +526,7 @@ class _QuickAction extends StatelessWidget {
     required this.onTap,
     this.badge = 0,
     this.value,
+    this.valueLoading = false,
   });
 
   final IconData icon;
@@ -451,6 +536,9 @@ class _QuickAction extends StatelessWidget {
 
   /// A figure worth reading at a glance, under the label.
   final String? value;
+
+  /// Shimmers in place of [value] while it is on its way.
+  final bool valueLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -501,12 +589,18 @@ class _QuickAction extends StatelessWidget {
             ),
             if (value != null) ...[
               const SizedBox(height: 2),
-              Text(
-                value!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySmSemibold(colors.onSurface),
-              ),
+              if (valueLoading)
+                _TextShimmer(
+                  width: 72,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                )
+              else
+                Text(
+                  value!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                ),
             ],
           ],
         ),

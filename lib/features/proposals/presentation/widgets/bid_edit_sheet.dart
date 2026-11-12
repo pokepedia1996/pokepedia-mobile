@@ -6,7 +6,9 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/utils/price_input_formatter.dart';
 import '../../repository/models/my_bid.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// What the seller changed. Null fields are left alone, which is what
 /// `update_order_self` expects — it rejects a call where everything is null
@@ -47,7 +49,9 @@ class _BidEditSheet extends StatefulWidget {
 }
 
 class _BidEditSheetState extends State<_BidEditSheet> {
-  late final _price = TextEditingController(text: widget.bid.price.toString());
+  late final _price = TextEditingController(
+    text: formatCountId(widget.bid.price),
+  );
   late int _quantity = widget.bid.quantity;
   String? _error;
 
@@ -62,7 +66,7 @@ class _BidEditSheetState extends State<_BidEditSheet> {
   }
 
   void _submit() {
-    final price = int.tryParse(_price.text.trim().replaceAll('.', ''));
+    final price = int.tryParse(_price.text.replaceAll(RegExp(r'\D'), ''));
     if (price == null || price <= 0 || price > 999999999) {
       setState(() => _error = 'Harga tidak valid.');
       return;
@@ -108,13 +112,17 @@ class _BidEditSheetState extends State<_BidEditSheet> {
             TextField(
               controller: _price,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                const PriceInputFormatter(),
+              ],
               onChanged: (_) {
                 if (_error != null) setState(() => _error = null);
               },
               decoration: InputDecoration(
                 labelText: 'Harga per kartu',
-                prefixText: 'Rp ',
+                prefixIcon: const RupiahPrefix(),
+                prefixIconConstraints: RupiahPrefix.constraints,
                 isDense: true,
                 errorText: _error,
               ),
@@ -158,7 +166,7 @@ class _BidEditSheetState extends State<_BidEditSheet> {
               ),
             const SizedBox(height: 16),
             Text(
-              'Total ${formatRupiah((int.tryParse(_price.text.trim()) ?? 0) * _quantity)}',
+              'Total ${formatRupiah((int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0) * _quantity)}',
               style: AppTypography.bodySmSemibold(colors.onSurface),
             ),
             const SizedBox(height: 12),
