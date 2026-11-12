@@ -8,16 +8,15 @@ import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/providers/card_ownership_controller.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/expansions/presentation/widgets/add_to_portfolio_panel.dart';
+import 'package:pokepedia_mobile/features/expansions/repository/models/market_models.dart';
 import 'package:pokepedia_mobile/features/expansions/usecase/expansions_notifier.dart';
 import 'package:pokepedia_mobile/features/portfolio/usecase/portfolio_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_condition.dart';
-import 'package:pokepedia_mobile/shared/models/card_market_price.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
 
 /// The panel that replaced the bare stepper under the artwork. Its job is to
-/// say where a copy is going, keep a running total, and write once when the
-/// tapping stops — the last part is the one worth pinning down, since a
-/// stepper that wrote per tap would cost five round trips to add five.
+/// say where a copy is going and in what condition, keep a running total
+/// over every condition held, and write each tap straight away.
 const _card = CardModel(
   id: 42,
   category: CardCategory.pokemon,
@@ -63,10 +62,19 @@ class _FakeOwnership implements CardOwnershipController {
       throw UnimplementedError(invocation.memberName.toString());
 }
 
+/// A day of the year-long series, [daysAgo] before today.
+MarketPricePoint _point(CardCondition condition, int daysAgo, int price) =>
+    MarketPricePoint(
+      condition: condition,
+      day: DateTime(2026, 11, 12).subtract(Duration(days: daysAgo)),
+      rawPrice: price,
+    );
+
 Future<_FakeOwnership> _pump(
   WidgetTester tester, {
   int owned = 0,
   Map<CardCondition, int>? held,
+  List<MarketPricePoint> series = const [],
   CardMarketPrice? price = const CardMarketPrice(
     price: 125000,
     condition: CardCondition.nm,
@@ -87,6 +95,10 @@ Future<_FakeOwnership> _pump(
           cardId: _card.id,
         )).overrideWith((ref) async => held ?? {CardCondition.nm: owned}),
         cardMarketPriceProvider(_card.id).overrideWith((ref) async => price),
+        marketPriceSeriesProvider((
+          cardId: _card.id,
+          days: null,
+        )).overrideWith((ref) async => series),
       ],
       child: MaterialApp(
         theme: AppTheme.light,
@@ -104,8 +116,8 @@ void main() {
 
     expect(find.textContaining('Menambah ke'), findsOneWidget);
     expect(find.text('Utama'), findsOneWidget);
-    // The variant is the row's label, spelled as a person would say it.
-    expect(find.text('Holofoil'), findsOneWidget);
+    // The row is labelled with the condition being counted.
+    expect(find.text('Near Mint'), findsOneWidget);
   });
 
   testWidgets('the total follows the stepper before anything is written', (
@@ -223,13 +235,15 @@ void main() {
       tester,
       held: {CardCondition.nm: 2, CardCondition.lp: 1},
     );
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Near Mint'), findsOneWidget);
 
-    await tester.tap(find.text('NM'));
+    await tester.tap(find.text('Near Mint'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Lightly Played'));
+    await tester.tap(find.text('LP').last);
     await tester.pumpAndSettle();
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Lightly Played'), findsOneWidget);
+    // And the picker has folded away again.
+    expect(find.text('RAW'), findsNothing);
 
     await tester.tap(find.byIcon(LucideIcons.plus));
     await tester.pump();
@@ -260,5 +274,148 @@ void main() {
     );
 
     expect(find.textContaining('%'), findsNothing);
+  });
+
+  group('conditions', () {
+    testWidgets('opens on the condition held most', (tester) async {
+      await _pump(tester, held: {CardCondition.nm: 1, CardCondition.lp: 3});
+      expect(find.text('Lightly Played'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('"Di koleksi" only once two conditions are held', (
+      tester,
+    ) async {
+      await _pump(tester, held: {CardCondition.nm: 2});
+      expect(find.text('Di koleksi'), findsNothing);
+
+      await tester.tap(find.text('Near Mint'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LP').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(LucideIcons.plus));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      // NM ×2 and now LP ×1: the row shows both, in picker order.
+      expect(find.text('Di koleksi'), findsOneWidget);
+      expect(find.text('NM ×2'), findsOneWidget);
+      expect(find.text('LP ×1'), findsOneWidget);
+
+      // A pill picks its condition without opening the picker.
+      await tester.tap(find.text('NM ×2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Near Mint'), findsOneWidget);
+      expect(find.text('RAW'), findsNothing);
+    });
+
+    testWidgets('each chip says how many are held', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(tester, held: {CardCondition.nm: 2, CardCondition.dmg: 1});
+      await tester.tap(find.text('Near Mint'));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Near Mint, 2 di koleksi'), findsOneWidget);
+      // Damaged copies are a condition of their own.
+      expect(find.bySemanticsLabel('Damaged, 1 di koleksi'), findsOneWidget);
+      expect(find.bySemanticsLabel('Lightly Played'), findsOneWidget);
+      // Graded copies wait for the backend to take them.
+      expect(find.text('GRADED'), findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('the total is every condition at its own price', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        held: {CardCondition.nm: 2, CardCondition.lp: 1},
+        series: [
+          _point(CardCondition.nm, 7, 90000),
+          _point(CardCondition.nm, 0, 100000),
+          _point(CardCondition.lp, 0, 60000),
+        ],
+      );
+      // 2 × Rp100.000 + 1 × Rp60.000.
+      expect(find.text('Total: Rp260.000'), findsOneWidget);
+      // The row's price is the condition's own, with its week.
+      expect(find.text('Rp100.000'), findsOneWidget);
+      expect(find.text('+Rp10.000 (11.1%)'), findsOneWidget);
+
+      await tester.tap(find.text('LP ×1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rp60.000'), findsOneWidget);
+      // Nothing a week back to measure LP's move from.
+      expect(find.textContaining('%'), findsNothing);
+    });
+
+    testWidgets('a condition nobody has sold is left out, and said so', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        held: {CardCondition.nm: 1, CardCondition.mp: 2},
+        series: [_point(CardCondition.nm, 0, 100000)],
+      );
+      expect(find.text('Total: Rp100.000'), findsOneWidget);
+      expect(find.text('1 kondisi belum ada harga'), findsOneWidget);
+
+      await tester.tap(find.text('MP ×2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rp–'), findsOneWidget);
+    });
+
+    testWidgets('no switching condition while a count is being written', (
+      tester,
+    ) async {
+      final ownership = await _pump(
+        tester,
+        held: {CardCondition.nm: 2, CardCondition.lp: 1},
+      );
+      ownership.gate = Completer<String?>();
+
+      await tester.tap(find.byIcon(LucideIcons.plus));
+      await tester.pump();
+      await tester.tap(find.text('LP ×1'));
+      await tester.pump();
+      expect(find.text('Near Mint'), findsOneWidget);
+
+      ownership.gate!.complete(null);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LP ×1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lightly Played'), findsOneWidget);
+    });
+  });
+
+  group('prices by condition', () {
+    test('the last price, and the one a week before it', () {
+      final prices = ConditionPrice.fromSeries([
+        _point(CardCondition.nm, 10, 80000),
+        _point(CardCondition.nm, 7, 90000),
+        _point(CardCondition.nm, 3, 95000),
+        _point(CardCondition.nm, 0, 100000),
+        _point(CardCondition.psa10, 0, 800000),
+      ]);
+      expect(prices[CardCondition.nm]!.price, 100000);
+      expect(prices[CardCondition.nm]!.price7dAgo, 90000);
+      expect(prices[CardCondition.psa10]!.price, 800000);
+      expect(prices[CardCondition.psa10]!.price7dAgo, isNull);
+      expect(prices.containsKey(CardCondition.lp), isFalse);
+    });
+
+    test('the EWMA when there is one, as the chart draws it', () {
+      final prices = ConditionPrice.fromSeries([
+        MarketPricePoint(
+          condition: CardCondition.nm,
+          day: DateTime(2026, 11, 12),
+          rawPrice: 100000,
+          avgPrice: 97000,
+        ),
+      ]);
+      expect(prices[CardCondition.nm]!.price, 97000);
+    });
   });
 }
