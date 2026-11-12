@@ -89,6 +89,15 @@ class AppTypography {
     color: color,
   );
 
+  /// Handwritten accents in the hand-drawn screens: eyebrows, hints, notes,
+  /// step labels. Patrick Hand, bundled.
+  static TextStyle hand(Color color, {double size = 18}) => TextStyle(
+    fontFamily: 'PatrickHand',
+    fontSize: size,
+    height: 1.1,
+    color: color,
+  );
+
   static TextTheme textTheme(Color foreground) => TextTheme(
     displayMedium: display(foreground),
     headlineLarge: h1(foreground),
