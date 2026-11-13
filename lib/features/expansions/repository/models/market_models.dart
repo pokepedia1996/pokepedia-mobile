@@ -78,6 +78,48 @@ class MarketHeadline {
 /// The window `useMarketHeadline` measures its delta over.
 const headlineDays = 7;
 
+/// One condition's market price, and what it was about a week before — the
+/// row price and its move in the card page's condition picker.
+class ConditionPrice {
+  const ConditionPrice({required this.price, this.price7dAgo});
+
+  final int price;
+
+  /// Null when the condition has no price as far back as a week.
+  final int? price7dAgo;
+
+  /// Per condition, from a [MarketPricePoint] series: the last point, and
+  /// the last one at least 7 days before it.
+  ///
+  /// What `get_card_condition_prices` (handoff 08 §6.5) computes server
+  /// side, from the same series — so the row agrees with the chart beside
+  /// it either way.
+  static Map<CardCondition, ConditionPrice> fromSeries(
+    List<MarketPricePoint> series,
+  ) {
+    final byCondition = <CardCondition, List<MarketPricePoint>>{};
+    for (final point in series) {
+      (byCondition[point.condition] ??= []).add(point);
+    }
+    return {
+      for (final MapEntry(key: condition, value: points) in byCondition.entries)
+        condition: () {
+          points.sort((a, b) => a.day.compareTo(b.day));
+          final last = points.last;
+          final weekBefore = last.day.subtract(const Duration(days: 7));
+          final then = points.lastWhere(
+            (p) => !p.day.isAfter(weekBefore),
+            orElse: () => last,
+          );
+          return ConditionPrice(
+            price: last.price,
+            price7dAgo: identical(then, last) ? null : then.price,
+          );
+        }(),
+    };
+  }
+}
+
 /// A price level of the order book — every open listing on one side at one
 /// price/condition, aggregated by the `get_order_book` RPC.
 class OrderBookLevel {
