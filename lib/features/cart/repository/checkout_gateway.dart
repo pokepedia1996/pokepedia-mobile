@@ -685,6 +685,17 @@ class CheckoutGateway {
     );
   }
 
+  /// Has the server ask the gateway about the order, and settle it if the
+  /// gateway says it was paid. The fallback for a payment notification that
+  /// is late or never arrives; the answer is read back through
+  /// [fetchProgress].
+  Future<void> syncPayment(String externalId) async {
+    await _api.post(
+      '/api/carts/${Uri.encodeComponent(externalId)}/sync',
+      const {},
+    );
+  }
+
   /// The decision [fetchProgress] makes from one `carts` row.
   static CheckoutProgress progressFromRow({
     required String? status,
