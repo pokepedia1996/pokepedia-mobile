@@ -29,6 +29,7 @@ class PaymentMethodPicker extends StatelessWidget {
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
+    this.paymentOptions = PaymentOptions.xenditDefault,
     required this.onPick,
   });
 
@@ -40,6 +41,9 @@ class PaymentMethodPicker extends StatelessWidget {
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
+
+  /// The server's gateway and channel rules; what the sheet lists.
+  final PaymentOptions paymentOptions;
   final ValueChanged<PaymentPick> onPick;
 
   Future<void> _open(BuildContext context) async {
@@ -55,6 +59,7 @@ class PaymentMethodPicker extends StatelessWidget {
         paymentMethod: paymentMethod,
         selectedChannel: selectedChannel,
         walletBalance: walletBalance,
+        paymentOptions: paymentOptions,
       ),
     );
     if (picked != null) onPick(picked);
@@ -124,7 +129,10 @@ class PaymentMethodPicker extends StatelessWidget {
                     walletSelected
                         ? _saldoLabel(walletBalance)
                         : meta?.description ??
-                              (grandTotal < qrisMaxIdr
+                              (availablePaymentChannels(
+                                    grandTotal,
+                                    paymentOptions,
+                                  ).contains(PaymentChannel.qris)
                                   ? 'QRIS tersedia'
                                   : 'Virtual Account tersedia'),
                     maxLines: 1,
@@ -153,6 +161,7 @@ class _PaymentMethodSheet extends StatelessWidget {
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
+    required this.paymentOptions,
   });
 
   final int grandTotal;
@@ -160,17 +169,28 @@ class _PaymentMethodSheet extends StatelessWidget {
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
+  final PaymentOptions paymentOptions;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final allowed = availablePaymentChannels(grandTotal).toSet();
+    final allowed = availablePaymentChannels(
+      grandTotal,
+      paymentOptions,
+    ).toSet();
+    // Only what the gateway offers at some total is listed: a bank the
+    // server switched off, or a section with nothing left, isn't shown.
+    final offered = paymentOptions.offered;
     final qr = paymentChannels
         .where((m) => m.group == PaymentChannelGroup.qr)
+        .where((m) => offered.contains(m.channel))
         .toList();
     final va = paymentChannels
         .where((m) => m.group == PaymentChannelGroup.va)
+        .where((m) => offered.contains(m.channel))
         .toList();
+    final qrisUpTo = paymentOptions.maxIdrFor(PaymentChannelGroup.qr);
+    final vaFrom = paymentOptions.minIdrFor(PaymentChannelGroup.va);
     // Three states, not two: an unknown balance disables the row the same
     // way an insufficient one does, but must not accuse the buyer of being
     // short when nobody has looked yet.
@@ -289,26 +309,30 @@ class _PaymentMethodSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _ChannelSection(
-                    icon: LucideIcons.qrCode,
-                    title: 'QRIS',
-                    caption: 'Bayar instan dengan QR',
-                    unavailableHint:
-                        'Tersedia untuk pembayaran < ${formatRupiah(qrisMaxIdr)}',
-                    items: qr,
-                    allowed: allowed,
-                    selectedChannel: selectedChannel,
-                  ),
-                  _ChannelSection(
-                    icon: LucideIcons.creditCard,
-                    title: 'Virtual Account',
-                    caption: 'Transfer bank',
-                    unavailableHint:
-                        'Tersedia untuk pembayaran ≥ ${formatRupiah(qrisMaxIdr)}',
-                    items: va,
-                    allowed: allowed,
-                    selectedChannel: selectedChannel,
-                  ),
+                  if (qr.isNotEmpty)
+                    _ChannelSection(
+                      icon: LucideIcons.qrCode,
+                      title: 'QRIS',
+                      caption: 'Bayar instan dengan QR',
+                      unavailableHint:
+                          'Tersedia untuk pembayaran < '
+                          '${formatRupiah((qrisUpTo ?? qrisMaxIdr - 1) + 1)}',
+                      items: qr,
+                      allowed: allowed,
+                      selectedChannel: selectedChannel,
+                    ),
+                  if (va.isNotEmpty)
+                    _ChannelSection(
+                      icon: LucideIcons.creditCard,
+                      title: 'Virtual Account',
+                      caption: 'Transfer bank',
+                      unavailableHint:
+                          'Tersedia untuk pembayaran ≥ '
+                          '${formatRupiah(vaFrom ?? qrisMaxIdr)}',
+                      items: va,
+                      allowed: allowed,
+                      selectedChannel: selectedChannel,
+                    ),
                   const SizedBox(height: 12),
                 ],
               ),

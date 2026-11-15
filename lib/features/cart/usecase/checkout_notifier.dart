@@ -69,6 +69,7 @@ class CheckoutState {
     this.paymentChannel,
     this.walletBalance,
     this.lastPaidChannel,
+    this.paymentOptions = PaymentOptions.xenditDefault,
     this.paymentTouched = false,
     this.sellerOrigins = const {},
     this.phoneVerified = true,
@@ -106,6 +107,10 @@ class CheckoutState {
   /// rather than always landing them on the first one in the list. Null
   /// until it has been read, and for a buyer who last paid from saldo.
   final PaymentChannel? lastPaidChannel;
+
+  /// The gateway checkout goes through and the channels it offers, from the
+  /// server. Xendit's fixed rule until it answers, and if it can't.
+  final PaymentOptions paymentOptions;
 
   /// Whether the buyer has picked a payment method themselves. Auto-select
   /// stops the moment they do — a choice that keeps being overwritten by a
@@ -146,6 +151,7 @@ class CheckoutState {
     PaymentChannel? paymentChannel,
     int? walletBalance,
     PaymentChannel? lastPaidChannel,
+    PaymentOptions? paymentOptions,
     bool? paymentTouched,
     Map<String, SellerOrigin>? sellerOrigins,
     bool? phoneVerified,
@@ -175,6 +181,7 @@ class CheckoutState {
           : (paymentChannel ?? this.paymentChannel),
       walletBalance: walletBalance ?? this.walletBalance,
       lastPaidChannel: lastPaidChannel ?? this.lastPaidChannel,
+      paymentOptions: paymentOptions ?? this.paymentOptions,
       paymentTouched: paymentTouched ?? this.paymentTouched,
       sellerOrigins: sellerOrigins ?? this.sellerOrigins,
       phoneVerified: phoneVerified ?? this.phoneVerified,
@@ -212,6 +219,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     _withCartSelection = ref.watch(checkoutWithCartSelectionProvider);
     Future.microtask(loadContext);
     Future.microtask(loadLastPaidChannel);
+    Future.microtask(loadPaymentOptions);
 
     // Follow the wallet, and seed from it in case it is already resolved.
     // `ref.listen` fires on change only, so on its own it never delivered a
@@ -488,13 +496,15 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 
     if (state.paymentMethod == PaymentMethod.wallet) return;
 
+    final options = state.paymentOptions;
     final channel = state.paymentChannel;
-    if (channel != null && !isChannelAllowedForAmount(channel, total)) {
+    if (channel != null &&
+        !isChannelAllowedForAmount(channel, total, options)) {
       state = state.copyWith(clearChannel: true);
     }
     if (state.paymentChannel != null) return;
 
-    final available = availablePaymentChannels(total);
+    final available = availablePaymentChannels(total, options);
     if (available.isNotEmpty) {
       state = state.copyWith(paymentChannel: available.first);
     }
@@ -517,6 +527,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
         CouponSlot.fee,
         itemsSubtotal,
       ),
+      options: state.paymentOptions,
     );
 
     if (state.paymentMethod == pick.method &&
@@ -546,6 +557,23 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       _syncChannel();
     } catch (_) {
       // Keep the list's own default.
+    }
+  }
+
+  /// Reads which gateway and channels the server offers this app. Failure
+  /// keeps Xendit's rule, and checkout then doesn't claim it can open any
+  /// other gateway's page — so the server routes it to match.
+  Future<void> loadPaymentOptions() async {
+    if (_disposed) return;
+    final gateway = ref.read(checkoutGatewayProvider);
+
+    try {
+      final options = await gateway.fetchPaymentOptions();
+      if (_disposed) return;
+      state = state.copyWith(paymentOptions: options);
+      _syncChannel();
+    } catch (_) {
+      // Keep the Xendit default.
     }
   }
 
@@ -803,6 +831,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
 
       final gateway = ref.read(checkoutGatewayProvider);
       final dealIds = _loadedDealIds;
+      final sendGateways = state.paymentOptions.fromServer;
       final result = isDealCheckout
           ? await gateway.submitDeals(
               dealExternalIds: dealIds,
@@ -812,6 +841,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               paymentChannel: state.paymentChannel,
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
+              sendGateways: sendGateways,
             )
           : dealIds.isNotEmpty
           ? await gateway.submitCartWithDeals(
@@ -823,6 +853,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               paymentChannel: state.paymentChannel,
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
+              sendGateways: sendGateways,
             )
           : await gateway.submit(
               courierChoices: choices,
@@ -832,6 +863,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
               selectedCartItemIds: [for (final item in _items) item.cartItemId],
+              sendGateways: sendGateways,
             );
 
       // A saldo checkout is already settled server-side when this returns:

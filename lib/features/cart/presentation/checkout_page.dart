@@ -537,6 +537,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     paymentMethod: state.paymentMethod,
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
+                    paymentOptions: state.paymentOptions,
                     onPick: (pick) => switch (pick) {
                       XenditPick(:final channel) => notifier.selectXendit(
                         channel,

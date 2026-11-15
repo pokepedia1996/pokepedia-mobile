@@ -10,21 +10,19 @@ const qrisMaxIdr = 1450000;
 bool isInsuranceMandatory(int sellerSubtotal) =>
     sellerSubtotal > insuranceMandatoryThresholdIdr;
 
-/// Mirrors `getAvailablePaymentChannels`: QRIS below the threshold, VA banks
-/// at or above it.
-List<PaymentChannel> availablePaymentChannels(int grandTotalIdr) {
-  if (grandTotalIdr < qrisMaxIdr) return const [PaymentChannel.qris];
-  return const [
-    PaymentChannel.bni,
-    PaymentChannel.bri,
-    PaymentChannel.mandiri,
-    PaymentChannel.permata,
-    PaymentChannel.cimb,
-  ];
-}
+/// Mirrors `getAvailablePaymentChannels`: the channels [options] offers at
+/// this total. The Xendit default is QRIS below the threshold and VA banks
+/// at or above it; the server's own rules replace it once they're in.
+List<PaymentChannel> availablePaymentChannels(
+  int grandTotalIdr, [
+  PaymentOptions options = PaymentOptions.xenditDefault,
+]) => options.channelsFor(grandTotalIdr);
 
-bool isChannelAllowedForAmount(PaymentChannel channel, int grandTotalIdr) =>
-    availablePaymentChannels(grandTotalIdr).contains(channel);
+bool isChannelAllowedForAmount(
+  PaymentChannel channel,
+  int grandTotalIdr, [
+  PaymentOptions options = PaymentOptions.xenditDefault,
+]) => availablePaymentChannels(grandTotalIdr, options).contains(channel);
 
 /// What checkout preselects for a buyer who hasn't chosen for themselves.
 ///
@@ -51,15 +49,16 @@ bool isChannelAllowedForAmount(PaymentChannel channel, int grandTotalIdr) =>
   int? walletAmountDue,
   PaymentChannel? lastPaidChannel,
   bool holdsFeeWaiver = false,
+  PaymentOptions options = PaymentOptions.xenditDefault,
 }) {
   if (walletBalance >= (walletAmountDue ?? grandTotalIdr) && !holdsFeeWaiver) {
     return (method: PaymentMethod.wallet, channel: null);
   }
 
-  final available = availablePaymentChannels(grandTotalIdr);
+  final available = availablePaymentChannels(grandTotalIdr, options);
   final channel = lastPaidChannel != null && available.contains(lastPaidChannel)
       ? lastPaidChannel
-      : available.first;
+      : available.firstOrNull;
   return (method: PaymentMethod.xendit, channel: channel);
 }
 

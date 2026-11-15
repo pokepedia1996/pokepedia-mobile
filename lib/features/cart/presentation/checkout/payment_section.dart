@@ -15,6 +15,7 @@ class PaymentSection extends StatelessWidget {
     required this.paymentMethod,
     required this.paymentChannel,
     required this.walletBalance,
+    this.paymentOptions = PaymentOptions.xenditDefault,
     required this.onPick,
   });
 
@@ -23,6 +24,7 @@ class PaymentSection extends StatelessWidget {
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
   final int? walletBalance;
+  final PaymentOptions paymentOptions;
   final ValueChanged<PaymentPick> onPick;
 
   @override
@@ -49,6 +51,7 @@ class PaymentSection extends StatelessWidget {
             paymentMethod: paymentMethod,
             selectedChannel: paymentChannel,
             walletBalance: walletBalance,
+            paymentOptions: paymentOptions,
             onPick: onPick,
           ),
           if (paymentMethod == PaymentMethod.wallet) ...[

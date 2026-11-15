@@ -120,6 +120,7 @@ class _DealGateway implements CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool sendGateways = false,
   }) async {
     submitted.add(dealExternalIds);
     return const CheckoutResult(invoiceUrl: 'https://checkout.xendit.co/x');

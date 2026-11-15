@@ -227,15 +227,39 @@ class CheckoutAddress {
   final bool isPrimary;
 }
 
-/// Ports `PaymentChannel` / `PaymentChannelMeta` from `lib/payments/pricing.ts`.
-enum PaymentChannel { qris, bni, bri, mandiri, permata, cimb }
+/// Ports `PaymentChannel` / `PaymentChannelMeta` from
+/// `features/checkout/domain/payment-channels.ts`. Which of these a checkout
+/// may use is the server's call — see [PaymentOptions].
+enum PaymentChannel {
+  qris,
+  bca,
+  bri,
+  mandiri,
+  bni,
+  permata,
+  danamon,
+  cimb,
+  btn,
+  doku,
+  maybank,
+  bnc,
+  bss,
+  bjb,
+  sinarmas,
+}
 
 extension PaymentChannelX on PaymentChannel {
-  /// The wire value `/api/cart/checkout` expects — the uppercase keys of
-  /// `CHANNEL_TO_XENDIT_PAYMENT_METHOD` in `lib/payments/pricing.ts`.
-  /// (BCA is defined server-side but commented out of `VA_CHANNELS` pending
-  /// Xendit activation, so it is deliberately absent here too.)
+  /// The wire value `/api/cart/checkout` expects: `PAYMENT_CHANNEL_CODES`.
   String get code => name.toUpperCase();
+
+  /// The channel for a wire [code]; null for one this version doesn't know.
+  static PaymentChannel? fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    for (final channel in PaymentChannel.values) {
+      if (channel.code == upper) return channel;
+    }
+    return null;
+  }
 }
 
 enum PaymentChannelGroup { qr, va }
@@ -247,6 +271,11 @@ class PaymentChannelMeta {
     required this.label,
     required this.description,
   });
+
+  const PaymentChannelMeta.va(this.channel, String bank, [String? fullName])
+    : group = PaymentChannelGroup.va,
+      label = '$bank Virtual Account',
+      description = 'Transfer ke nomor VA ${fullName ?? bank}';
 
   final PaymentChannel channel;
   final PaymentChannelGroup group;
@@ -261,37 +290,133 @@ const paymentChannels = [
     label: 'QRIS',
     description: 'Scan QR pakai aplikasi bank atau e-wallet',
   ),
-  PaymentChannelMeta(
-    channel: PaymentChannel.bni,
-    group: PaymentChannelGroup.va,
-    label: 'BNI Virtual Account',
-    description: 'Transfer ke nomor VA BNI',
-  ),
-  PaymentChannelMeta(
-    channel: PaymentChannel.bri,
-    group: PaymentChannelGroup.va,
-    label: 'BRI Virtual Account',
-    description: 'Transfer ke nomor VA BRI',
-  ),
-  PaymentChannelMeta(
-    channel: PaymentChannel.mandiri,
-    group: PaymentChannelGroup.va,
-    label: 'Mandiri Virtual Account',
-    description: 'Transfer ke nomor VA Mandiri',
-  ),
-  PaymentChannelMeta(
-    channel: PaymentChannel.permata,
-    group: PaymentChannelGroup.va,
-    label: 'Permata Virtual Account',
-    description: 'Transfer ke nomor VA Permata',
-  ),
-  PaymentChannelMeta(
-    channel: PaymentChannel.cimb,
-    group: PaymentChannelGroup.va,
-    label: 'CIMB Virtual Account',
-    description: 'Transfer ke nomor VA CIMB Niaga',
-  ),
+  PaymentChannelMeta.va(PaymentChannel.bca, 'BCA'),
+  PaymentChannelMeta.va(PaymentChannel.bri, 'BRI'),
+  PaymentChannelMeta.va(PaymentChannel.mandiri, 'Mandiri'),
+  PaymentChannelMeta.va(PaymentChannel.bni, 'BNI'),
+  PaymentChannelMeta.va(PaymentChannel.permata, 'Permata'),
+  PaymentChannelMeta.va(PaymentChannel.danamon, 'Danamon'),
+  PaymentChannelMeta.va(PaymentChannel.cimb, 'CIMB', 'CIMB Niaga'),
+  PaymentChannelMeta.va(PaymentChannel.btn, 'BTN'),
+  PaymentChannelMeta.va(PaymentChannel.doku, 'DOKU'),
+  PaymentChannelMeta.va(PaymentChannel.maybank, 'Maybank'),
+  PaymentChannelMeta.va(PaymentChannel.bnc, 'BNC', 'Bank Neo Commerce'),
+  PaymentChannelMeta.va(PaymentChannel.bss, 'BSS', 'Bank Sahabat Sampoerna'),
+  PaymentChannelMeta.va(PaymentChannel.bjb, 'BJB'),
+  PaymentChannelMeta.va(PaymentChannel.sinarmas, 'Sinarmas', 'Bank Sinarmas'),
 ];
+
+/// Where a channel may be used: totals from [minIdr] to [maxIdr] (null: no
+/// cap). `PaymentChannelRule` on the server.
+class PaymentChannelRule {
+  const PaymentChannelRule({
+    required this.channel,
+    required this.minIdr,
+    this.maxIdr,
+  });
+
+  final PaymentChannel channel;
+  final int minIdr;
+  final int? maxIdr;
+
+  bool allows(int totalIdr) =>
+      totalIdr >= minIdr && (maxIdr == null || totalIdr <= maxIdr!);
+}
+
+/// The gateway checkout goes through and the channels it offers, from
+/// `GET /api/cart/checkout/payment-options`.
+class PaymentOptions {
+  const PaymentOptions({
+    required this.gateway,
+    required this.rules,
+    this.fromServer = true,
+  });
+
+  /// What the server gives an app that doesn't say it can open DOKU's page:
+  /// Xendit, QRIS below Rp1.450.000 and its five VA banks from it. Used
+  /// until the server has answered, and if it can't.
+  static const xenditDefault = PaymentOptions(
+    gateway: 'xendit',
+    fromServer: false,
+    rules: [
+      PaymentChannelRule(
+        channel: PaymentChannel.qris,
+        minIdr: 0,
+        maxIdr: 1449999,
+      ),
+      PaymentChannelRule(channel: PaymentChannel.bni, minIdr: 1450000),
+      PaymentChannelRule(channel: PaymentChannel.bri, minIdr: 1450000),
+      PaymentChannelRule(channel: PaymentChannel.mandiri, minIdr: 1450000),
+      PaymentChannelRule(channel: PaymentChannel.permata, minIdr: 1450000),
+      PaymentChannelRule(channel: PaymentChannel.cimb, minIdr: 1450000),
+    ],
+  );
+
+  /// `xendit` or `doku`.
+  final String gateway;
+  final List<PaymentChannelRule> rules;
+
+  /// Whether the server said so. Only then does checkout tell it which
+  /// gateways the app can open: without these rules, the app has to be
+  /// routed the way the [xenditDefault] it shows assumes.
+  final bool fromServer;
+
+  /// Reads the route's body. A channel this version doesn't know is left
+  /// out: the server may offer banks added after this build.
+  static PaymentOptions fromJson(Map<String, dynamic> json) {
+    final rows = json['channels'];
+    return PaymentOptions(
+      gateway: json['gateway'] as String? ?? 'xendit',
+      rules: [
+        if (rows is List)
+          for (final row in rows.whereType<Map>())
+            if (PaymentChannelX.fromCode(row['channel'] as String?)
+                case final channel?)
+              PaymentChannelRule(
+                channel: channel,
+                minIdr: (row['minIdr'] as num?)?.toInt() ?? 0,
+                maxIdr: (row['maxIdr'] as num?)?.toInt(),
+              ),
+      ],
+    );
+  }
+
+  /// The channels offered at [totalIdr], in the server's order.
+  List<PaymentChannel> channelsFor(int totalIdr) => [
+    for (final rule in rules)
+      if (rule.allows(totalIdr)) rule.channel,
+  ];
+
+  /// Every channel offered at some total.
+  Set<PaymentChannel> get offered => {for (final rule in rules) rule.channel};
+
+  /// The smallest total [group]'s channels are offered from; null if none are.
+  int? minIdrFor(PaymentChannelGroup group) {
+    int? min;
+    for (final rule in rules) {
+      if (_groupOf(rule.channel) != group) continue;
+      if (min == null || rule.minIdr < min) min = rule.minIdr;
+    }
+    return min;
+  }
+
+  /// The largest total [group]'s channels are offered to; null if uncapped
+  /// or none are.
+  int? maxIdrFor(PaymentChannelGroup group) {
+    int? max;
+    for (final rule in rules) {
+      if (_groupOf(rule.channel) != group) continue;
+      if (rule.maxIdr == null) return null;
+      if (max == null || rule.maxIdr! > max) max = rule.maxIdr;
+    }
+    return max;
+  }
+}
+
+PaymentChannelGroup _groupOf(PaymentChannel channel) =>
+    channel == PaymentChannel.qris
+    ? PaymentChannelGroup.qr
+    : PaymentChannelGroup.va;
 
 /// "xendit" pays via a [PaymentChannel]; "wallet" pays from saldo balance.
 enum PaymentMethod { xendit, wallet }
