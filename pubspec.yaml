@@ -48,6 +48,9 @@ dependencies:
   app_links: ^6.4.1
   flutter_svg: ^2.3.0
   url_launcher: ^6.3.1
+  # The installed version, for the forced update. Already present
+  # transitively; named here because the app reads it directly.
+  package_info_plus: ^10.2.2
   # Renders the QRIS payload as a scannable code, on-device.
   qr_flutter: ^4.1.0
   webview_flutter: ^4.10.0
