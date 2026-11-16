@@ -88,30 +88,35 @@ class PaymentMethodPicker extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: (walletSelected || meta != null)
-                    ? colors.primary.withValues(alpha: 0.1)
-                    : Theme.of(context).colorScheme.secondary,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+            if (!walletSelected &&
+                meta != null &&
+                paymentLogoAsset(meta.channel) != null)
+              PaymentLogo(channel: meta.channel, size: 34)
+            else
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: (walletSelected || meta != null)
+                      ? colors.primary.withValues(alpha: 0.1)
+                      : Theme.of(context).colorScheme.secondary,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  walletSelected
+                      ? LucideIcons.wallet
+                      : meta != null
+                      ? (meta.group == PaymentChannelGroup.qr
+                            ? LucideIcons.qrCode
+                            : LucideIcons.creditCard)
+                      : LucideIcons.creditCard,
+                  size: 16,
+                  color: (walletSelected || meta != null)
+                      ? colors.primary
+                      : context.mutedForeground,
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(
-                walletSelected
-                    ? LucideIcons.wallet
-                    : meta != null
-                    ? (meta.group == PaymentChannelGroup.qr
-                          ? LucideIcons.qrCode
-                          : LucideIcons.creditCard)
-                    : LucideIcons.creditCard,
-                size: 16,
-                color: (walletSelected || meta != null)
-                    ? colors.primary
-                    : context.mutedForeground,
-              ),
-            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -450,20 +455,7 @@ class _ChannelSection extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondary,
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          icon,
-                          size: 15,
-                          color: context.mutedForeground,
-                        ),
-                      ),
+                      PaymentLogo(channel: meta.channel, fallback: icon),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -490,6 +482,75 @@ class _ChannelSection extends StatelessWidget {
                 ),
               ),
       ],
+    );
+  }
+}
+
+/// The logos web shows (`public/payment_logo/`), in `assets/images/payment/`.
+/// A bank without one gets [PaymentLogo]'s icon instead.
+const _paymentLogos = <PaymentChannel, String>{
+  PaymentChannel.qris: 'qris.webp',
+  PaymentChannel.bca: 'bca.webp',
+  PaymentChannel.bni: 'bni.webp',
+  PaymentChannel.bri: 'bri.webp',
+  PaymentChannel.mandiri: 'mandiri.webp',
+  PaymentChannel.permata: 'permata.webp',
+  PaymentChannel.cimb: 'cimb.webp',
+};
+
+/// The asset path of [channel]'s logo, or null if it has none.
+@visibleForTesting
+String? paymentLogoAsset(PaymentChannel channel) {
+  final file = _paymentLogos[channel];
+  return file == null ? null : 'assets/images/payment/$file';
+}
+
+/// A channel's logo on a white tile, as web's `PaymentLogo`; [fallback] in
+/// a muted tile for a channel without one.
+@visibleForTesting
+class PaymentLogo extends StatelessWidget {
+  const PaymentLogo({
+    super.key,
+    required this.channel,
+    this.size = 32,
+    this.fallback = LucideIcons.creditCard,
+  });
+
+  final PaymentChannel channel;
+  final double size;
+  final IconData fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = paymentLogoAsset(channel);
+    if (asset == null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        alignment: Alignment.center,
+        child: Icon(fallback, size: 15, color: context.mutedForeground),
+      );
+    }
+    // White in dark mode too: the logos are drawn for a light background.
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Image.asset(
+        asset,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) =>
+            Icon(fallback, size: 15, color: context.mutedForeground),
+      ),
     );
   }
 }

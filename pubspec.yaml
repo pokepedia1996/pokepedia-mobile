@@ -121,6 +121,7 @@ flutter:
     - assets/images/
     - assets/images/elements/
     - assets/images/flags/
+    - assets/images/payment/
     - assets/images/social/
     # Buka Toko and the condition picker: the hand-drawn art, its pattern
     # tiles and cards, and the graders' logos. Subfolders are listed one by
