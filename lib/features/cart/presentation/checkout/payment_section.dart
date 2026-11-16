@@ -10,7 +10,7 @@ import 'payment_method_picker.dart';
 class PaymentSection extends StatelessWidget {
   const PaymentSection({
     super.key,
-    required this.grandTotalBeforeFee,
+    required this.totalBeforeDiscount,
     required this.walletAmountDue,
     required this.paymentMethod,
     required this.paymentChannel,
@@ -19,7 +19,7 @@ class PaymentSection extends StatelessWidget {
     required this.onPick,
   });
 
-  final int grandTotalBeforeFee;
+  final int totalBeforeDiscount;
   final int walletAmountDue;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
@@ -46,7 +46,7 @@ class PaymentSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           PaymentMethodPicker(
-            grandTotal: grandTotalBeforeFee,
+            grandTotal: totalBeforeDiscount,
             walletAmountDue: walletAmountDue,
             paymentMethod: paymentMethod,
             selectedChannel: paymentChannel,

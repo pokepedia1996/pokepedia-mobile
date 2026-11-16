@@ -486,7 +486,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   }
 
   void _repairChannel() {
-    final total = totals.grandTotalBeforeFee;
+    final total = totals.totalBeforeDiscount;
     if (total <= 0) return;
 
     if (!state.paymentTouched) {
@@ -511,10 +511,6 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
   }
 
   /// Applies [autoSelectPayment], which is where the rule itself lives.
-  ///
-  /// Only a fee waiver the buyer picked holds them on the gateway. One the
-  /// catalog applied by default is worth exactly what saldo already saves,
-  /// so it is no reason to keep them off saldo.
   void _autoSelectPayment(int total) {
     final pick = autoSelectPayment(
       grandTotalIdr: total,
@@ -523,10 +519,6 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       walletBalance: state.walletBalance ?? 0,
       walletAmountDue: totals.walletAmountDue,
       lastPaidChannel: state.lastPaidChannel,
-      holdsFeeWaiver: state.couponOverrides.chose(
-        CouponSlot.fee,
-        itemsSubtotal,
-      ),
       options: state.paymentOptions,
     );
 
@@ -763,8 +755,6 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     itemsSubtotal: itemsSubtotal,
     shippingTotal: shippingTotal,
     insuranceTotal: insuranceTotal,
-    paymentMethod: state.paymentMethod,
-    paymentChannel: state.paymentChannel,
     coupons: coupons,
   );
 

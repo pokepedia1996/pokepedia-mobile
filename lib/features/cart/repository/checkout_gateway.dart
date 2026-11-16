@@ -515,7 +515,9 @@ class CheckoutGateway {
     if (rows is! List) return const [];
     return [
       for (final row in rows)
-        if (AvailableCoupon.tryParse(row) case final coupon?) coupon,
+        if (AvailableCoupon.tryParse(row) case final coupon?)
+          // Waives a buyer fee that no longer exists; not worth listing.
+          if (coupon.type != CouponType.waiveGatewayFee) coupon,
     ];
   }
 

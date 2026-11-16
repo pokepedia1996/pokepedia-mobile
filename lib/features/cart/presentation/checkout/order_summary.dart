@@ -16,8 +16,6 @@ class OrderSummary extends StatelessWidget {
     required this.itemsSubtotal,
     required this.shippingTotal,
     required this.insuranceTotal,
-    required this.paymentMethod,
-    required this.hasChannel,
     required this.totals,
     required this.coupons,
     required this.couponSlot,
@@ -29,8 +27,6 @@ class OrderSummary extends StatelessWidget {
   final int itemsSubtotal;
   final int shippingTotal;
   final int insuranceTotal;
-  final PaymentMethod paymentMethod;
-  final bool hasChannel;
   final CheckoutTotals totals;
   final CouponSelection coupons;
 
@@ -76,12 +72,6 @@ class OrderSummary extends StatelessWidget {
             _Row(
               label: 'Asuransi pengiriman',
               value: formatRupiah(insuranceTotal),
-            ),
-          if (paymentMethod == PaymentMethod.xendit)
-            _Row(
-              label: 'Biaya Platform',
-              value: !hasChannel ? '-' : formatRupiah(totals.gatewayFee),
-              strikethrough: totals.gatewayFeeWaived,
             ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -145,17 +135,11 @@ class OrderSummary extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({
-    required this.label,
-    required this.value,
-    this.color,
-    this.strikethrough = false,
-  });
+  const _Row({required this.label, required this.value, this.color});
 
   final String label;
   final String value;
   final Color? color;
-  final bool strikethrough;
 
   @override
   Widget build(BuildContext context) {
@@ -167,15 +151,7 @@ class _Row extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: AppTypography.bodySm(labelColor)),
-          Text(
-            value,
-            style: AppTypography.bodySmSemibold(valueColor).copyWith(
-              decoration: strikethrough ? TextDecoration.lineThrough : null,
-              color: strikethrough
-                  ? valueColor.withValues(alpha: 0.5)
-                  : valueColor,
-            ),
-          ),
+          Text(value, style: AppTypography.bodySmSemibold(valueColor)),
         ],
       ),
     );
