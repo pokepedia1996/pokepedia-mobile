@@ -131,7 +131,7 @@ Pokepedia berwenang, tanpa pemberitahuan sebelumnya, melakukan tindakan-tindakan
 
 ## E. Pembayaran
 
-Pokepedia menyediakan metode pembayaran melalui: (i) **QRIS** (Quick Response Code Indonesian Standard); dan (ii) **Virtual Account (VA)** bank yang tersedia, yang seluruhnya diproses oleh **Xendit** selaku penyedia layanan pembayaran pihak ketiga. Pokepedia tidak menyimpan data instrumen pembayaran Pengguna.
+Pokepedia menyediakan metode pembayaran melalui: (i) **QRIS** (Quick Response Code Indonesian Standard); dan (ii) **Virtual Account (VA)** bank yang tersedia, yang seluruhnya diproses oleh **DOKU** dan/atau **Xendit** selaku penyedia layanan pembayaran pihak ketiga. Pokepedia tidak menyimpan data instrumen pembayaran Pengguna.
 
 Pengguna memahami dan menyetujui bahwa masalah keterlambatan proses pembayaran yang disebabkan oleh pihak penyedia layanan pembayaran atau bank adalah tanggung jawab Pengguna secara pribadi dan di luar tanggung jawab Pokepedia.
 
@@ -141,10 +141,11 @@ Pengembalian dana dari Pokepedia kepada Pembeli hanya dapat dilakukan dalam kead
 
 1. Pembeli menyetujui pembatalan pesanan sebelum Barang dikirimkan oleh Penjual;
 2. Masalah pengiriman Barang telah teridentifikasi secara jelas dari Penjual yang mengakibatkan pesanan Barang tidak sampai kepada Pembeli;
-3. Penjual tidak bisa menyanggupi pesanan karena kehabisan stok atau penyebab lainnya; atau
-4. Penyelesaian permasalahan melalui Pusat Resolusi berupa keputusan untuk pengembalian dana kepada Pembeli.
+3. Penjual tidak bisa menyanggupi pesanan karena kehabisan stok atau penyebab lainnya;
+4. Penyelesaian permasalahan melalui Pusat Resolusi berupa keputusan untuk pengembalian dana kepada Pembeli; atau
+5. Pembayaran diterima setelah pesanan kedaluwarsa atau dibatalkan, atau pesanan tidak dapat diproses setelah pembayaran diterima.
 
-Apabila terjadi proses pengembalian dana, maka pengembalian akan diproses ke sumber pembayaran asal Pengguna dalam waktu 5 (lima) hingga 14 (empat belas) hari kerja, tergantung pada kebijakan masing-masing bank atau penyedia layanan pembayaran.
+Apabila terjadi proses pengembalian dana, maka dana dikembalikan ke **Saldo** akun Pembeli di Pokepedia dan dapat digunakan untuk transaksi berikutnya atau ditarik ke rekening bank Pembeli sesuai ketentuan penarikan dana. Pengembalian dana atas pembayaran yang diproses oleh Xendit untuk pesanan yang tidak terbentuk sebagaimana dimaksud pada angka 5 dapat diproses ke sumber pembayaran asal dalam waktu 5 (lima) hingga 14 (empat belas) hari kerja, tergantung pada kebijakan masing-masing bank atau penyedia layanan pembayaran. Bagian pembayaran yang menggunakan Koin dikembalikan dalam bentuk Koin.
 
 ---
 
@@ -289,4 +290,4 @@ Website: www.pokepedia.id
 
 ---
 
-*Terakhir diperbarui: 15 Oktober 2026*
+*Terakhir diperbarui: 15 November 2026*

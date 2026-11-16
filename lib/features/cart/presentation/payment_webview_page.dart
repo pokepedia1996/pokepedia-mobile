@@ -9,7 +9,7 @@ import '../../../shared/widgets/transparent_app_bar.dart';
 
 /// Why the payment page closed.
 enum PaymentOutcome {
-  /// Xendit redirected to our success URL. This is *not* proof of payment —
+  /// The gateway redirected to our success URL. This is *not* proof of payment —
   /// it only means the gateway sent the buyer back. The order is settled by
   /// the webhook, so the caller still has to poll.
   returned,
@@ -19,16 +19,25 @@ enum PaymentOutcome {
   dismissed,
 }
 
-/// Hosts Xendit's hosted invoice — the one checkout screen that is
-/// deliberately not native, because it is the gateway's own PCI surface.
+/// Hosts the gateway's payment page — Xendit's invoice or DOKU Checkout —
+/// the one checkout screen that is deliberately not native, because it is
+/// the gateway's own surface.
 ///
 /// Everything here is about not letting the WebView do more than that:
-/// only Xendit's own host may load, the return URL is intercepted rather
-/// than followed, and payment-app deep links are handed to the OS.
+/// only a gateway's own hosts may load, the return URLs are intercepted
+/// rather than followed, and payment-app deep links are handed to the OS.
 class PaymentWebViewPage extends StatefulWidget {
   const PaymentWebViewPage({super.key, required this.invoiceUrl});
 
   final String invoiceUrl;
+
+  /// Pages the payment page may move to once open: its own hosts, and DOKU's
+  /// other hosts, which its page can step through while the buyer pays.
+  @visibleForTesting
+  static bool isGatewayNavigation(Uri uri) =>
+      uri.scheme == 'https' &&
+      (_PaymentWebViewPageState._allowedHosts.contains(uri.host) ||
+          uri.host.endsWith('.doku.com'));
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPageState();
@@ -38,17 +47,25 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   late final WebViewController _controller;
   double _progress = 0;
 
-  /// The only hosts allowed to render here. Mirrors the server's
-  /// `isSafeInvoiceUrl`; anything else is either a mistake or an attempt to
-  /// dress something up as our payment page.
+  /// The only hosts a payment page may be opened at. Mirrors the server's
+  /// `isSafePaymentUrl`; anything else is either a mistake or an attempt to
+  /// dress something up as our payment page. DOKU's sandbox serves
+  /// `staging.doku.com`; production is `jokul.doku.com`.
   static const _allowedHosts = {
     'checkout.xendit.co',
     'checkout-staging.xendit.co',
+    'staging.doku.com',
+    'sandbox.doku.com',
+    'jokul.doku.com',
   };
 
-  /// Our own return URL. It needs a session cookie the app doesn't have, so
-  /// loading it would bounce to /login and look like a failed payment.
+  /// Our own return URLs. They need a session cookie the app doesn't have,
+  /// so loading one would bounce to /login and look like a failed payment.
   static const _successPath = '/cart/checkout/success';
+
+  /// Where a gateway sends a buyer who backs out of its page (DOKU's
+  /// `callback_url_cancel`).
+  static const _cancelPath = '/orders';
 
   static bool _isTrustedInvoice(Uri? uri) =>
       uri != null && uri.scheme == 'https' && _allowedHosts.contains(uri.host);
@@ -88,6 +105,14 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       return NavigationDecision.prevent;
     }
 
+    // The buyer backed out on the gateway's page: back to checkout, which
+    // asks our backend what happened, rather than our orders page in a browser.
+    if (!PaymentWebViewPage.isGatewayNavigation(uri) &&
+        uri.path.startsWith(_cancelPath)) {
+      if (mounted) Navigator.of(context).pop(PaymentOutcome.dismissed);
+      return NavigationDecision.prevent;
+    }
+
     // QRIS and VA pages hand off to bank and e-wallet apps via `gojek://`,
     // `shopeeid://`, `intent://` and friends. Without this the buyer
     // dead-ends on a page the WebView can't render.
@@ -101,7 +126,9 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       return NavigationDecision.prevent;
     }
 
-    if (_allowedHosts.contains(uri.host)) return NavigationDecision.navigate;
+    if (PaymentWebViewPage.isGatewayNavigation(uri)) {
+      return NavigationDecision.navigate;
+    }
 
     // Anything else — including our own domain — opens outside rather than
     // inside the frame the buyer is trusting with their payment.

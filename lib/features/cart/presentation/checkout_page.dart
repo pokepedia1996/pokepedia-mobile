@@ -532,11 +532,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   const SizedBox(height: 12),
 
                   PaymentSection(
-                    grandTotalBeforeFee: totals.grandTotalBeforeFee,
+                    totalBeforeDiscount: totals.totalBeforeDiscount,
                     walletAmountDue: totals.walletAmountDue,
                     paymentMethod: state.paymentMethod,
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
+                    paymentOptions: state.paymentOptions,
                     onPick: (pick) => switch (pick) {
                       XenditPick(:final channel) => notifier.selectXendit(
                         channel,
@@ -550,8 +551,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     itemsSubtotal: notifier.itemsSubtotal,
                     shippingTotal: notifier.shippingTotal,
                     insuranceTotal: notifier.insuranceTotal,
-                    paymentMethod: state.paymentMethod,
-                    hasChannel: state.paymentChannel != null,
                     totals: totals,
                     coupons: notifier.coupons,
                     couponSlot: const CouponSection(),
