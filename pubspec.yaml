@@ -119,6 +119,13 @@ flutter:
     - assets/images/elements/
     - assets/images/flags/
     - assets/images/social/
+    # Buka Toko and the condition picker: the hand-drawn art, its pattern
+    # tiles and cards, and the graders' logos. Subfolders are listed one by
+    # one, since a directory entry does not include them.
+    - assets/images/toko/
+    - assets/images/grader/
+    - assets/images/referral/
+    - assets/images/referral/kartu-polos/
     - assets/animation/
     - assets/data/
     - assets/tutorials/
@@ -128,6 +135,11 @@ flutter:
     - family: CalSans
       fonts:
         - asset: assets/fonts/CalSans-Regular.ttf
+    # Handwritten accents. Bundled rather than fetched at runtime, so the
+    # first frame of a drawn screen doesn't swap fonts under the reader.
+    - family: PatrickHand
+      fonts:
+        - asset: assets/fonts/PatrickHand-Regular.ttf
 
 # Launcher icon. iOS and older Android take one opaque square; Android's
 # adaptive icon takes the mark alone over the brand cream, so a round mask

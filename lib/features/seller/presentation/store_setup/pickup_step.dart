@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -7,10 +8,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/design_palette.dart';
 import '../../../../shared/utils/geocode.dart';
 import '../../../../shared/utils/id_phone.dart';
+import '../../../../shared/widgets/coretan_kit.dart';
+import '../../../../shared/widgets/scribble_drawing.dart';
 import '../../../../shared/widgets/setup_kit.dart';
 import '../../../account/presentation/widgets/address_form_sheet.dart';
 import '../../../account/repository/address_repository.dart';
@@ -68,25 +72,32 @@ Future<LatLng> _deviceLocation() async {
 /// Step 3: where the courier picks up — a pin on the map, the address it
 /// resolves to, a landmark, and the option to ship purchases there too.
 class PickupStep extends ConsumerStatefulWidget {
-  const PickupStep({
-    super.key,
-    required this.draft,
-    required this.palette,
-    required this.onBack,
-    required this.onNext,
-  });
+  const PickupStep({super.key, required this.draft, required this.onNext});
 
   final StoreSetupDraft draft;
-  final DesignPalette palette;
-  final VoidCallback onBack;
   final VoidCallback onNext;
 
   @override
   ConsumerState<PickupStep> createState() => _PickupStepState();
 }
 
-class _PickupStepState extends ConsumerState<PickupStep> {
+class _PickupStepState extends ConsumerState<PickupStep>
+    with TickerProviderStateMixin {
   final _map = MapController();
+
+  /// The pin falling back onto the map when "Pakai lokasiku" finds the
+  /// phone.
+  late final _drop = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 620),
+    value: 1,
+  );
+
+  /// The pin's bob and the ring spreading from it, once it has landed.
+  late final _idle = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+  );
   final _search = TextEditingController();
   late final _landmark = TextEditingController(text: widget.draft.landmark);
 
@@ -123,7 +134,19 @@ class _PickupStepState extends ConsumerState<PickupStep> {
   StoreSetupDraft get _draft => widget.draft;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (coretanReduceMotion(context)) {
+      _idle.stop();
+    } else if (!_idle.isAnimating) {
+      _idle.repeat();
+    }
+  }
+
+  @override
   void dispose() {
+    _drop.dispose();
+    _idle.dispose();
     _settle?.cancel();
     _typing?.cancel();
     _search.dispose();
@@ -258,7 +281,11 @@ class _PickupStepState extends ConsumerState<PickupStep> {
     setState(() => _locating = true);
     try {
       final here = await ref.read(currentLocationProvider)();
-      if (mounted) _moveTo(here);
+      if (!mounted) return;
+      _moveTo(here);
+      // The pin falling onto the spot, and the address filling in under
+      // it, say it worked; a toast would sit on the button below.
+      if (!coretanReduceMotion(context)) unawaited(_drop.forward(from: 0));
     } on LocationUnavailable catch (e) {
       _toast(e.message);
     } catch (_) {
@@ -299,7 +326,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = widget.palette;
+    final palette = DesignPalette.of(context);
     // Loaded here so it is ready by the time the map first settles.
     ref.watch(areaCatalogProvider);
     final addresses = ref.watch(addressesProvider);
@@ -309,86 +336,58 @@ class _PickupStepState extends ConsumerState<PickupStep> {
     if (!offerShipping && addresses.hasValue) _draft.alsoShipping = false;
 
     return SetupStepLayout(
-      palette: palette,
       physics: _onMap ? const NeverScrollableScrollPhysics() : null,
       content: [
-        SetupProgress(
-          step: 2,
-          total: 4,
-          palette: palette,
-          onBack: widget.onBack,
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(0, setupSize(28), 0, setupSize(20)),
-          child: SetupHeadline(
-            first: 'Kartu dijemput',
-            second: 'dari mana?',
-            palette: palette,
-            size: 38,
-            lineHeight: 42,
-          ),
+        const SetupIntro(
+          eyebrow: 'langkah 3 dari 4',
+          first: 'Kartu dijemput',
+          second: 'dari mana?',
         ),
         _mapCard(palette),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         _addressCard(palette),
-        if (offerShipping)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
-            child: InkWell(
-              onTap: () =>
-                  setState(() => _draft.alsoShipping = !_draft.alsoShipping),
-              child: Row(
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: _draft.alsoShipping
-                          ? palette.brand
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: _draft.alsoShipping
-                            ? palette.brand
-                            : palette.border,
-                        width: 1.5,
+        // Always here, ticked or not on offer, so the blocks keep their
+        // place.
+        offerShipping
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+                child: InkWell(
+                  onTap: () => setState(
+                    () => _draft.alsoShipping = !_draft.alsoShipping,
+                  ),
+                  child: Row(
+                    children: [
+                      CoretanCheckbox(checked: _draft.alsoShipping),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pakai juga sebagai alamat pengiriman',
+                              style: setupText(
+                                16,
+                                palette.ink,
+                                FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Alamat belanjamu langsung beres sekalian.',
+                              style: setupText(14.5, palette.muted),
+                            ),
+                          ],
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: _draft.alsoShipping
-                        ? Icon(
-                            LucideIcons.check,
-                            size: 14,
-                            color: palette.ctaForeground,
-                          )
-                        : null,
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Pakai juga sebagai alamat pengiriman',
-                          style: setupText(14, palette.ink, FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Alamat belanjamu langsung beres sekalian.',
-                          style: setupText(12, palette.muted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                ),
+              )
+            : const SizedBox.shrink(),
       ],
       footer: [
-        SetupPrimaryButton(
+        CoretanButton(
           label: 'Simpan alamat',
-          palette: palette,
           onPressed: _draft.pickupReady && !_resolving ? _save : null,
         ),
       ],
@@ -396,31 +395,35 @@ class _PickupStepState extends ConsumerState<PickupStep> {
   }
 
   Widget _mapCard(DesignPalette palette) {
-    final shadow = BoxShadow(
-      color: palette.ink.withValues(alpha: 0.08),
-      blurRadius: 12,
-      offset: const Offset(0, 4),
-    );
     return Listener(
       onPointerDown: (_) => setState(() => _onMap = true),
       onPointerUp: (_) => setState(() => _onMap = false),
       onPointerCancel: (_) => setState(() => _onMap = false),
       child: Container(
-        height: setupSize(312),
+        height: 224,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: palette.chip,
-          border: Border.all(color: palette.border),
-          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFFEDE3CC),
+          border: Border.all(color: AppColors.onbLine, width: 1.2),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Stack(
           children: [
+            // The drawn street map: what shows while the real one loads,
+            // and the look the real one sits in.
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/toko/toko-peta.webp',
+                fit: BoxFit.cover,
+              ),
+            ),
             FlutterMap(
               mapController: _map,
               options: MapOptions(
                 initialCenter: _center,
                 initialZoom: _placed ? 17 : 12,
                 onPositionChanged: _onMoved,
+                backgroundColor: Colors.transparent,
               ),
               children: [
                 TileLayer(
@@ -432,33 +435,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
             ),
             // The pin stays at the centre and the map moves under it,
             // steadier on a phone than dragging a marker under a fingertip.
-            IgnorePointer(
-              child: Center(
-                child: SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: palette.brand.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 36),
-                        child: Icon(
-                          LucideIcons.mapPin,
-                          size: 40,
-                          color: palette.brand,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            IgnorePointer(child: Center(child: _pin(palette))),
             Positioned(
               left: 12,
               right: 12,
@@ -466,21 +443,16 @@ class _PickupStepState extends ConsumerState<PickupStep> {
               child: Column(
                 children: [
                   Container(
-                    height: 44,
+                    height: 48,
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
                       color: palette.surface,
-                      border: Border.all(color: palette.border),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [shadow],
+                      border: Border.all(color: AppColors.onbLine, width: 1.2),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          LucideIcons.search,
-                          size: 16,
-                          color: palette.muted,
-                        ),
+                        Icon(LucideIcons.search, size: 18, color: palette.ink),
                         const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
@@ -492,7 +464,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                             onChanged: _onTyped,
                             onSubmitted: (_) => _runSearch(),
                             cursorColor: palette.brand,
-                            style: setupText(14, palette.ink),
+                            style: setupText(16, palette.ink),
                             decoration: InputDecoration(
                               isCollapsed: true,
                               border: InputBorder.none,
@@ -500,7 +472,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                               focusedBorder: InputBorder.none,
                               filled: false,
                               hintText: 'Cari jalan, gedung, atau kecamatan',
-                              hintStyle: setupText(14, palette.muted),
+                              hintStyle: setupText(16, palette.muted),
                             ),
                           ),
                         ),
@@ -519,12 +491,11 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                   if (_results.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 6),
-                      constraints: const BoxConstraints(maxHeight: 180),
+                      constraints: const BoxConstraints(maxHeight: 150),
                       decoration: BoxDecoration(
                         color: palette.surface,
-                        border: Border.all(color: palette.border),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [shadow],
+                        border: Border.all(color: AppColors.onbLine),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: ListView(
                         padding: EdgeInsets.zero,
@@ -542,7 +513,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                                   place.displayName ?? '',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: setupText(13, palette.ink),
+                                  style: setupText(14, palette.ink),
                                 ),
                               ),
                             ),
@@ -553,47 +524,101 @@ class _PickupStepState extends ConsumerState<PickupStep> {
               ),
             ),
             Positioned(
-              right: 12,
-              bottom: 12,
-              child: Material(
-                color: palette.surface,
-                shape: StadiumBorder(side: BorderSide(color: palette.border)),
-                elevation: 2,
-                shadowColor: palette.ink.withValues(alpha: 0.2),
-                child: InkWell(
-                  customBorder: const StadiumBorder(),
-                  onTap: _locate,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 9, 14, 9),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _locating
-                            ? SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+              right: 14,
+              bottom: 14,
+              // A sticker: an ink outline and a hard shadow.
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: palette.ink, width: 2),
+                  boxShadow: [
+                    BoxShadow(color: palette.ink, offset: const Offset(3, 3)),
+                  ],
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  shape: const StadiumBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _locate,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 9, 16, 9),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _locating
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: palette.brand,
+                                  ),
+                                )
+                              : Icon(
+                                  LucideIcons.locateFixed,
+                                  size: 17,
                                   color: palette.brand,
                                 ),
-                              )
-                            : Icon(
-                                LucideIcons.locateFixed,
-                                size: 16,
-                                color: palette.brand,
-                              ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Pakai lokasiku',
-                          style: setupText(13, palette.ink, FontWeight.w600),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(
+                            'Pakai lokasiku',
+                            style: setupText(16, palette.ink, FontWeight.w800),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// The drawn pin: it drops in with a bounce, then bobs, with a dashed
+  /// ring spreading and fading under it every 2 s.
+  Widget _pin(DesignPalette palette) {
+    return SizedBox(
+      width: 90,
+      height: 90,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_drop, _idle]),
+        builder: (context, child) {
+          final idle = _idle.isAnimating;
+          final t = _idle.value;
+          final fall = -70 * (1 - Curves.bounceOut.transform(_drop.value));
+          final bob = idle ? -3 * (1 - math.cos(t * 2 * math.pi)) : 0.0;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              if (idle)
+                Transform.scale(
+                  scale: .85 + .4 * t,
+                  child: Opacity(
+                    opacity: 1 - t,
+                    child: CustomPaint(
+                      size: const Size.square(54),
+                      painter: _DashedRing(palette.brand),
+                    ),
+                  ),
+                ),
+              Transform.translate(
+                // The pin's point, not its middle, sits on the centre.
+                offset: Offset(0, -22 + fall + bob),
+                child: child,
+              ),
+            ],
+          );
+        },
+        child: const ScribbleDrawing(
+          drawing: 'toko_pin',
+          size: 52,
+          stepMs: 40,
+          idle: false,
         ),
       ),
     );
@@ -613,27 +638,21 @@ class _PickupStepState extends ConsumerState<PickupStep> {
     final onlyDistrictMissing =
         areaMissing && draft.province != null && draft.city != null;
     final phone = draft.phone;
+    const divider = Divider(height: 1, thickness: 1, color: AppColors.onbLine);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border.all(color: palette.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return CoretanCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: palette.brandSoft,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(LucideIcons.mapPin, size: 18, color: palette.brand),
+              const ScribbleDrawing(
+                drawing: 'toko_pin',
+                size: 46,
+                stepMs: 40,
+                delay: Duration(milliseconds: 400),
+                idle: false,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -646,7 +665,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                           : hasStreet
                           ? draft.street
                           : 'Geser peta ke titik jemput',
-                      style: setupText(16, palette.ink, FontWeight.w600),
+                      style: setupText(18, palette.ink, FontWeight.w800),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -659,7 +678,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                           ? draft.areaLine
                           : 'Atau cari alamatmu di atas peta.',
                       style: setupText(
-                        13,
+                        15,
                         areaMissing ? palette.error : palette.muted,
                       ),
                     ),
@@ -678,79 +697,72 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                 ),
                 child: Text(
                   'Ubah',
-                  style: setupText(13, palette.brand, FontWeight.w700),
+                  style: setupText(17, palette.brand, FontWeight.w800),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          divider,
+          const SizedBox(height: 12),
           // Who the courier asks for: the account and its verified number.
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: palette.chip,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.userRound, size: 18, color: palette.muted),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        [
-                          draft.username,
-                          if (phone != null) formatIdPhone(phone),
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: setupText(14, palette.ink, FontWeight.w600),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        'Nama & nomor penerima kurir',
-                        style: setupText(12, palette.muted),
-                      ),
-                    ],
-                  ),
+          Row(
+            children: [
+              const SizedBox(width: 10),
+              Icon(LucideIcons.userRound, size: 20, color: palette.muted),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      [
+                        draft.username,
+                        if (phone != null) formatIdPhone(phone),
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: setupText(16, palette.ink, FontWeight.w800),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      'Nama & nomor penerima kurir',
+                      style: setupText(14.5, palette.muted),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                SetupPill(
-                  label: 'Otomatis',
-                  icon: LucideIcons.sparkles,
-                  background: palette.successSoft,
-                  foreground: palette.successText,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              const CoretanPill(label: 'Otomatis', icon: LucideIcons.sparkles),
+            ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          divider,
+          const SizedBox(height: 12),
           Text(
             'Patokan / detail (opsional)',
-            style: setupText(13, palette.ink, FontWeight.w600),
+            style: setupText(15, palette.ink, FontWeight.w800),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Container(
-            height: 44,
+            height: 50,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: palette.background,
-              border: Border.all(color: palette.border),
-              borderRadius: BorderRadius.circular(12),
+              color: palette.surface,
+              border: Border.all(color: AppColors.onbLine, width: 1.5),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
-                Icon(LucideIcons.flag, size: 16, color: palette.muted),
-                const SizedBox(width: 10),
+                Icon(LucideIcons.flag, size: 18, color: palette.muted),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _landmark,
                     onChanged: (v) => _draft.landmark = v,
                     maxLength: 120,
                     cursorColor: palette.brand,
-                    style: setupText(14, palette.ink),
+                    style: setupText(17, palette.ink),
                     decoration: InputDecoration(
                       isCollapsed: true,
                       counterText: '',
@@ -759,7 +771,7 @@ class _PickupStepState extends ConsumerState<PickupStep> {
                       focusedBorder: InputBorder.none,
                       filled: false,
                       hintText: 'Rumah pagar hitam',
-                      hintStyle: setupText(14, palette.muted),
+                      hintStyle: setupText(17, palette.muted),
                     ),
                   ),
                 ),
@@ -770,6 +782,31 @@ class _PickupStepState extends ConsumerState<PickupStep> {
       ),
     );
   }
+}
+
+/// The dashed circle round the pin, in pen.
+class _DashedRing extends CustomPainter {
+  const _DashedRing(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final rect = Offset.zero & size;
+    const dashes = 14;
+    const sweep = 2 * math.pi / dashes;
+    for (var i = 0; i < dashes; i++) {
+      canvas.drawArc(rect.deflate(1), i * sweep, sweep * .55, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRing old) => old.color != color;
 }
 
 /// "Ubah": the address by hand, for when the map's reading is wrong or
