@@ -83,7 +83,11 @@ class _FakeAuth extends AuthNotifier {
   Future<AppUser?> build() async => user;
 }
 
-Future<void> _pump(WidgetTester tester, AppUser viewer) async {
+Future<void> _pump(
+  WidgetTester tester,
+  AppUser viewer, {
+  bool soldOut = false,
+}) async {
   // Wide on purpose — the harness's square fallback font overflows this
   // page's rows at phone widths for reasons unrelated to what's under test.
   tester.view.physicalSize = const Size(2000, 3000);
@@ -100,7 +104,8 @@ Future<void> _pump(WidgetTester tester, AppUser viewer) async {
         )).overrideWith(
           (ref) async => (
             store: _store,
-            listings: [_listing],
+            card: _listing.card,
+            listings: soldOut ? <ListingModel>[] : [_listing],
             otherSellersCount: 0,
             positivePct: 100.0,
             feedbackScore: 4,
@@ -136,5 +141,36 @@ void main() {
     expect(find.text('Ikuti'), findsNothing);
     // Sharing your own listing still means something.
     expect(find.text('Bagikan'), findsOneWidget);
+  });
+
+  group('once every copy is sold', () {
+    testWidgets(
+      'the card page stays, marked Sudah Habis, with nothing to buy',
+      (tester) async {
+        await _pump(tester, _shopper, soldOut: true);
+
+        expect(find.text('Sudah Habis'), findsOneWidget);
+        expect(find.text('Listing tidak lagi tersedia'), findsNothing);
+        expect(find.text('Kartu ini sudah habis di toko ini.'), findsOneWidget);
+        // No price, stepper or buy actions.
+        expect(find.text('Keranjang'), findsNothing);
+        expect(find.text('Tawar'), findsNothing);
+        expect(find.textContaining('tersedia'), findsNothing);
+        // The seller is still there to follow or ask.
+        expect(find.text('Toko Ash'), findsWidgets);
+        expect(find.text('Hubungi'), findsOneWidget);
+        expect(find.text('Ikuti'), findsOneWidget);
+      },
+    );
+
+    testWidgets('the seller still gets neither on their own store', (
+      tester,
+    ) async {
+      await _pump(tester, _seller, soldOut: true);
+
+      expect(find.text('Sudah Habis'), findsOneWidget);
+      expect(find.text('Hubungi'), findsNothing);
+      expect(find.text('Ikuti'), findsNothing);
+    });
   });
 }
