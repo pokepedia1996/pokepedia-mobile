@@ -265,6 +265,9 @@ final storeFeedbackProvider =
 /// one `AsyncValue`.
 typedef StoreCardListingData = ({
   StoreModel store,
+
+  /// The card itself, so the page can still show it once every copy is gone.
+  CardModel card,
   List<ListingModel> listings,
   int otherSellersCount,
   double? positivePct,
@@ -335,6 +338,7 @@ final storeCardListingsProvider =
       // The store fetch already carries the seller's reputation.
       return (
         store: store,
+        card: card,
         listings: listingsResult.listings,
         otherSellersCount: listingsResult.otherSellersCount,
         positivePct: store.positivePct,

@@ -96,7 +96,9 @@ class ProposalsRepository {
     );
 
     return rows
-        .map((row) => _mapOffer(row, storeNames[row['seller_id'] as String]))
+        .map(
+          (row) => _mapOffer(row, storeNames[row['seller_id'] as String]?.name),
+        )
         .toList();
   }
 
@@ -501,13 +503,15 @@ class ProposalsRepository {
     return mine.map((row) {
       final bid = row['bid'] as Map<String, dynamic>;
       final card = CardModel.fromRow(bid['card'] as Map<String, dynamic>);
+      final seller = storeNames[row['seller_id'] as String];
       return BidProposalModel(
         slug: row['slug'] as String? ?? '',
         card: card,
         condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
         proposedQuantity: (row['proposed_quantity'] as num?)?.toInt() ?? 1,
-        sellerStoreName:
-            storeNames[row['seller_id'] as String] ?? sellerDisplayFallback,
+        sellerStoreName: seller?.name ?? sellerDisplayFallback,
+        sellerHandle: seller?.handle ?? '',
+        sellerCity: seller?.city,
         status: BidProposalStatusX.fromRaw(row['status'] as String?),
         createdAt: _date(row['created_at']),
         expiresAt: _date(row['expires_at']),
@@ -701,12 +705,15 @@ class ProposalsRepository {
   /// What to call each of [sellerIds]: their shop name where they have one,
   /// otherwise their username — a seller who never opened a storefront has
   /// no `seller_profiles` name at all, and naming them "Toko" throws away
-  /// the handle the profile row is carrying.
+  /// the handle the profile row is carrying. Also the handle their
+  /// storefront opens by (empty when there is none) and their city.
   ///
   /// Shop names come through `get_store_identities`: `seller_profiles` is
   /// self-select only, so reading it directly returns nothing for anyone
   /// but the caller.
-  Future<Map<String, String>> _storeNamesFor(Set<String> sellerIds) async {
+  Future<Map<String, _SellerIdentity>> _storeNamesFor(
+    Set<String> sellerIds,
+  ) async {
     if (sellerIds.isEmpty) return const {};
     final ids = sellerIds.toList();
 
@@ -732,9 +739,8 @@ class ProposalsRepository {
     final storeRows = results[0];
     final profileRows = results[1];
 
-    final storeNameBy = {
-      for (final row in storeRows)
-        row['user_id'] as String: row['store_name'] as String?,
+    final storeBy = {
+      for (final row in storeRows) row['user_id'] as String: row,
     };
     final usernameBy = {
       for (final row in profileRows)
@@ -743,9 +749,16 @@ class ProposalsRepository {
 
     return {
       for (final id in ids)
-        id: resolveSellerName(
-          storeName: storeNameBy[id],
-          username: usernameBy[id],
+        id: (
+          name: resolveSellerName(
+            storeName: storeBy[id]?['store_name'] as String?,
+            username: usernameBy[id],
+          ),
+          handle: resolveSellerHandle(
+            storeSlug: storeBy[id]?['store_slug'] as String?,
+            username: usernameBy[id],
+          ),
+          city: (storeBy[id]?['city_name'] as String?)?.trim(),
         ),
     };
   }
@@ -790,3 +803,5 @@ class ProposalsRepository {
     }
   }
 }
+
+typedef _SellerIdentity = ({String name, String handle, String? city});

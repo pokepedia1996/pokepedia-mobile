@@ -13,24 +13,6 @@ import 'models/store_feedback.dart';
 
 enum MarketBucket { all, listing, buylist, toko }
 
-/// Drops [viewerId]'s own rows out of a marketplace feed.
-///
-/// A property of the marketplace rather than of one screen: you cannot buy
-/// from yourself, so a row you could only look at is noise between the ones
-/// you can act on. Signed out, nothing is excluded.
-///
-/// Applied client-side because `get_recent_marketplace_listings` has no
-/// exclusion parameter — its `p_seller_user_id` filters *to* a seller. The
-/// cost is that a page can come back slightly short when your own listings
-/// fall inside it.
-List<ListingModel> excludeOwnListings(
-  Iterable<ListingModel> listings,
-  String? viewerId,
-) {
-  if (viewerId == null || viewerId.isEmpty) return listings.toList();
-  return listings.where((l) => l.sellerId != viewerId).toList();
-}
-
 /// Data access for the Market feature, backed by Supabase. Mirrors
 /// `loadMarketplaceListingsPage` (`get_recent_marketplace_listings` RPC)
 /// and `loadStoreDirectoryPage` (`search_stores` RPC) on the web. Only GET
@@ -87,28 +69,16 @@ class MarketRepository {
               },
             )
             as List;
-    // Your own listings are dropped here rather than in the pages that show
-    // this feed, because it is a property of the marketplace and not of one
-    // screen: you cannot buy from yourself, so a row you could only look at
-    // is noise between the ones you can act on.
-    //
-    // Client-side because `get_recent_marketplace_listings` has no exclusion
-    // parameter — its `p_seller_user_id` filters *to* a seller. The cost is
-    // that a page can come back slightly short when you have listings in it.
+    // Your own listings stay in: the market is where you check how yours
+    // sit against everyone else's, and a tile of your own opens with
+    // "Kelola listing" rather than a buy button.
     final parsed = rows
         .map((r) => ListingModel.fromMarketplaceRow(r as Map<String, dynamic>))
         .toList();
 
-    // Whether more exist is decided by what the *server* returned, before
-    // own-listings are dropped: a page that came back full is a full page
-    // even if filtering leaves it short, and treating short-after-filtering
-    // as "the end" would truncate the feed for anyone who sells.
     final last = parsed.isEmpty ? null : parsed.last;
     return MarketListingsPage(
-      listings: excludeOwnListings(
-        parsed,
-        _client.auth.currentUser?.id,
-      ).toList(),
+      listings: parsed,
       hasNext: parsed.length >= limit,
       cursor: last == null
           ? null

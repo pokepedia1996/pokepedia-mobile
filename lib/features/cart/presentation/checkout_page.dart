@@ -567,7 +567,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   const SizedBox(height: 12),
 
                   PaymentSection(
-                    grandTotalBeforeFee: totals.grandTotalBeforeFee,
+                    totalBeforeDiscount: totals.totalBeforeDiscount,
                     // Saldo only needs to cover what Koin doesn't.
                     walletAmountDue:
                         (totals.walletAmountDue - notifier.koinApplied).clamp(
@@ -577,6 +577,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     paymentMethod: state.paymentMethod,
                     paymentChannel: state.paymentChannel,
                     walletBalance: state.walletBalance,
+                    paymentOptions: state.paymentOptions,
                     onPick: (pick) => switch (pick) {
                       XenditPick(:final channel) => notifier.selectXendit(
                         channel,
@@ -590,8 +591,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     itemsSubtotal: notifier.itemsSubtotal,
                     shippingTotal: notifier.shippingTotal,
                     insuranceTotal: notifier.insuranceTotal,
-                    paymentMethod: state.paymentMethod,
-                    hasChannel: state.paymentChannel != null,
                     totals: totals,
                     coupons: notifier.coupons,
                     couponSlot: const CouponSection(),

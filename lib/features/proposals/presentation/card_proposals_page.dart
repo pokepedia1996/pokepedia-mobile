@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/router/routes.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
@@ -623,12 +625,7 @@ class _ReceivedRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      proposal.sellerStoreName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmSemibold(colors.onSurface),
-                    ),
+                    _SellerName(proposal: proposal),
                     Text(
                       '${proposal.condition.label} · '
                       '${proposal.proposedQuantity} pcs',
@@ -690,6 +687,75 @@ class _ReceivedRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Who sent the proposal, and where from. Opens their storefront, so the
+/// buyer can see where the copy ships from and what else the store has to
+/// buy alongside it in one order.
+class _SellerName extends StatelessWidget {
+  const _SellerName({required this.proposal});
+
+  final BidProposalModel proposal;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final handle = proposal.sellerHandle;
+    final city = proposal.sellerCity;
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                proposal.sellerStoreName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
+            ),
+            if (handle.isNotEmpty) ...[
+              const SizedBox(width: 2),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 14,
+                color: context.mutedForeground,
+              ),
+            ],
+          ],
+        ),
+        if (city != null && city.isNotEmpty)
+          Row(
+            children: [
+              Icon(
+                LucideIcons.mapPin,
+                size: 12,
+                color: context.mutedForeground,
+              ),
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  city,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption(context.mutedForeground),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+
+    // A seller with no storefront handle has nowhere to open.
+    if (handle.isEmpty) return content;
+    return InkWell(
+      onTap: () => context.push(Routes.storeDetail(handle)),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: content,
     );
   }
 }

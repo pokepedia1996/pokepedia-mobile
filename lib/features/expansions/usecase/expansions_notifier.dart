@@ -164,6 +164,37 @@ final marketPriceSeriesProvider =
           .fetchMarketPriceSeries(key.cardId, days: key.days);
     });
 
+/// The market price of each condition of a card, for the condition picker.
+///
+/// From the year-long series the chart draws (handoff 08 §6.5's source).
+/// Near Mint may borrow the cached headline price when the series has no NM
+/// of its own and that headline is an NM price (§3.5); a headline from asks
+/// or bids states no move.
+final conditionPricesProvider =
+    FutureProvider.family<Map<CardCondition, ConditionPrice>, int>((
+      ref,
+      cardId,
+    ) async {
+      final series = await ref.watch(
+        marketPriceSeriesProvider((cardId: cardId, days: null)).future,
+      );
+      final prices = ConditionPrice.fromSeries(series);
+      if (!prices.containsKey(CardCondition.nm)) {
+        final headline = await ref.watch(
+          cardMarketPriceProvider(cardId).future,
+        );
+        if (headline != null && headline.condition == CardCondition.nm) {
+          prices[CardCondition.nm] = ConditionPrice(
+            price: headline.price,
+            price7dAgo: headline.source == CardPriceSource.confirmed
+                ? headline.price7dAgo
+                : null,
+          );
+        }
+      }
+      return prices;
+    });
+
 /// Ports `useMarketHeadline` — the last traded price plus its 7-day move,
 /// derived from the same series the activity chart draws.
 final marketHeadlineProvider = FutureProvider.family<MarketHeadline?, int>((

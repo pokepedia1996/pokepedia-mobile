@@ -20,7 +20,8 @@ class LocalPush {
 
   final _plugin = FlutterLocalNotificationsPlugin();
 
-  /// Emits the `action_url` of a notification the user tapped.
+  /// Emits the app route of a notification the user tapped — already
+  /// resolved from its `action_url` when it was shown.
   final _taps = StreamController<String>.broadcast();
   Stream<String> get taps => _taps.stream;
 

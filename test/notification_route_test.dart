@@ -23,6 +23,12 @@ void main() {
       );
     });
 
+    test('an accepted offer or proposal opens the cart', () {
+      // accept_offer, accept_bid_proposal and commit_cart_match write this;
+      // unmapped, the tap marked the row read and went nowhere.
+      expect(appRouteForActionUrl('/cart'), '/cart');
+    });
+
     test('a storefront opens by its handle', () {
       expect(appRouteForActionUrl('/market/toko-abc'), '/market/toko-abc');
       expect(appRouteForActionUrl('/market'), '/market');

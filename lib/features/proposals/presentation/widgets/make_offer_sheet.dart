@@ -15,6 +15,7 @@ import '../../../../shared/models/listing_model.dart';
 import '../../../../shared/utils/price_input_formatter.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/proposals_notifier.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// Opens the "Buat Penawaran" form for an ask listing. Resolves true once
 /// an offer was submitted.
@@ -188,7 +189,8 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
               ],
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                prefixText: 'Rp ',
+                prefixIcon: const RupiahPrefix(),
+                prefixIconConstraints: RupiahPrefix.constraints,
                 // What the field wants, in the shape it will take.
                 hintText: formatCountId(listing.price),
               ),

@@ -120,6 +120,7 @@ class _DealGateway implements CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool sendGateways = false,
     bool useKoin = false,
   }) async {
     submitted.add(dealExternalIds);

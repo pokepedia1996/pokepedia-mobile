@@ -9,7 +9,10 @@ import '../features/chat/usecase/chat_notifier.dart';
 import '../features/notifications/usecase/notifications_notifier.dart';
 import '../core/providers/theme_mode_provider.dart';
 import '../core/theme/app_theme.dart';
+import '../features/app_update/presentation/update_required_gate.dart';
+import '../features/app_update/usecase/required_update_provider.dart';
 import '../features/onboarding/presentation/onboarding_page.dart';
+import '../features/notifications/presentation/widgets/in_app_banner_host.dart';
 import '../features/notifications/usecase/notification_push_notifier.dart';
 import '../shared/widgets/dismiss_keyboard_on_tap_outside.dart';
 import 'router/app_router.dart';
@@ -49,6 +52,7 @@ class _PokepediaAppState extends ConsumerState<PokepediaApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    ref.invalidate(requiredUpdateProvider);
     unawaited(ref.read(notificationsProvider.notifier).refresh());
     unawaited(ref.read(chatThreadsProvider.notifier).refresh());
   }
@@ -70,9 +74,15 @@ class _PokepediaAppState extends ConsumerState<PokepediaApp>
       // Above the router rather than on a route: a social sign-in lands
       // wherever the user already was, and the username is owed either way.
       // The keyboard rule sits above it too, so every route, sheet and the
-      // onboarding modal close the keyboard on a tap outside.
-      builder: (context, child) => DismissKeyboardOnTapOutside(
-        child: OnboardingGate(child: child ?? const SizedBox.shrink()),
+      // onboarding modal close the keyboard on a tap outside. The
+      // notification banner sits inside the gate: onboarding covers it, and
+      // it covers every route. A required update covers all of it.
+      builder: (context, child) => UpdateRequiredGate(
+        child: DismissKeyboardOnTapOutside(
+          child: OnboardingGate(
+            child: InAppBannerHost(child: child ?? const SizedBox.shrink()),
+          ),
+        ),
       ),
     );
   }

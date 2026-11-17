@@ -101,6 +101,24 @@ class AppColors {
   static const condPsaLow = Color(0xFFE0303C);
   static const condPsa9 = Color(0xFF8352D6);
   static const condPsa10 = gold;
+
+  // The hand-drawn ("coretan") screens — Buka Toko, and the onboarding to
+  // come. Light only: these screens are drawn on cream whatever the theme.
+  /// The cream under the pattern tile; the tile itself already carries it.
+  static const onbCream = Color(0xFFF5EFE1);
+
+  /// Hairlines of cards, fields and chips on cream.
+  static const onbLine = Color(0xFFE0D8C8);
+
+  /// An empty progress segment.
+  static const onbOff = Color(0xFFD9CDB8);
+
+  /// The dark button, disabled.
+  static const onbDisabled = Color(0xFFCBC1AF);
+
+  /// A code or coupon box, and its outline.
+  static const codeBg = Color(0xFFFFF6E6);
+  static const codeLine = Color(0xFFF1D9B5);
 }
 
 class AppSemanticColors extends ThemeExtension<AppSemanticColors> {

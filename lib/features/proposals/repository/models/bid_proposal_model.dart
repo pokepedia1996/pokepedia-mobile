@@ -40,6 +40,8 @@ class BidProposalModel {
     required this.condition,
     required this.proposedQuantity,
     required this.sellerStoreName,
+    this.sellerHandle = '',
+    this.sellerCity,
     required this.status,
     required this.createdAt,
     required this.expiresAt,
@@ -55,6 +57,13 @@ class BidProposalModel {
   final CardCondition condition;
   final int proposedQuantity;
   final String sellerStoreName;
+
+  /// What the seller's storefront opens by. Empty when there is none to
+  /// open.
+  final String sellerHandle;
+
+  /// Where the seller ships from, so a buyer can tell whether it is near.
+  final String? sellerCity;
   final BidProposalStatus status;
 
   /// When the bid's owner first opened this proposal. Null is what the

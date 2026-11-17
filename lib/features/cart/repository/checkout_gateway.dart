@@ -310,6 +310,22 @@ class CheckoutGateway {
     );
   }
 
+  /// The payment gateways whose hosted page [PaymentWebViewPage] can show.
+  /// Sent with checkout and with [fetchPaymentOptions], so the server only
+  /// routes the app to a gateway it can open.
+  static const openableGateways = ['xendit', 'doku'];
+
+  /// Which gateway checkout will go through and the channels it offers by
+  /// total — `GET /api/cart/checkout/payment-options`, which applies the
+  /// server's QRIS and VA switches.
+  Future<PaymentOptions> fetchPaymentOptions() async {
+    final json = await _api.get(
+      '/api/cart/checkout/payment-options'
+      '?gateways=${openableGateways.join(',')}',
+    );
+    return PaymentOptions.fromJson(json);
+  }
+
   /// Ports `submitCartCheckout`. The server validates and locks the cart,
   /// books the shipping fees, redeems the coupon and opens the invoice in
   /// one transaction — none of which the app can do itself, and none of
@@ -322,6 +338,7 @@ class CheckoutGateway {
     String buyerNote = '',
     List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
+    bool sendGateways = false,
     bool useKoin = false,
   }) async {
     final json = await _postCheckout(
@@ -336,6 +353,7 @@ class CheckoutGateway {
         selectedCartItemIds: selectedCartItemIds.isEmpty
             ? null
             : selectedCartItemIds,
+        sendGateways: sendGateways,
       ),
     );
     return _resultFrom(json);
@@ -355,6 +373,7 @@ class CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool sendGateways = false,
     bool useKoin = false,
   }) async {
     final json = await _postCheckout(
@@ -368,6 +387,7 @@ class CheckoutGateway {
         useKoin: useKoin,
         selectedCartItemIds: selectedCartItemIds,
         selectedDealExternalIds: dealExternalIds,
+        sendGateways: sendGateways,
       ),
     );
     return _resultFrom(json);
@@ -387,6 +407,7 @@ class CheckoutGateway {
     PaymentChannel? paymentChannel,
     String buyerNote = '',
     List<int> couponIds = const [],
+    bool sendGateways = false,
     bool useKoin = false,
   }) async {
     final json = await _postCheckout(
@@ -400,6 +421,7 @@ class CheckoutGateway {
         useKoin: useKoin,
         selectedCartItemIds: const [],
         selectedDealExternalIds: dealExternalIds,
+        sendGateways: sendGateways,
       ),
     );
     return _resultFrom(json);
@@ -407,6 +429,11 @@ class CheckoutGateway {
 
   /// The `CheckoutBodySchema` body. A null [selectedCartItemIds] is left off
   /// (the whole cart); an empty one is sent, meaning no cart lines at all.
+  ///
+  /// [sendGateways] tells the server which gateways' pages the app can open.
+  /// Only sent when the channel was picked from the server's
+  /// [PaymentOptions]: without it the server keeps the app on Xendit, which
+  /// is what [PaymentOptions.xenditDefault] assumes.
   static Map<String, dynamic> checkoutRequestBody({
     required List<CourierChoice> courierChoices,
     required String deliveryAddressSlug,
@@ -416,6 +443,7 @@ class CheckoutGateway {
     List<int> couponIds = const [],
     List<int>? selectedCartItemIds,
     List<String> selectedDealExternalIds = const [],
+    bool sendGateways = false,
     bool useKoin = false,
   }) => {
     'courierChoices': [
@@ -438,6 +466,8 @@ class CheckoutGateway {
     if (selectedCartItemIds != null) 'selectedCartItemIds': selectedCartItemIds,
     if (selectedDealExternalIds.isNotEmpty)
       'selectedDealExternalIds': selectedDealExternalIds,
+    if (sendGateways) 'client': 'app',
+    if (sendGateways) 'paymentGateways': openableGateways,
     // Omitted when off, so the request is exactly today's.
     if (useKoin) 'useKoin': true,
   };
@@ -521,7 +551,9 @@ class CheckoutGateway {
     if (rows is! List) return const [];
     return [
       for (final row in rows)
-        if (AvailableCoupon.tryParse(row) case final coupon?) coupon,
+        if (AvailableCoupon.tryParse(row) case final coupon?)
+          // Waives a buyer fee that no longer exists; not worth listing.
+          if (coupon.type != CouponType.waiveGatewayFee) coupon,
     ];
   }
 
@@ -646,12 +678,7 @@ class CheckoutGateway {
         .limit(1)
         .maybeSingle();
 
-    final code = (row?['payment_channel'] as String?)?.toUpperCase();
-    if (code == null || code == 'WALLET') return null;
-    for (final channel in PaymentChannel.values) {
-      if (channel.code == code) return channel;
-    }
-    return null;
+    return PaymentChannelX.fromCode(row?['payment_channel'] as String?);
   }
 
   /// Every `carts.status` the `carts_status_check` constraint allows that
@@ -693,6 +720,17 @@ class CheckoutGateway {
     return progressFromRow(
       status: row['status'] as String?,
       paidAt: row['paid_at'],
+    );
+  }
+
+  /// Has the server ask the gateway about the order, and settle it if the
+  /// gateway says it was paid. The fallback for a payment notification that
+  /// is late or never arrives; the answer is read back through
+  /// [fetchProgress].
+  Future<void> syncPayment(String externalId) async {
+    await _api.post(
+      '/api/carts/${Uri.encodeComponent(externalId)}/sync',
+      const {},
     );
   }
 

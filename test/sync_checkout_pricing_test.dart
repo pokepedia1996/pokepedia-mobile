@@ -42,30 +42,27 @@ AvailableCoupon _row(
 /// lock RPCs run — a mismatch makes `commit_cart_match` reject the payment.
 void main() {
   group('computeCheckoutTotals', () {
-    test('no coupon charges the flat gateway fee on a channel', () {
-      final totals = computeCheckoutTotals(
-        itemsSubtotal: 100000,
-        shippingTotal: 20000,
-        insuranceTotal: 0,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: PaymentChannel.qris,
-      );
-      expect(totals.grandTotalBeforeFee, 120000);
-      expect(totals.gatewayFeeCharged, platformBuyerFeeFlatIdr);
-      expect(totals.shippingDiscount, 0);
-      expect(totals.totalDiscount, 0);
-      // The server charges no buyer fee since 2026-10-21.
-      expect(totals.grandTotal, 120000);
-      expect(totals.walletAmountDue, 120000);
-    });
+    test(
+      'charges no buyer fee: the total is items, shipping and insurance',
+      () {
+        final totals = computeCheckoutTotals(
+          itemsSubtotal: 100000,
+          shippingTotal: 20000,
+          insuranceTotal: 5000,
+        );
+        expect(totals.totalBeforeDiscount, 125000);
+        expect(totals.shippingDiscount, 0);
+        expect(totals.totalDiscount, 0);
+        expect(totals.grandTotal, 125000);
+        expect(totals.walletAmountDue, 125000);
+      },
+    );
 
     test('free shipping is capped by its own value', () {
       final totals = computeCheckoutTotals(
         itemsSubtotal: 100000,
         shippingTotal: 20000,
         insuranceTotal: 0,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: PaymentChannel.qris,
         coupons: const CouponSelection(shipping: _freeShipping),
       );
       expect(totals.shippingDiscount, 15000);
@@ -78,77 +75,30 @@ void main() {
         itemsSubtotal: 100000,
         shippingTotal: 9000,
         insuranceTotal: 0,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: PaymentChannel.qris,
         coupons: const CouponSelection(shipping: _freeShipping),
       );
       expect(totals.shippingDiscount, 9000);
       expect(totals.grandTotal, 100000);
     });
 
-    test('the fee waiver zeroes the charged fee and counts as a saving', () {
-      final totals = computeCheckoutTotals(
-        itemsSubtotal: 100000,
-        shippingTotal: 20000,
-        insuranceTotal: 5000,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: PaymentChannel.qris,
-        coupons: const CouponSelection(fee: _feeWaiver),
-      );
-      expect(totals.gatewayFee, platformBuyerFeeFlatIdr);
-      expect(totals.gatewayFeeWaived, isTrue);
-      expect(totals.gatewayFeeCharged, 0);
-      expect(totals.grandTotal, 125000);
-      expect(totals.totalDiscount, platformBuyerFeeFlatIdr);
-    });
-
-    test('the fee waiver waives nothing before a channel is picked', () {
+    test('a fee waiver changes nothing: there is no fee to waive', () {
       final totals = computeCheckoutTotals(
         itemsSubtotal: 100000,
         shippingTotal: 20000,
         insuranceTotal: 0,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: null,
         coupons: const CouponSelection(fee: _feeWaiver),
       );
-      expect(totals.gatewayFeeWaived, isFalse);
+      expect(totals.grandTotal, 120000);
       expect(totals.totalDiscount, 0);
     });
 
-    test('both coupons stack across their two slots', () {
-      final totals = computeCheckoutTotals(
-        itemsSubtotal: 100000,
-        shippingTotal: 20000,
-        insuranceTotal: 0,
-        paymentMethod: PaymentMethod.xendit,
-        paymentChannel: PaymentChannel.bni,
-        coupons: const CouponSelection(
-          shipping: _freeShipping,
-          fee: _feeWaiver,
-        ),
-      );
-      expect(totals.grandTotal, 120000 - 15000);
-      expect(totals.totalDiscount, 15000 + platformBuyerFeeFlatIdr);
-      expect(
-        const CouponSelection(shipping: _freeShipping, fee: _feeWaiver).ids,
-        [11, 22],
-      );
-    });
-
-    test('saldo owes the total less the shipping discount, with no fee', () {
+    test('saldo pays the same total as the gateway', () {
       final totals = computeCheckoutTotals(
         itemsSubtotal: 100000,
         shippingTotal: 20000,
         insuranceTotal: 3000,
-        paymentMethod: PaymentMethod.wallet,
-        paymentChannel: null,
-        coupons: const CouponSelection(
-          shipping: _freeShipping,
-          fee: _feeWaiver,
-        ),
+        coupons: const CouponSelection(shipping: _freeShipping),
       );
-      expect(totals.gatewayFeeCharged, 0);
-      expect(totals.gatewayFeeWaived, isFalse);
       expect(totals.walletAmountDue, 123000 - 15000);
       expect(totals.grandTotal, totals.walletAmountDue);
     });
@@ -158,8 +108,6 @@ void main() {
         itemsSubtotal: 0,
         shippingTotal: 10000,
         insuranceTotal: 0,
-        paymentMethod: PaymentMethod.wallet,
-        paymentChannel: null,
         coupons: const CouponSelection(shipping: _freeShipping),
       );
       expect(totals.grandTotal, 0);
@@ -204,11 +152,16 @@ void main() {
     );
 
     test('applies the best eligible coupon per slot by default', () {
+      final selection = resolve(catalog: [_row(_freeShipping)]);
+      expect(selection.shipping?.couponId, 11);
+    });
+
+    test('never applies a fee waiver, on any payment method', () {
       final selection = resolve(
         catalog: [_row(_freeShipping), _row(_feeWaiver)],
       );
       expect(selection.shipping?.couponId, 11);
-      expect(selection.fee?.couponId, 22);
+      expect(selection.fee, isNull);
     });
 
     test('skips ineligible rows', () {
@@ -224,7 +177,7 @@ void main() {
       expect(selection.shipping, isNull);
     });
 
-    test('drops the fee waiver on saldo but keeps free shipping', () {
+    test('keeps free shipping on saldo', () {
       final selection = resolve(
         catalog: [_row(_freeShipping), _row(_feeWaiver)],
         method: PaymentMethod.wallet,

@@ -19,6 +19,7 @@ import '../../../../shared/widgets/condition_badge.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../repository/models/trading_models.dart';
 import '../../usecase/trading_notifier.dart';
+import '../../../../shared/widgets/rupiah_prefix.dart';
 
 /// `MIN_PROPOSAL_PHOTOS` in `proposal-photo-picker.tsx`.
 const _minPhotos = 1;
@@ -343,7 +344,8 @@ class _BidProposalSheetState extends ConsumerState<_BidProposalSheet> {
                   ],
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    prefixText: 'Rp ',
+                    prefixIcon: const RupiahPrefix(),
+                    prefixIconConstraints: RupiahPrefix.constraints,
                     isDense: true,
                     helperText: _askValue > widget.price
                         ? 'Di atas bid — pembeli harus menyetujui harga ini'

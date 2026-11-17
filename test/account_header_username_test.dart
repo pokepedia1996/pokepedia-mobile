@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +7,10 @@ import 'package:go_router/go_router.dart';
 import 'package:pokepedia_mobile/app/router/routes.dart';
 import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
+import 'package:pokepedia_mobile/core/utils/formatters.dart';
 import 'package:pokepedia_mobile/features/account/presentation/account_page.dart';
+import 'package:pokepedia_mobile/features/wallet/usecase/wallet_notifier.dart';
+import 'package:pokepedia_mobile/shared/widgets/shimmer_box.dart';
 
 /// The account header names the user by their `profiles.username`. It used to
 /// fall back to the email's local part, which reads as a username without
@@ -21,7 +26,7 @@ class _FakeAuth extends AuthNotifier {
 
 const _email = 'tajirsadiq.biz@example.com';
 
-Widget _host(AppUser? user) {
+Widget _host(AppUser? user, {Future<int>? balance}) {
   final router = GoRouter(
     initialLocation: Routes.account,
     routes: [
@@ -38,7 +43,10 @@ Widget _host(AppUser? user) {
     ],
   );
   return ProviderScope(
-    overrides: [authProvider.overrideWith(() => _FakeAuth(user))],
+    overrides: [
+      authProvider.overrideWith(() => _FakeAuth(user)),
+      if (balance != null) walletBalanceProvider.overrideWith((_) => balance),
+    ],
     child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
   );
 }
@@ -95,5 +103,53 @@ void main() {
 
     expect(find.text('Tamu'), findsOneWidget);
     expect(find.text('Belum ada username'), findsNothing);
+  });
+
+  // The shimmer never settles, so these pump a frame rather than settle.
+
+  testWidgets('shimmers while the profile is on its way', (tester) async {
+    tester.view.physicalSize = const Size(1170, 2600);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _host(
+        const AppUser(id: 'u1', email: _email, profilePending: true),
+        balance: Future.value(0),
+      ),
+    );
+    await tester.pump();
+
+    // Not yet known is not the same as not chosen.
+    expect(find.text('Belum ada username'), findsNothing);
+    expect(find.text('Pilih username'), findsNothing);
+    expect(find.byType(ShimmerBox), findsWidgets);
+  });
+
+  testWidgets('saldo shimmers while it loads, then shows the figure', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1170, 2600);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final balance = Completer<int>();
+    await tester.pumpWidget(
+      _host(
+        const AppUser(id: 'u1', email: _email, username: 'tajirsadiq'),
+        balance: balance.future,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Rp–'), findsNothing);
+    expect(find.byType(ShimmerBox), findsOneWidget);
+
+    balance.complete(150000);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(ShimmerBox), findsNothing);
+    expect(find.text(formatRupiah(150000)), findsOneWidget);
   });
 }

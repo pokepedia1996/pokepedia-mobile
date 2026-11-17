@@ -78,7 +78,10 @@ class ConditionGradePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      // Room after the last pill: scrolled to the end, the row should
+      // visibly stop rather than run flush into the edge, where it reads as
+      // one more pill cut off.
+      padding: const EdgeInsets.fromLTRB(0, 2, 16, 2),
       child: Row(
         children: [
           if (showAllOption)
