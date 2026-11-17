@@ -10,8 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// accounts are the same person on one device — the `same_device_self_trade`
 /// rule that stops someone buying their own listing from a second account.
 /// The app sends this value as `deviceFingerprint` on `/api/cart` and
-/// `/api/listings`, and those routes record the pairing server-side, the way
-/// `recordDeviceUser` does for the browser.
+/// `/api/listings`, and on `/api/device` whenever a session starts, and those
+/// routes record the pairing server-side, the way `recordDeviceUser` does for
+/// the browser. The session-start call is what lets the referral
+/// `same_device` rule see an account that never carted from this device.
 ///
 /// Generated once and kept in local storage: not a hardware id, nothing
 /// about the device, and it resets on reinstall. That's the same guarantee

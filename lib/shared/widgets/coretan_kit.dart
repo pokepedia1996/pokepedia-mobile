@@ -85,12 +85,17 @@ class CoretanStepHeader extends StatelessWidget {
     required this.step,
     required this.onBack,
     this.total = 4,
+    this.showBack = true,
   });
 
   /// 1-based, as the label reads.
   final int step;
   final int total;
   final VoidCallback? onBack;
+
+  /// False on a first step that has nowhere to go back to: the space stays,
+  /// so the segments do not shift.
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -100,11 +105,14 @@ class CoretanStepHeader extends StatelessWidget {
       height: 44,
       child: Row(
         children: [
-          CoretanIconButton(
-            icon: LucideIcons.arrowLeft,
-            label: 'Kembali',
-            onPressed: onBack,
-          ),
+          if (showBack)
+            CoretanIconButton(
+              icon: LucideIcons.arrowLeft,
+              label: 'Kembali',
+              onPressed: onBack,
+            )
+          else
+            const SizedBox.square(dimension: 38),
           Expanded(
             child: Center(
               child: Row(

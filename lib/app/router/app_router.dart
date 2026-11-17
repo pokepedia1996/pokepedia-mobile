@@ -61,6 +61,8 @@ import '../../features/user/presentation/user_profile_page.dart';
 import '../../features/user/presentation/users_search_page.dart';
 import '../../features/wallet/presentation/wallet_page.dart';
 import '../app_shell.dart';
+import '../../features/onboarding/presentation/intro/intro_page.dart';
+import '../../features/onboarding/usecase/intro_flag.dart';
 import 'go_router_refresh_stream.dart';
 import 'routes.dart';
 import '../../features/seller/repository/models/seller_listing.dart';
@@ -85,6 +87,12 @@ final appRouter = GoRouter(
         state.matchedLocation == Routes.login ||
         state.matchedLocation == Routes.signup;
     if (loggedIn && loggingIn) return Routes.account;
+    final intro = introRedirect(
+      loggedIn: loggedIn,
+      introDone: IntroFlag.done.value,
+      location: state.matchedLocation,
+    );
+    if (intro != null) return intro;
     return null;
   },
   routes: [
@@ -267,6 +275,7 @@ final appRouter = GoRouter(
     // moment later and the auth listener drives whatever comes next —
     // onboarding for a fresh account, the account page for a returning one.
     GoRoute(path: Routes.authConfirm, redirect: (_, __) => Routes.home),
+    GoRoute(path: Routes.welcome, builder: (_, __) => const IntroPage()),
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
     GoRoute(

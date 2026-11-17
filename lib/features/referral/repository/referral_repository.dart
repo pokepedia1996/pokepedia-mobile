@@ -47,6 +47,25 @@ class ReferralRepository {
     return RemindResult.fromJson(data);
   }
 
+  /// Live check while a code is typed. Each call counts toward the server's
+  /// 20 a minute, so callers only ask once the text has the code's shape.
+  Future<ReferralCheck> validateCode(String code) async {
+    final data = await _client.rpc(
+      'validate_referral_code',
+      params: {'p_code': code},
+    );
+    return ReferralCheck.fromJson(data);
+  }
+
+  /// Idempotent: the same code again returns the first result.
+  Future<ReferralApplyResult> applyCode(String code) async {
+    final data = await _client.rpc(
+      'apply_referral_code',
+      params: {'p_code': code},
+    );
+    return ReferralApplyResult.fromJson(data);
+  }
+
   Future<KoinBalance> fetchKoinBalance() async {
     if (!_signedIn) return KoinBalance.zero;
     return KoinBalance.fromJson(await _client.rpc('get_koin_balance'));

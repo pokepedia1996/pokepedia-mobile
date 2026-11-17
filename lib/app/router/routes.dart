@@ -49,6 +49,7 @@ class Routes {
   /// standing while that happens.
   static const authConfirm = '/auth/confirm';
 
+  static const welcome = '/welcome';
   static const login = '/login';
   static const signup = '/signup';
   static const forgotPassword = '/forgot-password';

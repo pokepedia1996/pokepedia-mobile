@@ -41,6 +41,53 @@ Map<String, dynamic> referralPayload(Object? raw) {
   return Map<String, dynamic>.from(raw);
 }
 
+/// What `validate_referral_code` says about a typed code: [reason] is null
+/// when it is [valid], else one of `not_found`, `own_code`, `already_referred`,
+/// `mutual_referral`, `program_closed`, `rate_limited`.
+class ReferralCheck {
+  const ReferralCheck({
+    required this.valid,
+    this.referrerUsername,
+    this.reason,
+  });
+
+  final bool valid;
+  final String? referrerUsername;
+  final String? reason;
+
+  factory ReferralCheck.fromJson(Object? raw) {
+    final m = referralPayload(raw);
+    return ReferralCheck(
+      valid: m['valid'] == true,
+      referrerUsername: _str(m['referrer_username']),
+      reason: _str(m['reason']),
+    );
+  }
+
+  /// A line for the field, or null when the reason is not the typist's to
+  /// fix (the program closed, the limit hit): the field stays quiet then.
+  String? get fieldMessage => switch (reason) {
+    'not_found' => 'Kodenya nggak ketemu. Cek lagi, ya.',
+    'own_code' => 'Itu kode kamu sendiri.',
+    'already_referred' => 'Kamu sudah pakai kode referal.',
+    _ => null,
+  };
+}
+
+/// What `apply_referral_code` answered. Failing to apply never blocks
+/// onboarding; [ok] only decides whether to say so.
+class ReferralApplyResult {
+  const ReferralApplyResult({required this.ok, this.reason});
+
+  final bool ok;
+  final String? reason;
+
+  factory ReferralApplyResult.fromJson(Object? raw) {
+    final m = referralPayload(raw);
+    return ReferralApplyResult(ok: m['ok'] == true, reason: _str(m['reason']));
+  }
+}
+
 /// Tier keys as the server and assets spell them (the prototype's `umum` is
 /// the server's `biasa`).
 enum ReferralTierKey {

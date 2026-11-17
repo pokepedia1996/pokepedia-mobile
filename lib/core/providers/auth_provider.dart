@@ -13,7 +13,10 @@ import '../../shared/utils/primary_collection.dart';
 import '../config/app_config.dart';
 import '../../app/router/app_router.dart';
 import '../../app/router/routes.dart';
+import '../network/pokepedia_api.dart';
 import '../utils/image_url.dart';
+import '../../features/onboarding/usecase/intro_flag.dart';
+import 'device_fingerprint.dart';
 import 'supabase_provider.dart';
 import '../errors/user_message.dart';
 
@@ -174,10 +177,35 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     }
 
     unawaited(_enrich(client, generation));
+    // Anyone signed in has been past the intro: an existing user after an
+    // update, or one who came in through a link. Without this, signing out
+    // would show them a first-launch intro they never needed.
+    if (!IntroFlag.done.value) unawaited(IntroFlag.markDone());
+    unawaited(_recordDevice(user.id));
     final known = _enriched;
     if (known != null && known.id == user.id) return known;
     return AppUser(id: user.id, email: user.email ?? '', profilePending: true);
   }
+
+  /// Tells the server this account is signed in on this device, so the
+  /// same-device rules (self-trade, referral rewards) can see an account that
+  /// never carted or listed from here. Best effort: a missing fraud signal
+  /// must never get in the way of signing in.
+  Future<void> _recordDevice(String userId) async {
+    // Once per account per run: `build` also reruns on `userUpdated`.
+    if (_deviceRecordedFor == userId) return;
+    _deviceRecordedFor = userId;
+    try {
+      final fingerprint = await ref.read(deviceFingerprintProvider).value();
+      await ref.read(pokepediaApiProvider).post('/api/device', {
+        'deviceFingerprint': fingerprint,
+      });
+    } catch (_) {
+      _deviceRecordedFor = null;
+    }
+  }
+
+  String? _deviceRecordedFor;
 
   /// Replaces the bare session user with the profile-backed one.
   ///
@@ -534,7 +562,10 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
   ///
   /// `display_name` is mirrored onto the auth user as web does, so the name
   /// Supabase reports matches the one the profile carries.
-  Future<String?> completeOnboarding(String username) async {
+  Future<String?> completeOnboarding(
+    String username, {
+    List<String> intents = const [],
+  }) async {
     final client = ref.read(supabaseClientProvider);
     final user = client.auth.currentUser;
     if (user == null) return 'Sesi berakhir. Masuk lagi untuk melanjutkan.';
@@ -542,7 +573,13 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     try {
       await client
           .from('profiles')
-          .update({'username': username, 'onboarded': true})
+          .update({
+            'username': username,
+            'onboarded': true,
+            // The column is NOT NULL and its check accepts an empty list,
+            // which is what "Lewati dulu" sends.
+            'onboarding_intents': intents,
+          })
           .eq('id', user.id)
           .timeout(_authTimeout);
     } on PostgrestException catch (e) {
