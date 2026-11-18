@@ -1,0 +1,225 @@
+{
+ "_readme": "Ink drawn on the reward card front, per tier, in the card face coordinate space 264 x 384 (scale to the card width; 1 unit = cardWidth/264). Draw over the card art. Text baselines are given (SVG style). Paths use only M, L, Q (absolute). extras: sparkles/crown in local coordinates; apply translate, then rotateDeg, then scale; stroke width already divided by scale. Ink colour = tier accent. Order: wipe in the word (420 ms, delay 120), draw the loop (540 ms, delay 420), fade in odds (300 ms, delay 520); after the flip: count up the amount, then draw the underline (420 ms) and each extra (260 ms, 150 ms apart).",
+ "tiers": {
+  "biasa": {
+   "word": "Biasa",
+   "wordX": 34,
+   "wordBaselineY": 282,
+   "wordFontSize": 27,
+   "wordRotateDeg": 3,
+   "wordRotateOrigin": [
+    34,
+    282
+   ],
+   "loopPath": "M25.3 265.8 L27.3 262.9 L31.6 260.8 L35.7 258.8 L39.9 256.8 L44.3 254.8 L50.1 254.4 L55.5 253.7 L61.2 253.0 L66.8 253.9 L72.4 254.4 L77.9 255.4 L83.0 257.0 L86.7 259.4 L89.9 261.9 L93.1 264.4 L95.2 267.3 L96.8 270.2 L96.5 273.3 L97.2 276.4 L94.4 279.2 L93.5 282.3 L89.1 284.5 L85.9 287.0 L81.8 289.1 L77.0 290.8 L71.7 292.1 L66.0 293.0 L60.2 293.4 L54.4 292.8 L48.4 292.6 L43.6 290.7 L38.7 289.2 L33.7 287.6 L29.0 285.6 L27.1 282.5 L23.3 280.1 L22.0 277.0 L20.7 273.8 L22.0 270.7 L22.2 267.5 L24.1 264.5 L27.3 261.8 L30.8 259.2 L35.6 257.4 L39.7 255.0 L45.3 253.7",
+   "loopStrokeWidth": 2.4,
+   "odds": "peluang 70%",
+   "oddsRightX": 240,
+   "oddsBaselineY": 280,
+   "oddsFontSize": 16,
+   "oddsColor": "#6B6564",
+   "amountX": 26,
+   "amountBaselineY": 333,
+   "amountFontSize": 54,
+   "amountRotateDeg": 2,
+   "amountRotateOrigin": [
+    26,
+    333
+   ],
+   "amountColor": "#1C1413",
+   "underlinePath": "M30 339 Q102.3046875 346 174.609375 336 M50 348 Q112.3046875 352 148.609375 345",
+   "underlineStrokeWidth": 2.6,
+   "accent": "#9A5F2E",
+   "cardBg": "#F4E7D8",
+   "cardEdge": "#D9C7B2",
+   "glowRgb": "190,170,140",
+   "footer": "Hadiah Ajak Teman · Pokepedia",
+   "extras": []
+  },
+  "spesial": {
+   "word": "Spesial!",
+   "wordX": 34,
+   "wordBaselineY": 282,
+   "wordFontSize": 27,
+   "wordRotateDeg": 3,
+   "wordRotateOrigin": [
+    34,
+    282
+   ],
+   "loopPath": "M26.0 265.8 L28.7 262.9 L34.4 260.8 L39.9 258.8 L45.5 256.8 L51.4 254.8 L59.0 254.4 L66.3 253.7 L73.8 253.0 L81.3 253.9 L88.8 254.4 L96.1 255.4 L102.8 257.0 L107.8 259.4 L112.1 261.9 L116.3 264.4 L119.1 267.3 L121.2 270.2 L120.8 273.3 L121.8 276.4 L118.0 279.2 L116.9 282.3 L111.0 284.5 L106.8 287.0 L101.2 289.1 L94.8 290.8 L87.8 292.1 L80.3 293.0 L72.5 293.4 L64.8 292.8 L56.9 292.6 L50.5 290.7 L43.9 289.2 L37.2 287.6 L30.9 285.6 L28.5 282.5 L23.4 280.1 L21.6 277.0 L20.0 273.8 L21.6 270.7 L21.9 267.5 L24.5 264.5 L28.8 261.8 L33.4 259.2 L39.8 257.4 L45.3 255.0 L52.6 253.7",
+   "loopStrokeWidth": 2.4,
+   "odds": "peluang 20%",
+   "oddsRightX": 240,
+   "oddsBaselineY": 280,
+   "oddsFontSize": 16,
+   "oddsColor": "#6B6564",
+   "amountX": 26,
+   "amountBaselineY": 333,
+   "amountFontSize": 54,
+   "amountRotateDeg": 2,
+   "amountRotateOrigin": [
+    26,
+    333
+   ],
+   "amountColor": "#1C1413",
+   "underlinePath": "M30 339 Q112.78125 346 195.5625 336 M50 348 Q122.78125 352 169.5625 345",
+   "underlineStrokeWidth": 2.6,
+   "accent": "#2F7FA0",
+   "cardBg": "#E3F3F8",
+   "cardEdge": "#B9D8E2",
+   "glowRgb": "93,134,214",
+   "footer": "Hadiah Ajak Teman · Pokepedia",
+   "extras": [
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      215.5625,
+      305
+     ],
+     "scale": 1.3,
+     "rotateDeg": 0,
+     "strokeWidth": 1.69231
+    }
+   ]
+  },
+  "langka": {
+   "word": "Langka!",
+   "wordX": 34,
+   "wordBaselineY": 282,
+   "wordFontSize": 27,
+   "wordRotateDeg": 3,
+   "wordRotateOrigin": [
+    34,
+    282
+   ],
+   "loopPath": "M25.9 265.8 L28.5 262.9 L34.1 260.8 L39.5 258.8 L45.0 256.8 L50.7 254.8 L58.2 254.4 L65.3 253.7 L72.7 253.0 L79.9 253.9 L87.3 254.4 L94.4 255.4 L101.0 257.0 L105.8 259.4 L110.0 261.9 L114.2 264.4 L116.9 267.3 L119.0 270.2 L118.5 273.3 L119.5 276.4 L115.8 279.2 L114.7 282.3 L109.0 284.5 L104.8 287.0 L99.4 289.1 L93.2 290.8 L86.3 292.1 L78.9 293.0 L71.3 293.4 L63.8 292.8 L56.1 292.6 L49.8 290.7 L43.4 289.2 L36.9 287.6 L30.7 285.6 L28.4 282.5 L23.4 280.1 L21.6 277.0 L20.1 273.8 L21.7 270.7 L22.0 267.5 L24.5 264.5 L28.6 261.8 L33.1 259.2 L39.4 257.4 L44.8 255.0 L52.0 253.7",
+   "loopStrokeWidth": 2.4,
+   "odds": "peluang 7%",
+   "oddsRightX": 240,
+   "oddsBaselineY": 280,
+   "oddsFontSize": 16,
+   "oddsColor": "#6B6564",
+   "amountX": 26,
+   "amountBaselineY": 333,
+   "amountFontSize": 54,
+   "amountRotateDeg": 2,
+   "amountRotateOrigin": [
+    26,
+    333
+   ],
+   "amountColor": "#1C1413",
+   "underlinePath": "M30 339 Q114.9375 346 199.875 336 M50 348 Q124.9375 352 173.875 345",
+   "underlineStrokeWidth": 2.6,
+   "accent": "#5E4A9A",
+   "cardBg": "#ECE6F5",
+   "cardEdge": "#C9C0DC",
+   "glowRgb": "155,107,208",
+   "footer": "Hadiah Ajak Teman · Pokepedia",
+   "extras": [
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      219.875,
+      305
+     ],
+     "scale": 1.3,
+     "rotateDeg": 0,
+     "strokeWidth": 1.69231
+    },
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      211.875,
+      329
+     ],
+     "scale": 0.85,
+     "rotateDeg": 0,
+     "strokeWidth": 2.58824
+    }
+   ]
+  },
+  "jackpot": {
+   "word": "JACKPOT!!",
+   "wordX": 34,
+   "wordBaselineY": 282,
+   "wordFontSize": 27,
+   "wordRotateDeg": 3,
+   "wordRotateOrigin": [
+    34,
+    282
+   ],
+   "loopPath": "M27.0 265.8 L30.4 262.9 L38.0 260.8 L45.2 258.8 L52.6 256.8 L60.3 254.8 L70.3 254.4 L79.8 253.7 L89.7 253.0 L99.5 253.9 L109.4 254.4 L119.0 255.4 L127.8 257.0 L134.2 259.4 L139.9 261.9 L145.5 264.4 L149.2 267.3 L151.9 270.2 L151.4 273.3 L152.6 276.4 L147.7 279.2 L146.2 282.3 L138.5 284.5 L132.9 287.0 L125.7 289.1 L117.3 290.8 L108.0 292.1 L98.2 293.0 L87.9 293.4 L77.8 292.8 L67.4 292.6 L59.0 290.7 L50.4 289.2 L41.7 287.6 L33.4 285.6 L30.2 282.5 L23.5 280.1 L21.2 277.0 L19.1 273.8 L21.2 270.7 L21.6 267.5 L25.0 264.5 L30.6 261.8 L36.6 259.2 L45.0 257.4 L52.2 255.0 L61.9 253.7",
+   "loopStrokeWidth": 2.4,
+   "odds": "peluang 3%",
+   "oddsRightX": 240,
+   "oddsBaselineY": 280,
+   "oddsFontSize": 16,
+   "oddsColor": "#6B6564",
+   "amountX": 26,
+   "amountBaselineY": 333,
+   "amountFontSize": 54,
+   "amountRotateDeg": 2,
+   "amountRotateOrigin": [
+    26,
+    333
+   ],
+   "amountColor": "#1C1413",
+   "underlinePath": "M30 339 Q114.3984375 346 198.796875 336 M50 348 Q124.3984375 352 172.796875 345",
+   "underlineStrokeWidth": 2.6,
+   "accent": "#C98A12",
+   "cardBg": "#FFF6CF",
+   "cardEdge": "#E8D79A",
+   "glowRgb": "232,166,32",
+   "footer": "Hadiah Ajak Teman · Pokepedia",
+   "extras": [
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      218.796875,
+      305
+     ],
+     "scale": 1.3,
+     "rotateDeg": 0,
+     "strokeWidth": 1.69231
+    },
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      210.796875,
+      329
+     ],
+     "scale": 0.85,
+     "rotateDeg": 0,
+     "strokeWidth": 2.58824
+    },
+    {
+     "kind": "sparkle",
+     "path": "M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z",
+     "translate": [
+      168.0625,
+      266
+     ],
+     "scale": 0.9,
+     "rotateDeg": 0,
+     "strokeWidth": 2.44444
+    },
+    {
+     "kind": "crown",
+     "path": "M-11 5 L-13 -6 L-6 -1 L0 -10 L6 -1 L13 -6 L11 5 Z",
+     "translate": [
+      87.03125,
+      244
+     ],
+     "scale": 1,
+     "rotateDeg": 6,
+     "strokeWidth": 2.4
+    }
+   ]
+  }
+ }
+}

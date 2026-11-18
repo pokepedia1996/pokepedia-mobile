@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'app/startup_error_app.dart';
 import 'core/config/app_config.dart';
+import 'features/onboarding/usecase/intro_flag.dart';
 
 Future<void> main() async {
   // Bound before the try so the error screen has a binding to run on even if
@@ -27,6 +28,8 @@ Future<void> main() async {
     runApp(StartupErrorApp(message: '$error'));
     return;
   }
+
+  await IntroFlag.load();
 
   runApp(const ProviderScope(child: PokepediaApp()));
 }

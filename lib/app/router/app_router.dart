@@ -26,6 +26,8 @@ import '../../features/market/presentation/store_card_listing_page.dart';
 import '../../features/market/presentation/store_detail_page.dart';
 import '../../features/moderation/presentation/blocked_users_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
+import '../../features/referral/presentation/referral_page.dart';
+import '../../features/referral/presentation/referral_pack_page.dart';
 import '../../features/orders/presentation/dispute_detail_page.dart';
 import '../../features/orders/presentation/order_detail_page.dart';
 import '../../features/orders/presentation/order_dispute_page.dart';
@@ -59,6 +61,8 @@ import '../../features/user/presentation/user_profile_page.dart';
 import '../../features/user/presentation/users_search_page.dart';
 import '../../features/wallet/presentation/wallet_page.dart';
 import '../app_shell.dart';
+import '../../features/onboarding/presentation/intro/intro_page.dart';
+import '../../features/onboarding/usecase/intro_flag.dart';
 import 'go_router_refresh_stream.dart';
 import 'routes.dart';
 import '../../features/seller/repository/models/seller_listing.dart';
@@ -83,6 +87,12 @@ final appRouter = GoRouter(
         state.matchedLocation == Routes.login ||
         state.matchedLocation == Routes.signup;
     if (loggedIn && loggingIn) return Routes.account;
+    final intro = introRedirect(
+      loggedIn: loggedIn,
+      introDone: IntroFlag.done.value,
+      location: state.matchedLocation,
+    );
+    if (intro != null) return intro;
     return null;
   },
   routes: [
@@ -265,6 +275,7 @@ final appRouter = GoRouter(
     // moment later and the auth listener drives whatever comes next —
     // onboarding for a fresh account, the account page for a returning one.
     GoRoute(path: Routes.authConfirm, redirect: (_, __) => Routes.home),
+    GoRoute(path: Routes.welcome, builder: (_, __) => const IntroPage()),
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
     GoRoute(
@@ -296,6 +307,7 @@ final appRouter = GoRouter(
         cardCount: int.tryParse(state.uri.queryParameters['cards'] ?? '') ?? 0,
         totalAmount:
             int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0,
+        koinAmount: int.tryParse(state.uri.queryParameters['koin'] ?? '') ?? 0,
       ),
     ),
     GoRoute(
@@ -351,6 +363,17 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(path: Routes.wallet, builder: (_, __) => const WalletPage()),
+    GoRoute(
+      path: Routes.referral,
+      builder: (_, __) => const ReferralPage(),
+      routes: [
+        GoRoute(
+          path: 'pack/:id',
+          builder: (_, state) =>
+              ReferralPackPage(packId: state.pathParameters['id'] ?? ''),
+        ),
+      ],
+    ),
 
     // Seller. The dashboard is the Jual tab and lives in the shell above;
     // the rest stay pushed pages.

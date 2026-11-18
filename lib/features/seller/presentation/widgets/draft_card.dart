@@ -395,7 +395,9 @@ class _PhotoBadge extends StatelessWidget {
           child: Icon(
             done ? LucideIcons.check : LucideIcons.camera,
             size: 11,
-            color: Colors.white,
+            // The fill is onSurface (cream in dark), so the camera takes the
+            // inverse; white vanished on it in dark mode.
+            color: done ? Colors.white : context.appColors.surface,
           ),
         ),
       ),

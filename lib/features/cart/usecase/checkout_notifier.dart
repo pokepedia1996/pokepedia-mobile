@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/pokepedia_api.dart';
 import '../../account/repository/models/address_model.dart';
 import '../../orders/usecase/orders_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../../wallet/usecase/wallet_notifier.dart';
 import '../repository/checkout_gateway.dart';
 import '../repository/checkout_pricing.dart';
@@ -77,6 +78,8 @@ class CheckoutState {
     this.contextError,
     this.submitting = false,
     this.deals = const [],
+    this.koinBalance = 0,
+    this.useKoin = false,
   });
 
   final AddressModel? address;
@@ -137,6 +140,12 @@ class CheckoutState {
   /// context. Empty outside a deal checkout.
   final List<CheckoutDeal> deals;
 
+  /// Spendable Koin; 0 until known, which hides the toggle.
+  final int koinBalance;
+
+  /// "Pakai Koin" toggle. Off keeps the request exactly as before.
+  final bool useKoin;
+
   CheckoutState copyWith({
     AddressModel? address,
     Map<String, SellerShipping>? shippingBySeller,
@@ -159,6 +168,8 @@ class CheckoutState {
     String? contextError,
     bool? submitting,
     List<CheckoutDeal>? deals,
+    int? koinBalance,
+    bool? useKoin,
     bool clearCouponNotice = false,
     bool clearChannel = false,
     bool clearContextError = false,
@@ -180,6 +191,8 @@ class CheckoutState {
           ? null
           : (paymentChannel ?? this.paymentChannel),
       walletBalance: walletBalance ?? this.walletBalance,
+      koinBalance: koinBalance ?? this.koinBalance,
+      useKoin: useKoin ?? this.useKoin,
       lastPaidChannel: lastPaidChannel ?? this.lastPaidChannel,
       paymentOptions: paymentOptions ?? this.paymentOptions,
       paymentTouched: paymentTouched ?? this.paymentTouched,
@@ -235,6 +248,16 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final balance = next.valueOrNull;
       if (balance != null) setWalletBalance(balance);
     });
+    // Same pattern for Koin: seeded below, followed here. Refetched on entry
+    // too — Koin returned by a refund or an expired invoice is otherwise
+    // invisible until a manual refresh, hiding the toggle.
+    ref.listen(koinBalanceProvider, (_, next) {
+      final koin = next.valueOrNull;
+      if (koin != null) _setKoinBalance(koin.balance);
+    });
+    Future.microtask(() {
+      if (!_disposed) ref.invalidate(koinBalanceProvider);
+    });
 
     // The rate debounce outlives the notifier otherwise. A buyer who picks an
     // address and leaves checkout inside 400ms left a timer behind that woke
@@ -250,6 +273,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     });
     return CheckoutState(
       walletBalance: ref.read(walletBalanceProvider).valueOrNull,
+      koinBalance: ref.read(koinBalanceProvider).valueOrNull?.balance ?? 0,
     );
   }
 
@@ -517,7 +541,12 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       // Unknown reads as nothing to spend, so auto-select never lands on
       // saldo before the balance is in.
       walletBalance: state.walletBalance ?? 0,
-      walletAmountDue: totals.walletAmountDue,
+      // Koin covers part of the bill, so saldo only needs the rest. The
+      // channel itself still follows the pre-Koin total, as the server does.
+      walletAmountDue: (totals.walletAmountDue - koinApplied).clamp(
+        0,
+        totals.walletAmountDue,
+      ),
       lastPaidChannel: state.lastPaidChannel,
       options: state.paymentOptions,
     );
@@ -591,6 +620,21 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       paymentTouched: true,
     );
     _scheduleCouponCatalog();
+  }
+
+  void _setKoinBalance(int balance) {
+    if (state.koinBalance == balance) return;
+    state = state.copyWith(
+      koinBalance: balance,
+      useKoin: balance > 0 && state.useKoin,
+    );
+    _syncChannel();
+  }
+
+  void setUseKoin(bool on) {
+    if (state.useKoin == on) return;
+    state = state.copyWith(useKoin: on);
+    _syncChannel();
   }
 
   void setWalletBalance(int balance) {
@@ -758,6 +802,26 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
     coupons: coupons,
   );
 
+  /// Koin the server will take, previewed (the server is authoritative).
+  int get koinApplied => koinAppliedFor(
+    useKoin: state.useKoin,
+    koinBalance: state.koinBalance,
+    total: state.paymentMethod == PaymentMethod.wallet
+        ? totals.walletAmountDue
+        : totals.grandTotal,
+    // Only a Xendit invoice has a floor; a Saldo remainder can be Rp1.
+    minRemainder: state.paymentMethod == PaymentMethod.wallet
+        ? 0
+        : koinMinCashRemainder,
+  );
+
+  /// What the buyer still pays after Koin.
+  int get amountToPay =>
+      (state.paymentMethod == PaymentMethod.wallet
+          ? totals.walletAmountDue
+          : totals.grandTotal) -
+      koinApplied;
+
   /// Every reason the pay button stays disabled, in the same order the web
   /// evaluates them.
   String? get blockedReason {
@@ -783,7 +847,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final balance = state.walletBalance;
       // Blocked either way, but only one of these is the buyer's problem.
       if (balance == null) return 'Memuat saldo...';
-      if (balance < totals.walletAmountDue) {
+      if (balance < totals.walletAmountDue - koinApplied) {
         return 'Saldo dompet tidak cukup.';
       }
     }
@@ -822,6 +886,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       final gateway = ref.read(checkoutGatewayProvider);
       final dealIds = _loadedDealIds;
       final sendGateways = state.paymentOptions.fromServer;
+      final useKoin = koinApplied > 0;
       final result = isDealCheckout
           ? await gateway.submitDeals(
               dealExternalIds: dealIds,
@@ -832,6 +897,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
               sendGateways: sendGateways,
+              useKoin: useKoin,
             )
           : dealIds.isNotEmpty
           ? await gateway.submitCartWithDeals(
@@ -844,6 +910,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
               sendGateways: sendGateways,
+              useKoin: useKoin,
             )
           : await gateway.submit(
               courierChoices: choices,
@@ -852,6 +919,7 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
               paymentChannel: state.paymentChannel,
               buyerNote: state.buyerNote,
               couponIds: coupons.ids,
+              useKoin: useKoin,
               selectedCartItemIds: [for (final item in _items) item.cartItemId],
               sendGateways: sendGateways,
             );
@@ -865,7 +933,13 @@ class CheckoutNotifier extends AutoDisposeNotifier<CheckoutState> {
       // the wallet page's pull-to-refresh was the only thing that cleared
       // them. A card payment is still pending at this point and revalidates
       // when its webhook lands, so it is deliberately left alone.
-      if (state.paymentMethod == PaymentMethod.wallet) {
+      if (useKoin) {
+        ref.invalidate(koinBalanceProvider);
+        ref.invalidate(koinHistoryProvider);
+      }
+      // Koin covering everything settles like saldo: no invoice to wait on.
+      if (state.paymentMethod == PaymentMethod.wallet ||
+          (useKoin && result.invoiceUrl == null)) {
         ref.invalidate(walletBalanceProvider);
         ref.invalidate(walletActivityProvider);
         ref.invalidate(ordersProvider);

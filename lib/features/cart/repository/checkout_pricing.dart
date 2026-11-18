@@ -107,3 +107,26 @@ CheckoutTotals computeCheckoutTotals({
 }
 
 int _atLeastZero(int value) => value < 0 ? 0 : value;
+
+/// Smallest cash remainder the server leaves for a Xendit invoice, mirroring
+/// web's `KOIN_MIN_CASH_REMAINDER_IDR`.
+const koinMinCashRemainder = 1500;
+
+/// Display-only preview of the Koin the server will take: it applies
+/// `min(spendable Koin, invoice amount)` after locking the cart, then takes
+/// less Koin when the cash left would be between Rp1 and [minRemainder].
+int koinAppliedFor({
+  required bool useKoin,
+  required int koinBalance,
+  required int total,
+  int minRemainder = 0,
+}) {
+  if (!useKoin || koinBalance <= 0 || total <= 0) return 0;
+  final koin = koinBalance < total ? koinBalance : total;
+  final remainder = total - koin;
+  if (remainder > 0 && remainder < minRemainder) {
+    final reduced = total - minRemainder;
+    return reduced < 0 ? 0 : reduced;
+  }
+  return koin;
+}

@@ -143,6 +143,10 @@ class OrderItemModel {
       shippingDiscount:
           (settlement?['shipping_discount_idr'] as num?)?.toInt() ?? 0,
       insuranceFee: (settlement?['insurance_fee_idr'] as num?)?.toInt() ?? 0,
+      koin: (settlement?['koin_idr'] as num?)?.toInt() ?? 0,
+      koinRefunded: (settlement?['koin_refunded_idr'] as num?)?.toInt() ?? 0,
+      partialRefund:
+          (settlement?['partial_refund_amount'] as num?)?.toInt() ?? 0,
       escrowAmount: (settlement?['escrow_amount'] as num?)?.toInt(),
       settlementSlug: settlement?['slug'] as String?,
       checkoutFees: PackageCheckoutFees.fromRow(
@@ -180,6 +184,9 @@ class OrderItemModel {
     this.shippingCost = 0,
     this.shippingDiscount = 0,
     this.insuranceFee = 0,
+    this.koin = 0,
+    this.koinRefunded = 0,
+    this.partialRefund = 0,
     this.escrowAmount,
     this.settlementSlug,
     this.checkoutFees,
@@ -217,6 +224,16 @@ class OrderItemModel {
 
   /// `settlements.insurance_fee_idr` — the shipping insurance the buyer paid.
   final int insuranceFee;
+
+  /// `settlements.koin_idr` — this line's share of the Koin the buyer paid
+  /// with, and `koin_refunded_idr` the part a cancel/refund already returned.
+  /// Both stay 0 on the seller's queries, which don't select them.
+  final int koin;
+  final int koinRefunded;
+
+  /// `settlements.partial_refund_amount`; only the buyer's detail query
+  /// selects it.
+  final int partialRefund;
 
   /// `settlements.escrow_amount`, which web's list total prefers over
   /// `match_price × quantity` when the settlement is readable.
@@ -478,6 +495,9 @@ class OrderModel {
         shippingCost: item.shippingCost,
         shippingDiscount: item.shippingDiscount,
         insurance: item.insuranceFee,
+        koin: item.koin,
+        koinRefunded: item.koinRefunded,
+        partialRefund: item.partialRefund,
         cancelled: item.isCancelled,
       ),
   ], _checkoutFees);
@@ -659,6 +679,9 @@ class OrderModel {
           shippingCost: item.shippingCost,
           shippingDiscount: item.shippingDiscount,
           insurance: item.insuranceFee,
+          // Koin, but not partial refunds — same as web's list total.
+          koin: item.koin,
+          koinRefunded: item.koinRefunded,
           cancelled: item.isCancelled,
         ),
     ], _checkoutFees);

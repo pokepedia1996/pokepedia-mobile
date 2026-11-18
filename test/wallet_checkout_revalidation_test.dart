@@ -33,6 +33,7 @@ class _FakeGateway implements CheckoutGateway {
     List<int> couponIds = const [],
     List<int> selectedCartItemIds = const [],
     bool sendGateways = false,
+    bool useKoin = false,
   }) async => const CheckoutResult(redirect: '/orders');
 
   @override

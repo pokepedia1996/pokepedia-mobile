@@ -49,6 +49,7 @@ class Routes {
   /// standing while that happens.
   static const authConfirm = '/auth/confirm';
 
+  static const welcome = '/welcome';
   static const login = '/login';
   static const signup = '/signup';
   static const forgotPassword = '/forgot-password';
@@ -62,8 +63,13 @@ class Routes {
   /// The saldo thank-you screen, carrying what it needs to state the outcome.
   /// Query params rather than `extra` so the destination survives the
   /// `go(home)` + `push` that `goHomeThen` performs.
-  static String checkoutSuccessFor({required int cards, required int total}) =>
-      '$checkoutSuccess?cards=$cards&total=$total';
+  static String checkoutSuccessFor({
+    required int cards,
+    required int total,
+    int koin = 0,
+  }) =>
+      '$checkoutSuccess?cards=$cards&total=$total'
+      '${koin > 0 ? '&koin=$koin' : ''}';
   static const orders = '/orders';
   static const proposals = '/proposals';
 
@@ -92,6 +98,11 @@ class Routes {
   /// opens the whole feed rather than a filter that would hide half of them.
   static const proposalsBids = proposals;
   static const wallet = '/wallet';
+
+  // Ajak Teman (referral). Pack ids are uuids from `ready_packs` or a
+  // `referral_pack_ready` notification's action_url.
+  static const referral = '/referral';
+  static String referralPack(String id) => '/referral/pack/$id';
   static const lists = '/portfolio/list';
 
   // Seller.
