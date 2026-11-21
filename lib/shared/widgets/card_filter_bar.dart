@@ -11,6 +11,8 @@ import '../utils/card_filtering.dart';
 import 'language_filter_chip.dart';
 import 'type_icon.dart';
 import 'view_mode_toggle.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/catalog_language_provider.dart';
 
 /// Ports `components/card/card-filters.tsx` + `SortDropdown` +
 /// `ViewToggle` — the search box, facet filter chips, sort picker and
@@ -471,14 +473,14 @@ class _SortButton extends StatelessWidget {
 
 /// "Bahasa": the three print languages split the row evenly, as in the
 /// market's filter sheet.
-class _LanguageSection extends StatelessWidget {
+class _LanguageSection extends ConsumerWidget {
   const _LanguageSection({required this.selected, required this.onToggle});
 
   final Set<CardLanguage> selected;
   final ValueChanged<CardLanguage> onToggle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -491,9 +493,10 @@ class _LanguageSection extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              for (final language in CardLanguage.values) ...[
-                if (language != CardLanguage.values.first)
-                  const SizedBox(width: 6),
+              for (final (i, language) in watchCatalogLanguages(
+                ref,
+              ).indexed) ...[
+                if (i > 0) const SizedBox(width: 6),
                 Expanded(
                   child: LanguageFilterChip(
                     language: language,

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/catalog_language_provider.dart';
 import '../../../core/providers/supabase_provider.dart';
-import '../../../shared/models/card_model.dart';
 import '../../../shared/models/pack_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../../expansions/usecase/recently_viewed_provider.dart';

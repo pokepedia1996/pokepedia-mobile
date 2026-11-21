@@ -1,4 +1,3 @@
-import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/collector_number.dart';
 import '../../../shared/utils/csv_export.dart';
 import '../../../shared/utils/variant_label.dart';

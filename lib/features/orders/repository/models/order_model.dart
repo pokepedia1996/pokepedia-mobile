@@ -377,6 +377,7 @@ class OrderModel {
         shipment?['shipment_deadline'] as String? ?? '',
       )?.toLocal(),
       biteshipOrderId: shipment?['biteship_order_id'] as String?,
+      courierLink: shipment?['courier_link'] as String?,
       biteshipBookError: shipment?['biteship_book_error'] as String?,
       originCollectionMethod: shipment?['origin_collection_method'] as String?,
       statusHistory: _statusHistory(shipment?['status_history']),
@@ -413,6 +414,7 @@ class OrderModel {
     this.shipmentStatus,
     this.shipmentDeadline,
     this.biteshipOrderId,
+    this.courierLink,
     this.biteshipBookError,
     this.originCollectionMethod,
     this.statusHistory,
@@ -460,6 +462,18 @@ class OrderModel {
   /// [biteshipBookError] means the booking never took.
   final String? biteshipOrderId;
   final String? biteshipBookError;
+
+  /// `shipments.courier_link`: this parcel's own tracking page, as Biteship
+  /// returned it with the booking (`courier.link`). Not the courier's
+  /// general form [getTrackingUrl] gives, which needs the resi pasted in.
+  final String? courierLink;
+
+  /// [courierLink] when it is safe to open, which web also requires before
+  /// it shows its button: https only.
+  String? get biteshipTrackingUrl {
+    final link = courierLink?.trim();
+    return link != null && link.startsWith('https://') ? link : null;
+  }
 
   /// `pickup` or `manual` — null while the seller still has to choose.
   final String? originCollectionMethod;
@@ -714,6 +728,7 @@ class OrderModel {
       shipmentStatus: shipmentStatus,
       shipmentDeadline: shipmentDeadline,
       biteshipOrderId: biteshipOrderId,
+      courierLink: courierLink,
       biteshipBookError: biteshipBookError,
       originCollectionMethod: originCollectionMethod,
       statusHistory: statusHistory,

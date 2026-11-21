@@ -362,9 +362,10 @@ class _ListingFilterSheetState extends ConsumerState<ListingFilterSheet> {
             children: [
               Row(
                 children: [
-                  for (final language in catalogLanguages) ...[
-                    if (language != catalogLanguages.first)
-                      const SizedBox(width: 6),
+                  for (final (i, language) in watchCatalogLanguages(
+                    ref,
+                  ).indexed) ...[
+                    if (i > 0) const SizedBox(width: 6),
                     Expanded(
                       child: LanguageFilterChip(
                         language: language,
