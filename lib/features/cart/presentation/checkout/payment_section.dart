@@ -10,19 +10,21 @@ import 'payment_method_picker.dart';
 class PaymentSection extends StatelessWidget {
   const PaymentSection({
     super.key,
-    required this.grandTotalBeforeFee,
+    required this.totalBeforeDiscount,
     required this.walletAmountDue,
     required this.paymentMethod,
     required this.paymentChannel,
     required this.walletBalance,
+    this.paymentOptions = PaymentOptions.xenditDefault,
     required this.onPick,
   });
 
-  final int grandTotalBeforeFee;
+  final int totalBeforeDiscount;
   final int walletAmountDue;
   final PaymentMethod paymentMethod;
   final PaymentChannel? paymentChannel;
   final int? walletBalance;
+  final PaymentOptions paymentOptions;
   final ValueChanged<PaymentPick> onPick;
 
   @override
@@ -44,11 +46,12 @@ class PaymentSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           PaymentMethodPicker(
-            grandTotal: grandTotalBeforeFee,
+            grandTotal: totalBeforeDiscount,
             walletAmountDue: walletAmountDue,
             paymentMethod: paymentMethod,
             selectedChannel: paymentChannel,
             walletBalance: walletBalance,
+            paymentOptions: paymentOptions,
             onPick: onPick,
           ),
           if (paymentMethod == PaymentMethod.wallet) ...[

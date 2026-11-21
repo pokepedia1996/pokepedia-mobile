@@ -11,17 +11,20 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../orders/usecase/orders_notifier.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../repository/checkout_gateway.dart';
 import '../usecase/cart_notifier.dart';
 
 /// Confirms an order after the payment page closes.
 ///
-/// The redirect back from Xendit is UX only — the webhook is what settles
-/// the order, and it can land before or after the buyer returns. Someone who
-/// pays by VA transfer and closes the page never redirects at all, and
-/// someone who returns immediately may arrive before the webhook does. So
-/// coming back is never treated as payment; this asks our own backend
-/// instead, and keeps asking for a while.
+/// The redirect back from the gateway is UX only — the webhook is what
+/// settles the order, and it can land before or after the buyer returns.
+/// Someone who pays by VA transfer and closes the page never redirects at
+/// all, and someone who returns immediately may arrive before the webhook
+/// does. So coming back is never treated as payment; this asks our own
+/// backend instead, and keeps asking for a while — and now and then has it
+/// check with the gateway, in case the webhook never comes.
 class CheckoutStatusPage extends ConsumerStatefulWidget {
   const CheckoutStatusPage({
     super.key,
@@ -34,6 +37,13 @@ class CheckoutStatusPage extends ConsumerStatefulWidget {
   /// Lines the server refused at lock time, one reason each, surfaced here
   /// because this is the first screen after the order was placed.
   final List<String> droppedItems;
+
+  /// Whether poll [attempt] also has the server ask the gateway: from about
+  /// six seconds in, then every ten. The notification usually settles the
+  /// order before that; when it is lost, this does instead. Spaced out
+  /// because each one is a call to the gateway.
+  @visibleForTesting
+  static bool asksGateway(int attempt) => attempt >= 3 && attempt % 5 == 3;
 
   @override
   ConsumerState<CheckoutStatusPage> createState() => _CheckoutStatusPageState();
@@ -67,11 +77,19 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
   Future<void> _poll() async {
     if (!mounted) return;
     _tries++;
+    final gateway = ref.read(checkoutGatewayProvider);
+
+    if (CheckoutStatusPage.asksGateway(_tries)) {
+      try {
+        await gateway.syncPayment(widget.externalId);
+      } catch (_) {
+        // Only a fallback: the row below is still the answer.
+      }
+      if (!mounted) return;
+    }
 
     try {
-      final progress = await ref
-          .read(checkoutGatewayProvider)
-          .fetchProgress(widget.externalId);
+      final progress = await gateway.fetchProgress(widget.externalId);
       if (!mounted) return;
       setState(() {
         _progress = progress;
@@ -82,6 +100,13 @@ class _CheckoutStatusPageState extends ConsumerState<CheckoutStatusPage> {
         // The cart is emptied server-side at lock time; pull that through so
         // the badge doesn't keep showing items that are now an order.
         await ref.read(cartProvider.notifier).refresh();
+        // The webhook just created the order; the cached Pesanan list
+        // predates it and would otherwise hide it until a pull-to-refresh.
+        ref.invalidate(ordersProvider);
+        ref.invalidate(myPendingCheckoutsProvider);
+        // Paid spends the Koin for good; cancelled or expired returns it.
+        ref.invalidate(koinBalanceProvider);
+        ref.invalidate(koinHistoryProvider);
       }
     } catch (e) {
       if (!mounted) return;

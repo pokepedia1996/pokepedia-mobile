@@ -137,18 +137,5 @@ void main() {
       );
       expect(pick.method, PaymentMethod.wallet);
     });
-
-    test('a fee-waiver coupon keeps the buyer on the gateway', () {
-      // Saldo pays no gateway fee, so switching would void the coupon the
-      // buyer just applied.
-      final pick = autoSelectPayment(
-        grandTotalIdr: 1500000,
-        walletBalance: 1500000,
-        lastPaidChannel: PaymentChannel.bri,
-        holdsFeeWaiver: true,
-      );
-      expect(pick.method, PaymentMethod.xendit);
-      expect(pick.channel, PaymentChannel.bri);
-    });
   });
 }

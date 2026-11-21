@@ -16,21 +16,22 @@ class OrderSummary extends StatelessWidget {
     required this.itemsSubtotal,
     required this.shippingTotal,
     required this.insuranceTotal,
-    required this.paymentMethod,
-    required this.hasChannel,
     required this.totals,
     required this.coupons,
     required this.couponSlot,
     required this.submitting,
     required this.payDisabled,
     required this.onCheckout,
+    this.koinBalance = 0,
+    this.useKoin = false,
+    this.koinApplied = 0,
+    this.amountToPay,
+    this.onUseKoin,
   });
 
   final int itemsSubtotal;
   final int shippingTotal;
   final int insuranceTotal;
-  final PaymentMethod paymentMethod;
-  final bool hasChannel;
   final CheckoutTotals totals;
   final CouponSelection coupons;
 
@@ -40,6 +41,15 @@ class OrderSummary extends StatelessWidget {
   final bool submitting;
   final bool payDisabled;
   final VoidCallback onCheckout;
+
+  /// Spendable Koin; the toggle only shows when there is some.
+  final int koinBalance;
+  final bool useKoin;
+  final int koinApplied;
+
+  /// Total after Koin; [totals.grandTotal] when null.
+  final int? amountToPay;
+  final ValueChanged<bool>? onUseKoin;
 
   @override
   Widget build(BuildContext context) {
@@ -77,17 +87,33 @@ class OrderSummary extends StatelessWidget {
               label: 'Asuransi pengiriman',
               value: formatRupiah(insuranceTotal),
             ),
-          if (paymentMethod == PaymentMethod.xendit)
-            _Row(
-              label: 'Biaya Platform',
-              value: !hasChannel ? '-' : formatRupiah(totals.gatewayFee),
-              strikethrough: totals.gatewayFeeWaived,
-            ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),
           ),
           couponSlot,
+          if (koinBalance > 0 && onUseKoin != null)
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: useKoin,
+              onChanged: submitting ? null : onUseKoin,
+              secondary: Icon(
+                LucideIcons.coins,
+                size: 18,
+                color: colors.onSurface,
+              ),
+              title: Text(
+                'Pakai Koin (${formatRupiah(koinBalance)})',
+                style: AppTypography.bodySmSemibold(colors.onSurface),
+              ),
+            ),
+          if (koinApplied > 0)
+            _Row(
+              label: 'Koin Pokepedia',
+              value: '- ${formatRupiah(koinApplied)}',
+              color: success,
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: context.borderColor),
@@ -100,7 +126,7 @@ class OrderSummary extends StatelessWidget {
                 style: AppTypography.bodySemibold(colors.onSurface),
               ),
               Text(
-                formatRupiah(totals.grandTotal),
+                formatRupiah(amountToPay ?? totals.grandTotal),
                 style: AppTypography.bodySemibold(colors.primary),
               ),
             ],
@@ -145,17 +171,11 @@ class OrderSummary extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({
-    required this.label,
-    required this.value,
-    this.color,
-    this.strikethrough = false,
-  });
+  const _Row({required this.label, required this.value, this.color});
 
   final String label;
   final String value;
   final Color? color;
-  final bool strikethrough;
 
   @override
   Widget build(BuildContext context) {
@@ -167,15 +187,7 @@ class _Row extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: AppTypography.bodySm(labelColor)),
-          Text(
-            value,
-            style: AppTypography.bodySmSemibold(valueColor).copyWith(
-              decoration: strikethrough ? TextDecoration.lineThrough : null,
-              color: strikethrough
-                  ? valueColor.withValues(alpha: 0.5)
-                  : valueColor,
-            ),
-          ),
+          Text(value, style: AppTypography.bodySmSemibold(valueColor)),
         ],
       ),
     );

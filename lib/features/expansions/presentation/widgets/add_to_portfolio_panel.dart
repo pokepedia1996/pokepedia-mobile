@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,31 +14,36 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
-import '../../../../shared/models/card_market_price.dart';
 import '../../../../shared/models/card_model.dart';
-import '../../../../shared/widgets/quantity_selector.dart';
 import '../../../home/repository/models/portfolio_value.dart';
 import '../../../home/usecase/portfolio_value_notifier.dart';
-import '../../../portfolio/presentation/widgets/collection_condition_field.dart';
 import '../../../portfolio/presentation/widgets/portfolio_picker_sheet.dart';
+import '../../repository/models/market_models.dart';
 import '../../usecase/expansions_notifier.dart';
+import 'condition_toggle_picker.dart';
 
 /// How long the green tick sits on the button after a write lands, before
 /// the stepper goes back to normal.
 const _doneDelay = Duration(milliseconds: 900);
+
+/// How long a picked chip shows as picked before the picker folds away.
+const _closeAfterPick = Duration(milliseconds: 120);
 
 /// Which of the two buttons a tap came from — what says where the working
 /// and finished states are drawn.
 enum _Step { minus, plus }
 
 /// "Menambah ke: Utama · Total: Rp0" — the panel that owns adding this card
-/// to a portfolio, in place of the bare counter that used to sit under the
-/// artwork.
+/// to a portfolio, one condition at a time.
 ///
 /// Which portfolio is [selectedPortfolioProvider], the same one Beranda's
 /// header values and the Koleksi page lists: switching it here switches it
 /// everywhere, which is the point — "the portfolio I'm working in" is one
 /// idea, not one per screen.
+///
+/// A card is counted per condition: the row's stepper and price are the
+/// picked condition's, the total is every condition held, and the picker
+/// under the row shows how many of each are already there.
 class AddToPortfolioPanel extends ConsumerStatefulWidget {
   const AddToPortfolioPanel({super.key, required this.card});
 
@@ -56,9 +62,13 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   /// The count the server last confirmed, which the delta is measured from.
   int _saved = 0;
 
-  /// Which condition the stepper counts. A card can be held as 2x NM and
-  /// 1x LP, and each is its own `collection_cards` row.
-  CardCondition _condition = CardCondition.nm;
+  /// Which condition the stepper counts. Null until the portfolio's counts
+  /// have arrived, then the one held most (§3.1) — and again on switching
+  /// portfolio.
+  CardCondition? _condition;
+
+  /// The portfolio [_condition] was chosen for.
+  PortfolioTarget? _conditionFor;
 
   /// The shelf and condition [_saved] belongs to, so switching either
   /// re-seeds rather than carrying the previous count over.
@@ -72,18 +82,24 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   /// Cleared the moment the server agrees with what was written.
   bool _awaitingRefresh = false;
 
-  /// The button a write is running from. Non-null locks both of them: a
-  /// second tap would measure its delta from a [_saved] the server hasn't
-  /// confirmed yet.
+  /// The button a write is running from. Non-null locks both of them — and
+  /// the conditions: a second tap would measure its delta from a [_saved]
+  /// the server hasn't confirmed yet, and a switch would count the landing
+  /// write against the wrong condition.
   _Step? _busy;
 
   /// The button showing the tick. Cleared by [_doneTimer].
   _Step? _done;
   Timer? _doneTimer;
 
+  /// The picker under the row is open.
+  bool _open = false;
+  Timer? _closeTimer;
+
   @override
   void dispose() {
     _doneTimer?.cancel();
+    _closeTimer?.cancel();
     super.dispose();
   }
 
@@ -97,6 +113,24 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
         )),
       )
       .valueOrNull;
+
+  /// A chip or a pill: the row moves to that condition — its count, price
+  /// and move — and an open picker folds away a beat later.
+  void _pick(CardCondition condition) {
+    if (_busy != null) return;
+    HapticFeedback.selectionClick();
+    _doneTimer?.cancel();
+    setState(() {
+      _condition = condition;
+      _done = null;
+      _awaitingRefresh = false;
+    });
+    if (!_open) return;
+    _closeTimer?.cancel();
+    _closeTimer = Timer(_closeAfterPick, () {
+      if (mounted) setState(() => _open = false);
+    });
+  }
 
   /// A tap on one of the signs: the count moves, both buttons lock, and the
   /// write goes out immediately.
@@ -130,7 +164,8 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
 
   Future<void> _write(PortfolioTarget target, _Step step) async {
     final user = ref.read(authProvider).valueOrNull;
-    if (user == null) return;
+    final condition = _condition;
+    if (user == null || condition == null) return;
     final wanted = _qty;
     if (wanted == null) return;
 
@@ -142,13 +177,13 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
             userId: user.id,
             cardId: widget.card.id,
             delta: wanted - _saved,
-            condition: _condition,
+            condition: condition,
           )
         : await controller.setListCardQuantity(
             listId: target.listId!,
             cardId: widget.card.id,
             quantity: wanted,
-            condition: _condition,
+            condition: condition,
           );
     if (!mounted) return;
 
@@ -183,24 +218,39 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     // Watched, not read on demand: a provider first touched inside the
-    // debounce timer would still be loading when the write asks who is
-    // signed in, and the write would be dropped.
+    // write would still be loading when it asks who is signed in, and the
+    // write would be dropped.
     ref.watch(authProvider);
     final target = ref.watch(selectedPortfolioProvider);
     final counts = _serverCounts(target);
-    final server = counts == null ? null : counts[_condition] ?? 0;
-    final seedKey = (target: target, condition: _condition);
 
-    // Seed from the server once per target, and re-seed whenever it moves
-    // underneath us — an add from the scanner, or the same card edited on
-    // the collection page.
+    // A sealed product has no condition to grade: it is kept as NM, and the
+    // condition trigger, picker and "Di koleksi" row are left out.
+    final sealed = widget.card.isSealed;
+
+    // The condition the row opens on: the one held most in this portfolio,
+    // chosen once its counts are in — and again for another portfolio. A
+    // guest's counts are empty, so theirs is Near Mint.
+    if (_conditionFor != target && counts != null) {
+      _conditionFor = target;
+      _condition = defaultPickerCondition(counts);
+    }
+    final condition = sealed
+        ? CardCondition.nm
+        : _condition ?? CardCondition.nm;
+    final server = counts == null ? null : counts[condition] ?? 0;
+    final seedKey = (target: target, condition: condition);
+
+    // Seed from the server once per target and condition, and re-seed
+    // whenever it moves underneath us — an add from the scanner, or the
+    // same card edited on the collection page.
     if (server != null) {
-      final switchedShelf = _seededFor != seedKey;
+      final switched = _seededFor != seedKey;
       if (server == _saved) _awaitingRefresh = false;
       // While a write is on its way — or its refetch hasn't landed — the
       // local number is the truthful one.
       final pending = _busy != null || _awaitingRefresh;
-      if (switchedShelf || (!pending && server != _saved)) {
+      if (switched || (!pending && server != _saved)) {
         _seededFor = seedKey;
         _saved = server;
         _qty = server;
@@ -208,13 +258,30 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
       }
     }
 
-    final price = ref
-        .watch(cardMarketPriceProvider(widget.card.id))
-        .valueOrNull;
     final qty = _qty ?? 0;
-    final total = (price?.price ?? 0) * qty;
+    // What is held, with the stepper's own count standing in for the
+    // server's on the condition being changed: the badges, the pills and
+    // the total follow a tap before the write is back.
+    final held = <CardCondition, int>{...?counts, condition: qty}
+      ..removeWhere((_, n) => n <= 0);
+
+    final prices =
+        ref.watch(conditionPricesProvider(widget.card.id)).valueOrNull ??
+        const <CardCondition, ConditionPrice>{};
+    var total = 0;
+    var unpriced = 0;
+    for (final MapEntry(key: c, value: n) in held.entries) {
+      final price = prices[c];
+      if (price == null) {
+        unpriced++;
+      } else {
+        total += price.price * n;
+      }
+    }
+    final locked = _busy != null;
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -224,9 +291,10 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
                   child: _TargetButton(
@@ -234,59 +302,57 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
                     onTap: () => showPortfolioPicker(context, ref),
                   ),
                 ),
-
-                Text(
-                  'Total: ${price == null ? 'Rp–' : formatRupiah(total)}',
-                  style: AppTypography.bodySmSemibold(colors.onSurface),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Total: ${formatRupiah(total)}',
+                      style: AppTypography.bodySmSemibold(colors.onSurface),
+                    ),
+                    // A held condition nobody has sold yet adds nothing to
+                    // the total; saying so keeps the figure honest.
+                    if (unpriced > 0)
+                      Text(
+                        '$unpriced kondisi belum ada harga',
+                        style: AppTypography.caption(
+                          context.mutedForeground,
+                        ).copyWith(fontSize: 11),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
           Divider(height: 1, color: context.borderColor),
-          // A sealed product has no condition to grade; it is kept as NM,
-          // which [_condition] already is.
-          if (!widget.card.isSealed)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-              child: Row(
-                children: [
-                  Text(
-                    'Kondisi',
-                    style: AppTypography.bodySm(context.mutedForeground),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 200,
-                    child: CollectionConditionField(
-                      value: _condition,
-                      counts: counts,
-                      // Switching mid-write would count the landing write
-                      // against the wrong condition.
-                      onChanged: _busy != null
-                          ? null
-                          : (value) => setState(() {
-                              _condition = value;
-                              _done = null;
-                              _awaitingRefresh = false;
-                            }),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !sealed && OwnedConditionsRow.shouldShow(held)
+                ? OwnedConditionsRow(owned: held, onTap: locked ? null : _pick)
+                : const SizedBox(width: double.infinity),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    variantLabel(widget.card.variant),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySm(colors.onSurface),
-                  ),
+                  child: sealed
+                      ? const SizedBox.shrink()
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: ConditionTrigger(
+                            condition: condition,
+                            open: _open,
+                            onTap: () => setState(() {
+                              _closeTimer?.cancel();
+                              _open = !_open;
+                            }),
+                          ),
+                        ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 // The stepper keeps its shape while the count is still
                 // arriving — a control that appears late moves everything
                 // beside it.
@@ -297,9 +363,31 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
                   done: _done,
                   onStep: (step) => _bump(step, target),
                 ),
-                const SizedBox(width: 8),
-                _PriceColumn(price: price),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 78,
+                  child: _PriceColumn(price: prices[condition]),
+                ),
               ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: _open && !sealed
+                  ? IgnorePointer(
+                      // Locked while a count is being written.
+                      ignoring: locked,
+                      child: ConditionTogglePicker(
+                        selected: condition,
+                        owned: held,
+                        onSelected: _pick,
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
             ),
           ),
         ],
@@ -308,7 +396,7 @@ class _AddToPortfolioPanelState extends ConsumerState<AddToPortfolioPanel> {
   }
 }
 
-/// The stepper this panel owns, rather than the shared [QuantitySelector].
+/// The stepper this panel owns, rather than the shared quantity selector.
 ///
 /// The difference is where the write shows: each sign carries its own state,
 /// so the button that was pressed is the one that reports back. A spinner
@@ -354,30 +442,32 @@ class _PortfolioStepper extends StatelessWidget {
           phase: phaseOf(_Step.minus),
           onTap: locked || value <= 0 ? null : () => onStep(_Step.minus),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         Container(
-          width: 48,
-          height: 32,
+          width: 32,
+          height: 26,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
             border: Border.all(color: context.borderColor),
-            borderRadius: BorderRadius.circular(AppRadius.md),
+            borderRadius: BorderRadius.circular(13),
           ),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 160),
-            // The count slides rather than blinks, so a run of taps reads as
+            // The count fades rather than blinks, so a run of taps reads as
             // one number moving.
             transitionBuilder: (child, animation) =>
                 FadeTransition(opacity: animation, child: child),
             child: Text(
               ready ? '$value' : '–',
               key: ValueKey(ready ? value : null),
-              style: AppTypography.bodySmSemibold(colors.onSurface),
+              style: AppTypography.bodySmSemibold(
+                colors.onSurface,
+              ).copyWith(fontSize: 13),
             ),
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         _StepButton(
           icon: LucideIcons.plus,
           phase: phaseOf(_Step.plus),
@@ -391,7 +481,8 @@ class _PortfolioStepper extends StatelessWidget {
 /// What one sign is doing.
 enum _Phase { idle, working, done }
 
-/// One sign of the stepper, and the three states it can be in.
+/// One sign of the stepper — a 26pt disc — and the three states it can be
+/// in.
 class _StepButton extends StatefulWidget {
   const _StepButton({
     required this.icon,
@@ -449,15 +540,15 @@ class _StepButtonState extends State<_StepButton>
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final success = context.appSemantic.success;
-    final radius = BorderRadius.circular(AppRadius.md);
     final working = widget.phase == _Phase.working;
     final done = widget.phase == _Phase.done;
-    // A bound reached, or the other button holding the lock.
+    // A bound reached, or the other button holding the lock: the sign goes
+    // to the design's pale grey rather than ink.
     final dimmed = widget.onTap == null && !working && !done;
 
     return InkWell(
       onTap: widget.onTap,
-      borderRadius: radius,
+      customBorder: const CircleBorder(),
       child: AnimatedBuilder(
         animation: _pulse,
         builder: (context, child) {
@@ -474,17 +565,15 @@ class _StepButtonState extends State<_StepButton>
 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            width: 32,
-            height: 32,
+            width: 26,
+            height: 26,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: fill,
-              border: Border.all(
-                color: working || done ? success : context.borderColor,
-              ),
-              borderRadius: radius,
+              shape: BoxShape.circle,
+              border: working || done ? Border.all(color: success) : null,
             ),
-            child: Opacity(opacity: dimmed ? 0.3 : 1, child: child),
+            child: Opacity(opacity: dimmed ? 0.35 : 1, child: child),
           );
         },
         child: AnimatedSwitcher(
@@ -500,32 +589,19 @@ class _StepButtonState extends State<_StepButton>
               ? const Icon(
                   LucideIcons.check,
                   key: ValueKey('done'),
-                  size: 16,
+                  size: 14,
                   color: Colors.white,
                 )
               : Icon(
                   widget.icon,
                   key: const ValueKey('sign'),
-                  size: 14,
-                  color: working ? Colors.white : context.mutedForeground,
+                  size: 12,
+                  color: working ? Colors.white : colors.onSurface,
                 ),
         ),
       ),
     );
   }
-}
-
-/// `listings.variant_key` / `cards.variant` as a person would say it.
-String variantLabel(String variant) {
-  final cleaned = variant.replaceAll('_', ' ').trim();
-  if (cleaned.isEmpty) return 'Normal';
-  return cleaned
-      .split(' ')
-      .map(
-        (word) =>
-            word.isEmpty ? word : word[0].toUpperCase() + word.substring(1),
-      )
-      .join(' ');
 }
 
 /// "Menambah ke: Utama ⌄" — tapping opens the same picker Beranda uses.
@@ -544,11 +620,18 @@ class _TargetButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Menambah ke: ',
-            style: AppTypography.bodySm(context.mutedForeground),
+          // Both give way on a narrow phone or with large text, rather than
+          // push the total off the panel; the label goes first.
+          Flexible(
+            child: Text(
+              'Menambah ke: ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
           ),
           Flexible(
+            flex: 2,
             child: Text(
               target.name,
               maxLines: 1,
@@ -556,55 +639,56 @@ class _TargetButton extends StatelessWidget {
               style: AppTypography.bodySmSemibold(colors.primary),
             ),
           ),
-          Icon(LucideIcons.chevronDown, size: 15, color: colors.primary),
+          Icon(LucideIcons.chevronDown, size: 14, color: colors.primary),
         ],
       ),
     );
   }
 }
 
-/// The market price, with the week's move under it — the same figure and the
-/// same rule the catalog tiles use: only a confirmed price has a move worth
-/// stating.
+/// The picked condition's market price, with its week's move under it —
+/// hidden when there is no move or nothing to measure it from.
 class _PriceColumn extends StatelessWidget {
   const _PriceColumn({this.price});
 
-  final CardMarketPrice? price;
+  final ConditionPrice? price;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final value = price;
+    final style = AppTypography.bodySmSemibold(
+      colors.onSurface,
+    ).copyWith(fontSize: 13, fontWeight: FontWeight.w700);
     if (value == null) {
-      return Text('Rp–', style: AppTypography.bodySmSemibold(colors.onSurface));
+      return Text('Rp–', textAlign: TextAlign.right, style: style);
     }
 
     final then = value.price7dAgo;
-    final movable =
-        value.source == CardPriceSource.confirmed && then != null && then > 0;
-    final delta = movable ? value.price - then : 0;
-    final pct = movable ? delta / then * 100 : 0.0;
-    final tone = delta > 0
-        ? context.appSemantic.success
-        : delta < 0
-        ? colors.error
-        : context.mutedForeground;
+    final delta = then == null || then <= 0 ? 0 : value.price - then;
+    final pct = delta == 0 ? 0.0 : delta / then! * 100;
+    final tone = delta > 0 ? const Color(0xFF16A34A) : colors.error;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          formatRupiah(value.price),
-          style: AppTypography.bodySmSemibold(colors.onSurface),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Text(formatRupiah(value.price), style: style),
         ),
-        if (movable && delta != 0)
-          Text(
-            '${delta > 0 ? '+' : '-'}${formatRupiah(delta.abs())} '
-            '(${pct.abs().toStringAsFixed(1)}%)',
-            style: AppTypography.badge(
-              tone,
-            ).copyWith(fontWeight: FontWeight.w500),
+        if (delta != 0)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${delta > 0 ? '+' : '-'}${formatRupiah(delta.abs())} '
+              '(${pct.abs().toStringAsFixed(1)}%)',
+              style: AppTypography.badge(
+                tone,
+              ).copyWith(fontSize: 10, fontWeight: FontWeight.w500),
+            ),
           ),
       ],
     );

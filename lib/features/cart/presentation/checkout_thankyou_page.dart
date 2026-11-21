@@ -27,6 +27,7 @@ class CheckoutThankYouPage extends StatelessWidget {
     super.key,
     required this.cardCount,
     required this.totalAmount,
+    this.koinAmount = 0,
   });
 
   /// Copies bought, not cart lines — "3 kartu" reads as three cards even when
@@ -36,6 +37,9 @@ class CheckoutThankYouPage extends StatelessWidget {
   /// What the wallet was actually charged: the discounted total, with no
   /// gateway fee, matching `carts.invoice_amount`.
   final int totalAmount;
+
+  /// Koin that paid part (or all) of the bill; 0 when none was used.
+  final int koinAmount;
 
   @override
   Widget build(BuildContext context) {
@@ -77,11 +81,22 @@ class CheckoutThankYouPage extends StatelessWidget {
                     style: AppTypography.bodySm(context.mutedForeground),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Dibayar dari saldo: ${formatRupiah(totalAmount)}',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodySmSemibold(colors.onSurface),
-                  ),
+                  // Saldo only when some was actually charged: Koin can cover
+                  // the whole bill.
+                  if (totalAmount > 0 || koinAmount == 0)
+                    Text(
+                      'Dibayar dari saldo: ${formatRupiah(totalAmount)}',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodySmSemibold(colors.onSurface),
+                    ),
+                  if (koinAmount > 0)
+                    Text(
+                      totalAmount > 0
+                          ? 'Koin dipakai: ${formatRupiah(koinAmount)}'
+                          : 'Dibayar dengan Koin: ${formatRupiah(koinAmount)}',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodySmSemibold(colors.onSurface),
+                    ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,

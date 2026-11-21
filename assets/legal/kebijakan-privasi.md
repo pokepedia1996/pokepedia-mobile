@@ -61,7 +61,7 @@ Pokepedia mengumpulkan Data Pribadi Pengguna yang meliputi namun tidak terbatas 
 - Informasi pengiriman dan nomor resi
 - Data komunikasi antara Pembeli dan Penjual melalui Situs
 
-Pokepedia **tidak** menyimpan data instrumen pembayaran Pengguna seperti nomor kartu atau detail rekening bank. Data pembayaran dikelola sepenuhnya oleh Xendit selaku penyedia layanan pembayaran pihak ketiga.
+Pokepedia **tidak** menyimpan data instrumen pembayaran Pengguna seperti nomor kartu atau detail rekening bank. Data pembayaran dikelola sepenuhnya oleh DOKU dan Xendit selaku penyedia layanan pembayaran pihak ketiga.
 
 ---
 
@@ -97,7 +97,7 @@ Pengguna memahami dan menyetujui bahwa Pokepedia dapat menggunakan Data Pribadi 
 
 Pokepedia dapat mengungkapkan Data Pribadi Pengguna kepada Pihak Ketiga dalam keadaan-keadaan berikut:
 
-1. **Penyedia layanan pembayaran**, yaitu Xendit, untuk keperluan pemrosesan transaksi pembayaran.
+1. **Penyedia layanan pembayaran**, yaitu DOKU dan Xendit, untuk keperluan pemrosesan transaksi pembayaran.
 2. **Penyedia jasa pengiriman**, yaitu perusahaan ekspedisi yang digunakan dalam transaksi, untuk keperluan pengiriman Barang kepada Pembeli.
 3. **Penjual**, yaitu informasi pengiriman Pembeli yang diperlukan Penjual untuk memproses dan mengirimkan pesanan.
 4. **Penyedia layanan teknologi**, yaitu pihak ketiga yang mendukung operasional teknis Situs, termasuk layanan hosting, analitik, dan keamanan.
@@ -186,4 +186,4 @@ Pokepedia akan berupaya merespons setiap pertanyaan atau permintaan dalam jangka
 
 ---
 
-*Terakhir diperbarui: 01 Juli 2026*
+*Terakhir diperbarui: 15 November 2026*

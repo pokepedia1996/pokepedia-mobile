@@ -6,6 +6,9 @@ class PackagePaymentLine {
     this.shippingCost = 0,
     this.shippingDiscount = 0,
     this.insurance = 0,
+    this.koin = 0,
+    this.koinRefunded = 0,
+    this.partialRefund = 0,
     this.cancelled = false,
   });
 
@@ -19,6 +22,15 @@ class PackagePaymentLine {
 
   /// `settlements.insurance_fee_idr`.
   final int insurance;
+
+  /// `settlements.koin_idr` — the Koin that paid part of this line, and
+  /// `koin_refunded_idr` what a cancel/refund already returned to Koin.
+  /// Buyer pages only: seller pages leave both at 0.
+  final int koin;
+  final int koinRefunded;
+
+  /// `settlements.partial_refund_amount`.
+  final int partialRefund;
 
   /// `order_items.status == 'cancelled'`.
   final bool cancelled;
@@ -63,6 +75,9 @@ class PackagePaymentBreakdown {
     required this.cancelledCount,
     required this.cancelledAmount,
     required this.originalPaidTotal,
+    this.koin = 0,
+    this.koinSpent = 0,
+    this.partialRefund = 0,
   });
 
   final int subtotal;
@@ -77,6 +92,17 @@ class PackagePaymentBreakdown {
   final int cancelledAmount;
   final int originalPaidTotal;
 
+  /// Koin still paying for the active lines (spent minus already returned),
+  /// already taken off [paidTotal].
+  final int koin;
+
+  /// Koin spent on every line, cancelled ones included — decides whether a
+  /// refund goes back to "saldo & Koin".
+  final int koinSpent;
+
+  /// Partial refunds on the active lines, already taken off [paidTotal].
+  final int partialRefund;
+
   bool get isPlatformFeeWaived => platformFeeWaived >= platformFee;
 }
 
@@ -85,6 +111,9 @@ class _LineTotals {
   int shippingGross = 0;
   int shippingDiscount = 0;
   int insurance = 0;
+  int koin = 0;
+  int koinRefunded = 0;
+  int partialRefund = 0;
 
   int get net => subtotal + shippingGross - shippingDiscount + insurance;
 }
@@ -101,6 +130,9 @@ _LineTotals _sumLines(Iterable<PackagePaymentLine> lines) {
         ? discount
         : line.shippingCost;
     totals.insurance += line.insurance;
+    totals.koin += _nonNegative(line.koin);
+    totals.koinRefunded += _nonNegative(line.koinRefunded);
+    totals.partialRefund += _nonNegative(line.partialRefund);
   }
   return totals;
 }
@@ -124,6 +156,7 @@ PackagePaymentBreakdown computePackagePayment(
   final showCheckoutFee = attributable != null;
   final platformFee = _nonNegative(attributable?.gatewayFee ?? 0);
   final feeCharged = _nonNegative(attributable?.gatewayFeeCharged ?? 0);
+  final activeKoin = _nonNegative(active.koin - active.koinRefunded);
 
   return PackagePaymentBreakdown(
     subtotal: active.subtotal,
@@ -133,10 +166,13 @@ PackagePaymentBreakdown computePackagePayment(
     showCheckoutFee: showCheckoutFee,
     platformFee: platformFee,
     platformFeeWaived: _nonNegative(platformFee - feeCharged),
-    paidTotal: active.net + feeCharged,
+    paidTotal: active.net + feeCharged - active.partialRefund - activeKoin,
     cancelledCount: cancelledLines.length,
     cancelledAmount: _sumLines(cancelledLines).net,
-    originalPaidTotal: all.net + feeCharged,
+    originalPaidTotal: all.net + feeCharged - all.koin,
+    koin: activeKoin,
+    koinSpent: all.koin,
+    partialRefund: active.partialRefund,
   );
 }
 

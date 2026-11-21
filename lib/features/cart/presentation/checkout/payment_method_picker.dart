@@ -29,6 +29,7 @@ class PaymentMethodPicker extends StatelessWidget {
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
+    this.paymentOptions = PaymentOptions.xenditDefault,
     required this.onPick,
   });
 
@@ -40,6 +41,9 @@ class PaymentMethodPicker extends StatelessWidget {
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
+
+  /// The server's gateway and channel rules; what the sheet lists.
+  final PaymentOptions paymentOptions;
   final ValueChanged<PaymentPick> onPick;
 
   Future<void> _open(BuildContext context) async {
@@ -55,6 +59,7 @@ class PaymentMethodPicker extends StatelessWidget {
         paymentMethod: paymentMethod,
         selectedChannel: selectedChannel,
         walletBalance: walletBalance,
+        paymentOptions: paymentOptions,
       ),
     );
     if (picked != null) onPick(picked);
@@ -83,30 +88,35 @@ class PaymentMethodPicker extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: (walletSelected || meta != null)
-                    ? colors.primary.withValues(alpha: 0.1)
-                    : Theme.of(context).colorScheme.secondary,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+            if (!walletSelected &&
+                meta != null &&
+                paymentLogoAsset(meta.channel) != null)
+              PaymentLogo(channel: meta.channel, size: 34)
+            else
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: (walletSelected || meta != null)
+                      ? colors.primary.withValues(alpha: 0.1)
+                      : Theme.of(context).colorScheme.secondary,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  walletSelected
+                      ? LucideIcons.wallet
+                      : meta != null
+                      ? (meta.group == PaymentChannelGroup.qr
+                            ? LucideIcons.qrCode
+                            : LucideIcons.creditCard)
+                      : LucideIcons.creditCard,
+                  size: 16,
+                  color: (walletSelected || meta != null)
+                      ? colors.primary
+                      : context.mutedForeground,
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(
-                walletSelected
-                    ? LucideIcons.wallet
-                    : meta != null
-                    ? (meta.group == PaymentChannelGroup.qr
-                          ? LucideIcons.qrCode
-                          : LucideIcons.creditCard)
-                    : LucideIcons.creditCard,
-                size: 16,
-                color: (walletSelected || meta != null)
-                    ? colors.primary
-                    : context.mutedForeground,
-              ),
-            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -124,7 +134,10 @@ class PaymentMethodPicker extends StatelessWidget {
                     walletSelected
                         ? _saldoLabel(walletBalance)
                         : meta?.description ??
-                              (grandTotal < qrisMaxIdr
+                              (availablePaymentChannels(
+                                    grandTotal,
+                                    paymentOptions,
+                                  ).contains(PaymentChannel.qris)
                                   ? 'QRIS tersedia'
                                   : 'Virtual Account tersedia'),
                     maxLines: 1,
@@ -153,6 +166,7 @@ class _PaymentMethodSheet extends StatelessWidget {
     required this.paymentMethod,
     required this.selectedChannel,
     required this.walletBalance,
+    required this.paymentOptions,
   });
 
   final int grandTotal;
@@ -160,17 +174,28 @@ class _PaymentMethodSheet extends StatelessWidget {
   final PaymentMethod paymentMethod;
   final PaymentChannel? selectedChannel;
   final int? walletBalance;
+  final PaymentOptions paymentOptions;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final allowed = availablePaymentChannels(grandTotal).toSet();
+    final allowed = availablePaymentChannels(
+      grandTotal,
+      paymentOptions,
+    ).toSet();
+    // Only what the gateway offers at some total is listed: a bank the
+    // server switched off, or a section with nothing left, isn't shown.
+    final offered = paymentOptions.offered;
     final qr = paymentChannels
         .where((m) => m.group == PaymentChannelGroup.qr)
+        .where((m) => offered.contains(m.channel))
         .toList();
     final va = paymentChannels
         .where((m) => m.group == PaymentChannelGroup.va)
+        .where((m) => offered.contains(m.channel))
         .toList();
+    final qrisUpTo = paymentOptions.maxIdrFor(PaymentChannelGroup.qr);
+    final vaFrom = paymentOptions.minIdrFor(PaymentChannelGroup.va);
     // Three states, not two: an unknown balance disables the row the same
     // way an insufficient one does, but must not accuse the buyer of being
     // short when nobody has looked yet.
@@ -289,26 +314,30 @@ class _PaymentMethodSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _ChannelSection(
-                    icon: LucideIcons.qrCode,
-                    title: 'QRIS',
-                    caption: 'Bayar instan dengan QR',
-                    unavailableHint:
-                        'Tersedia untuk pembayaran < ${formatRupiah(qrisMaxIdr)}',
-                    items: qr,
-                    allowed: allowed,
-                    selectedChannel: selectedChannel,
-                  ),
-                  _ChannelSection(
-                    icon: LucideIcons.creditCard,
-                    title: 'Virtual Account',
-                    caption: 'Transfer bank',
-                    unavailableHint:
-                        'Tersedia untuk pembayaran ≥ ${formatRupiah(qrisMaxIdr)}',
-                    items: va,
-                    allowed: allowed,
-                    selectedChannel: selectedChannel,
-                  ),
+                  if (qr.isNotEmpty)
+                    _ChannelSection(
+                      icon: LucideIcons.qrCode,
+                      title: 'QRIS',
+                      caption: 'Bayar instan dengan QR',
+                      unavailableHint:
+                          'Tersedia untuk pembayaran < '
+                          '${formatRupiah((qrisUpTo ?? qrisMaxIdr - 1) + 1)}',
+                      items: qr,
+                      allowed: allowed,
+                      selectedChannel: selectedChannel,
+                    ),
+                  if (va.isNotEmpty)
+                    _ChannelSection(
+                      icon: LucideIcons.creditCard,
+                      title: 'Virtual Account',
+                      caption: 'Transfer bank',
+                      unavailableHint:
+                          'Tersedia untuk pembayaran ≥ '
+                          '${formatRupiah(vaFrom ?? qrisMaxIdr)}',
+                      items: va,
+                      allowed: allowed,
+                      selectedChannel: selectedChannel,
+                    ),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -426,20 +455,7 @@ class _ChannelSection extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondary,
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          icon,
-                          size: 15,
-                          color: context.mutedForeground,
-                        ),
-                      ),
+                      PaymentLogo(channel: meta.channel, fallback: icon),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -466,6 +482,75 @@ class _ChannelSection extends StatelessWidget {
                 ),
               ),
       ],
+    );
+  }
+}
+
+/// The logos web shows (`public/payment_logo/`), in `assets/images/payment/`.
+/// A bank without one gets [PaymentLogo]'s icon instead.
+const _paymentLogos = <PaymentChannel, String>{
+  PaymentChannel.qris: 'qris.webp',
+  PaymentChannel.bca: 'bca.webp',
+  PaymentChannel.bni: 'bni.webp',
+  PaymentChannel.bri: 'bri.webp',
+  PaymentChannel.mandiri: 'mandiri.webp',
+  PaymentChannel.permata: 'permata.webp',
+  PaymentChannel.cimb: 'cimb.webp',
+};
+
+/// The asset path of [channel]'s logo, or null if it has none.
+@visibleForTesting
+String? paymentLogoAsset(PaymentChannel channel) {
+  final file = _paymentLogos[channel];
+  return file == null ? null : 'assets/images/payment/$file';
+}
+
+/// A channel's logo on a white tile, as web's `PaymentLogo`; [fallback] in
+/// a muted tile for a channel without one.
+@visibleForTesting
+class PaymentLogo extends StatelessWidget {
+  const PaymentLogo({
+    super.key,
+    required this.channel,
+    this.size = 32,
+    this.fallback = LucideIcons.creditCard,
+  });
+
+  final PaymentChannel channel;
+  final double size;
+  final IconData fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = paymentLogoAsset(channel);
+    if (asset == null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        alignment: Alignment.center,
+        child: Icon(fallback, size: 15, color: context.mutedForeground),
+      );
+    }
+    // White in dark mode too: the logos are drawn for a light background.
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Image.asset(
+        asset,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) =>
+            Icon(fallback, size: 15, color: context.mutedForeground),
+      ),
     );
   }
 }

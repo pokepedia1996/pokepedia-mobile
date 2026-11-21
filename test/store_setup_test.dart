@@ -18,12 +18,15 @@ import 'package:pokepedia_mobile/features/seller/presentation/store_setup/store_
 import 'package:pokepedia_mobile/features/seller/presentation/store_setup/store_setup_page.dart';
 import 'package:pokepedia_mobile/features/seller/repository/models/store_profile.dart';
 import 'package:pokepedia_mobile/features/seller/repository/store_profile_repository.dart';
+import 'package:pokepedia_mobile/features/seller/usecase/store_profile_notifier.dart';
 import 'package:pokepedia_mobile/features/seller/usecase/store_setup.dart';
 import 'package:pokepedia_mobile/features/user/repository/models/profile_models.dart';
 import 'package:pokepedia_mobile/features/user/repository/phone_otp_repository.dart';
 import 'package:pokepedia_mobile/features/user/usecase/user_notifier.dart';
 import 'package:pokepedia_mobile/shared/utils/geocode.dart';
 import 'package:pokepedia_mobile/shared/utils/id_phone.dart';
+import 'package:pokepedia_mobile/shared/widgets/coretan_kit.dart';
+import 'package:pokepedia_mobile/shared/widgets/scribble_drawing.dart';
 
 /// Buka Toko: from the Jual tab's launcher, through profile, phone, pickup
 /// point and couriers, to an open store — and nothing written until then.
@@ -46,6 +49,13 @@ class _FakeStoreRepo implements StoreProfileRepository {
   final String? openError;
   final opened = <Map<String, Object?>>[];
   final uploaded = <StorefrontImageKind>[];
+  final savedCouriers = <List<String>>[];
+
+  @override
+  Future<String?> saveCouriers(List<String> serviceIds) async {
+    savedCouriers.add(serviceIds);
+    return null;
+  }
 
   @override
   Future<String?> openStore({
@@ -168,6 +178,21 @@ const _places = [
 
 late AreaCatalog _areas;
 
+/// The drawings keep moving after they draw in, so nothing would ever
+/// settle; with "reduce motion" on they are simply there, and the flow can
+/// be walked with pumpAndSettle. The motion has its own tests below.
+void _stillMotion(WidgetTester tester) {
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      const FakeAccessibilityFeatures(disableAnimations: true);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+}
+
+/// Past the pause before a full code is checked.
+Future<void> _settleCode(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pumpAndSettle();
+}
+
 class _Harness {
   _Harness(this.store, this.addresses, this.otp);
   final _FakeStoreRepo store;
@@ -184,6 +209,7 @@ Future<_Harness> _openFlow(
   tester.view.physicalSize = const Size(430 * 3, 932 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
+  _stillMotion(tester);
 
   final harness = _Harness(
     _FakeStoreRepo(openError: openError),
@@ -245,6 +271,7 @@ Future<_Harness> _openFlow(
 }
 
 Future<void> _tap(WidgetTester tester, String text) async {
+  if (find.text(text).evaluate().isEmpty) fail('Nothing reads "$text"');
   await tester.ensureVisible(find.text(text).last);
   await tester.tap(find.text(text).last);
   await tester.pumpAndSettle();
@@ -291,6 +318,24 @@ void main() {
       expect(recommendedCourierLabels(_catalog), ['JNE', 'J&T', 'Gojek']);
     });
 
+    test('courier times, as a seller reads them', () {
+      expect(courierDurationLabel('1 - 3', 'hours'), '1–3 jam');
+      expect(courierDurationLabel('2 - 3', 'days'), '2–3 hari');
+      expect(courierDurationLabel('1', 'days'), 'besok');
+      expect(courierDurationLabel('6 - 8', 'hours'), '6–8 jam');
+      expect(courierDurationLabel('', 'days'), '');
+      expect(
+        CourierService.fromJson({
+          'id': 'jne/reg',
+          'courierName': 'JNE',
+          'serviceName': 'REG',
+          'durationRange': '2 - 3',
+          'durationUnit': 'days',
+        }).duration,
+        '2–3 hari',
+      );
+    });
+
     test('"Malang" is the Malang that has Klojen', () {
       final jatim = matchAreaOption(_areas.provinces, 'Jawa Timur')!;
       final city = matchCity(_areas, jatim.code, 'Malang', 'Klojen');
@@ -308,6 +353,7 @@ void main() {
       tester.view.physicalSize = const Size(430 * 3, 932 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
+      _stillMotion(tester);
       final router = GoRouter(
         routes: [
           GoRoute(
@@ -356,7 +402,7 @@ void main() {
     testWidgets('a phone verified elsewhere is already done', (tester) async {
       await open(tester, verified: true);
       expect(find.text('1 dari 3'), findsOneWidget);
-      expect(find.text('Selesai'), findsOneWidget);
+      expect(find.text('selesai'), findsOneWidget);
     });
 
     testWidgets('Mulai buka toko opens the flow', (tester) async {
@@ -402,9 +448,13 @@ void main() {
       expect(find.text('+62 812 3456 7890'), findsOneWidget);
       expect(find.textContaining('Kirim ulang dalam'), findsOneWidget);
 
-      // Six digits verify on their own.
+      // Six digits verify on their own, a moment after the last lands.
       await tester.enterText(find.byType(TextField), '123456');
-      await tester.pumpAndSettle();
+      await tester.pump();
+      expect(harness.otp.sent, hasLength(1));
+      expect(find.text('kode 6 digit.'), findsOneWidget);
+      await _settleCode(tester);
+      expect(find.text('Nomor HP terverifikasi'), findsOneWidget);
       expect(find.text('Kartu dijemput'), findsOneWidget);
       expect(find.text('3/4'), findsOneWidget);
     });
@@ -417,12 +467,17 @@ void main() {
       await _tap(tester, 'Kirim kode via WhatsApp');
 
       await tester.enterText(find.byType(TextField), '000000');
-      await tester.pumpAndSettle();
+      await _settleCode(tester);
       expect(
         find.text('Kode OTP salah atau sudah kedaluwarsa'),
         findsOneWidget,
       );
       expect(find.text('kode 6 digit.'), findsOneWidget);
+      // Emptied for another go.
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
     });
 
     testWidgets('a verified phone is not asked for again', (tester) async {
@@ -547,6 +602,8 @@ void main() {
       ]);
 
       expect(find.text('sudah buka!'), findsOneWidget);
+      // The finished store has its own close button, and no step header.
+      expect(find.byType(CoretanStepHeader), findsNothing);
       expect(find.text('Binder Mulyana'), findsOneWidget);
       expect(find.text('oleh @mulyana'), findsOneWidget);
       expect(find.text('BM'), findsOneWidget);
@@ -589,11 +646,21 @@ void main() {
       await _tap(tester, 'Simpan alamat');
 
       await _tap(tester, 'Atur manual');
+      expect(
+        find.text('4 layanan dipilih · ubah di langkah berikut'),
+        findsOneWidget,
+      );
+      // Picking by hand is a screen of its own.
+      await _tap(tester, 'Pilih layanan kurir');
+      expect(find.text('kurir kamu.'), findsOneWidget);
       expect(find.text('4 dari 5 layanan dipilih'), findsOneWidget);
       // Drop Gojek, add AnterAja.
-      await _tap(tester, 'Gojek INSTANT');
-      await _tap(tester, 'AnterAja REG');
-      await _tap(tester, 'Buka toko');
+      await _tap(tester, 'Gojek · INSTANT');
+      await _tap(tester, 'AnterAja · REG');
+      expect(find.text('4 dari 5 layanan dipilih'), findsOneWidget);
+      // Nothing written until the store opens.
+      expect(harness.store.opened, isEmpty);
+      await _tap(tester, 'Buka toko · 4 layanan');
 
       expect((harness.store.opened.single['couriers']! as List).toSet(), {
         'jne/reg',
@@ -601,7 +668,223 @@ void main() {
         'jnt/ez',
         'anteraja/reg',
       });
-      expect(find.text('3 kurir aktif'), findsOneWidget);
+      expect(find.text('4 layanan kurir aktif'), findsOneWidget);
+      expect(find.text('JNE, J&T Express, AnterAja'), findsOneWidget);
+    });
+
+    testWidgets('no courier, no store: the button says why', (tester) async {
+      await _openFlow(tester, phoneVerified: true);
+      await _tap(tester, 'Lanjut');
+      await _pickupAtIjen(tester);
+      await _tap(tester, 'Simpan alamat');
+      await _tap(tester, 'Atur manual');
+      await _tap(tester, 'Pilih layanan kurir');
+
+      await _tap(tester, 'Pilih semua');
+      expect(find.text('5 dari 5 layanan dipilih'), findsOneWidget);
+      await _tap(tester, 'Kosongkan');
+      expect(find.text('0 dari 5 layanan dipilih'), findsOneWidget);
+      expect(find.text('Pilih minimal 1 layanan kurir.'), findsOneWidget);
+      final open = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Buka toko · 0 layanan'),
+      );
+      expect(open.onPressed, isNull);
+
+      // Back to the choice, and the recommendation is still one tap away.
+      await tester.tap(find.bySemanticsLabel('Kembali'));
+      await tester.pumpAndSettle();
+      expect(find.text('kirim kartumu.'), findsOneWidget);
+    });
+
+    testWidgets('a profile put off says so on the finished store', (
+      tester,
+    ) async {
+      await _openFlow(tester, phoneVerified: true);
+      await _tap(tester, 'Nanti dulu');
+      await _pickupAtIjen(tester);
+      await _tap(tester, 'Simpan alamat');
+      await _tap(tester, 'Buka toko');
+
+      expect(find.text('Profil toko pakai default'), findsOneWidget);
+      expect(
+        find.text('Nama toko: mulyana · bisa diubah nanti'),
+        findsOneWidget,
+      );
+      expect(find.text('selesai'), findsNWidgets(4));
+    });
+  });
+
+  group('the Kurir settings', () {
+    testWidgets('the same list as Buka Toko, saved as a whole', (tester) async {
+      tester.view.physicalSize = const Size(430 * 3, 932 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      _stillMotion(tester);
+      final store = _FakeStoreRepo();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(_FakeAuth.new),
+            storeProfileRepositoryProvider.overrideWithValue(store),
+            storeProfileProvider.overrideWith(
+              (ref) async => const StoreProfile(
+                storeName: 'Binder Mulyana',
+                acceptedCourierServices: ['jne/reg', 'gojek/instant'],
+              ),
+            ),
+            courierServicesProvider.overrideWith((ref) async => _catalog),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const SellerCouriersPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // What the store takes now, ticked; the speeds as cards.
+      expect(find.text('2 dari 5 layanan dipilih'), findsOneWidget);
+      expect(find.text('Instan (1–3 jam)'), findsOneWidget);
+      expect(find.text('Reguler'), findsOneWidget);
+      expect(find.text('1/1'), findsOneWidget);
+      expect(find.text('1/4'), findsOneWidget);
+
+      await _tap(tester, 'J&T Express · EZ');
+      expect(find.text('3 dari 5 layanan dipilih'), findsOneWidget);
+      await _tap(tester, 'Simpan');
+      expect(store.savedCouriers.single.toSet(), {
+        'jne/reg',
+        'gojek/instant',
+        'jnt/ez',
+      });
+    });
+  });
+
+  group('with motion', () {
+    // The rest of this file holds still; these let everything move, and
+    // walk time forward by hand, since the drawings never settle.
+    Future<void> step(WidgetTester tester, [int ms = 700]) async {
+      for (var i = 0; i < ms ~/ 50; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    testWidgets('the launcher draws itself in, and keeps moving', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(430 * 3, 932 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      // The test bundle reads assets with real file I/O, which the fake
+      // clock doesn't drive; loaded once in real time, every drawing after
+      // finds the data ready.
+      ScribbleData.clearCache();
+      await tester.runAsync(
+        () => ScribbleData.load(
+          'toko_lapak',
+        ).timeout(const Duration(seconds: 10)),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(_FakeAuth.new),
+            privateProfileProvider.overrideWith(
+              (ref) async => const PrivateProfile(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const Scaffold(body: StoreSetupLauncher()),
+          ),
+        ),
+      );
+      // The data was finished in real time, so the drawings hear of it
+      // there too.
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await step(tester, 3000);
+      expect(
+        find.descendant(
+          of: find.byType(ScribbleDrawing),
+          matching: find.byType(CustomPaint),
+        ),
+        findsWidgets,
+      );
+      expect(find.text('0% potongan.'), findsOneWidget);
+      // The stall's idle loop is still running: it never settles.
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a full code waits a beat, then the boxes go green', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(430 * 3, 932 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final otp = _FakeOtp();
+      final router = GoRouter(
+        initialLocation: Routes.openStore,
+        routes: [
+          GoRoute(
+            path: Routes.openStore,
+            builder: (_, __) => const StoreSetupPage(),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(_FakeAuth.new),
+            privateProfileProvider.overrideWith(
+              (ref) async => const PrivateProfile(),
+            ),
+            storeProfileRepositoryProvider.overrideWithValue(_FakeStoreRepo()),
+            areaCatalogProvider.overrideWith((ref) async => _areas),
+            addressesProvider.overrideWith((ref) async => const []),
+            phoneOtpRepositoryProvider.overrideWithValue(otp),
+            courierServicesProvider.overrideWith((ref) async => _catalog),
+          ],
+          child: MaterialApp.router(
+            theme: AppTheme.light,
+            routerConfig: router,
+          ),
+        ),
+      );
+      await step(tester);
+      final header = tester.element(find.byType(CoretanStepHeader));
+      await tester.tap(find.text('Nanti dulu'));
+      await tester.pump(const Duration(milliseconds: 150));
+      // Mid-change: one page, one header, and both steps' content while
+      // one gives way to the other.
+      expect(find.byType(CoretanStepHeader), findsOneWidget);
+      expect(find.text('Kenalin'), findsOneWidget);
+      expect(find.text('kamu berapa?'), findsOneWidget);
+      await step(tester);
+      // The same header, kept rather than built again, now reading 2/4.
+      expect(tester.element(find.byType(CoretanStepHeader)), same(header));
+      expect(find.text('2/4'), findsOneWidget);
+      expect(find.text('Kenalin'), findsNothing);
+      await tester.enterText(find.byType(TextField), '81234567890');
+      await step(tester, 300);
+      await tester.tap(find.text('Kirim kode via WhatsApp'));
+      await step(tester);
+      expect(find.text('kode 6 digit.'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.pump(const Duration(milliseconds: 200));
+      // Not yet: the last digit is seen landing first.
+      expect(find.text('Nomor HP terverifikasi'), findsNothing);
+      await step(tester, 400);
+      expect(find.text('Nomor HP terverifikasi'), findsOneWidget);
+      expect(find.text('kode 6 digit.'), findsOneWidget);
+      // Then on to the pickup point.
+      await step(tester, 1400);
+      expect(find.text('Kartu dijemput'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
     });
   });
 }

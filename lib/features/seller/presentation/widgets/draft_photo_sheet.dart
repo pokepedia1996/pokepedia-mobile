@@ -172,13 +172,15 @@ class _DraftPhotoSheetState extends ConsumerState<_DraftPhotoSheet> {
                   foregroundColor: Theme.of(context).cardColor,
                   minimumSize: const Size.fromHeight(44),
                 ),
+                // Saving disables the button, which swaps its fill for the
+                // pale disabled grey: a white spinner vanished on it.
                 child: _saving
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: colors.onSurface,
                         ),
                       )
                     : const Text('Simpan foto'),

@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_palette.dart';
+import '../../../../shared/widgets/coretan_kit.dart';
 import '../../../../shared/widgets/setup_kit.dart';
 
-/// A Buka Toko step: what it asks, scrolling, over a footer that stays put
-/// — and rises with the keyboard, so the button is never under it.
+/// A Buka Toko step's content: what it asks, scrolling, over a footer that
+/// stays put — and rises with the keyboard, so the button is never under it.
+///
+/// The page around it — the paper and the step header — belongs to
+/// StoreSetupPage and stays as the steps change; the blocks of [content]
+/// arrive one after another as this step comes in.
 class SetupStepLayout extends StatelessWidget {
   const SetupStepLayout({
     super.key,
-    required this.palette,
     required this.content,
     required this.footer,
-    this.top = 16,
     this.physics,
   });
 
-  final DesignPalette palette;
   final List<Widget> content;
   final List<Widget> footer;
-
-  /// Space above the progress bar; the designs vary it by step.
-  final double top;
 
   /// Set to stop the page scrolling while a finger is on a map in it, so
   /// the drag pans the map instead.
@@ -30,98 +29,130 @@ class SetupStepLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, top, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: SingleChildScrollView(
               physics: physics,
+              // Room for a sticker card's hard shadow at the edges.
+              clipBehavior: Clip.none,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [...content, const SizedBox(height: 24)],
+                children: [
+                  for (var i = 0; i < content.length; i++)
+                    CoretanReveal.at(i, child: content[i]),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
           ),
-          ...footer,
+          for (var i = 0; i < footer.length; i++)
+            CoretanReveal.at(content.length + i, child: footer[i]),
         ],
       ),
     );
   }
 }
 
-/// The state of one checklist row.
-enum SetupRowState {
-  /// Still to do; the icon says what it is.
-  todo,
+/// The eyebrow, the two-line headline and the line under it that open
+/// every step.
+class SetupIntro extends StatelessWidget {
+  const SetupIntro({
+    super.key,
+    required this.eyebrow,
+    required this.first,
+    required this.second,
+    this.sub,
+    this.subWidget,
+  });
 
-  /// Done: a green tick, and "Selesai".
-  done,
+  final String eyebrow;
+  final String first;
+  final String second;
+  final String? sub;
 
-  /// Can wait: the icon on a quiet tile, and "Opsional".
-  optional,
+  /// In place of [sub], for a line with a link in it.
+  final Widget? subWidget;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = DesignPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CoretanEyebrow(eyebrow),
+          const SizedBox(height: 8),
+          SetupHeadline(
+            first: first,
+            second: second,
+            palette: palette,
+            size: 40,
+            lineHeight: 42,
+          ),
+          if (sub != null || subWidget != null) ...[
+            const SizedBox(height: 10),
+            subWidget ??
+                Text(
+                  sub!,
+                  style: setupText(18, palette.muted, FontWeight.w400, 1.4),
+                ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
-/// One row of the Buka Toko checklist — the launcher's "Yang perlu
-/// disiapkan" and the finished store's summary.
+/// One row of a Buka Toko checklist — the launcher's "Yang perlu
+/// disiapkan" and the finished store's summary: a drawn icon, what it is,
+/// and a handwritten note on the right.
 class SetupChecklistRow extends StatelessWidget {
   const SetupChecklistRow({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.meta,
-    required this.state,
-    required this.palette,
+    this.meta,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String title;
   final String subtitle;
 
-  /// The note on the right: "±1 mnt", "Opsional", "Selesai".
-  final String meta;
-  final SetupRowState state;
-  final DesignPalette palette;
+  /// The note on the right: "±1 mnt", "opsional", "selesai".
+  final Widget? meta;
 
   @override
   Widget build(BuildContext context) {
-    final (tile, iconColor, metaColor) = switch (state) {
-      SetupRowState.done => (
-        palette.successSoft,
-        palette.successText,
-        palette.successText,
-      ),
-      SetupRowState.optional => (palette.chip, palette.muted, palette.muted),
-      SetupRowState.todo => (palette.brandSoft, palette.brand, palette.muted),
-    };
+    final palette = DesignPalette.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(color: tile, shape: BoxShape.circle),
-            child: Icon(
-              state == SetupRowState.done ? LucideIcons.check : icon,
-              size: 18,
-              color: iconColor,
-            ),
-          ),
-          const SizedBox(width: 14),
+          SizedBox.square(dimension: 46, child: Center(child: icon)),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: setupText(15, palette.ink, FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: setupText(13, palette.muted)),
+                Text(title, style: setupText(17, palette.ink, FontWeight.w800)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: setupText(14.5, palette.muted),
+                  ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          Text(meta, style: setupText(12, metaColor, FontWeight.w500)),
+          if (meta != null) ...[const SizedBox(width: 10), meta!],
         ],
       ),
     );
@@ -130,27 +161,15 @@ class SetupChecklistRow extends StatelessWidget {
 
 /// White card with rows divided by hairlines, optionally under a header.
 class SetupCard extends StatelessWidget {
-  const SetupCard({
-    super.key,
-    required this.palette,
-    required this.rows,
-    this.header,
-  });
+  const SetupCard({super.key, required this.rows, this.header});
 
-  final DesignPalette palette;
   final List<Widget> rows;
   final Widget? header;
 
   @override
   Widget build(BuildContext context) {
-    final divider = Container(height: 1, color: palette.border);
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: palette.surface,
-        border: Border.all(color: palette.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    const divider = Divider(height: 1, thickness: 1, color: AppColors.onbLine);
+    return CoretanCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

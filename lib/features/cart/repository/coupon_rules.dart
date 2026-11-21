@@ -2,8 +2,9 @@ import 'models/checkout_models.dart';
 
 /// Ports `clientBlockReason` from `features/checkout/utils/coupon-eligibility.ts`.
 ///
-/// Free shipping stays usable on saldo and before a channel is picked; the
-/// fee waiver does not, since neither of those charges a fee to waive.
+/// Free shipping stays usable on saldo and before a channel is picked. The
+/// fee waiver never applies: there is no buyer fee left to waive, and web
+/// paused the POKEPEDIA coupon when it dropped the fee.
 String? couponBlockReason(
   CouponType type, {
   required PaymentMethod paymentMethod,
@@ -12,11 +13,7 @@ String? couponBlockReason(
 }) {
   switch (type) {
     case CouponType.waiveGatewayFee:
-      if (paymentMethod == PaymentMethod.wallet) {
-        return 'Tidak berlaku untuk pembayaran saldo';
-      }
-      if (paymentChannel == null) return 'Pilih metode pembayaran dulu';
-      return null;
+      return 'Biaya platform sudah tidak dikenakan';
     case CouponType.freeShipping:
       if (shippingTotal <= 0) return 'Pilih kurir dulu';
       return null;

@@ -35,6 +35,9 @@ Map<String, dynamic> _item({
   int shipping = 0,
   int discount = 0,
   int insurance = 0,
+  int koin = 0,
+  int koinRefunded = 0,
+  int partialRefund = 0,
   Map<String, dynamic>? cart,
 }) => {
   'id': id,
@@ -53,6 +56,9 @@ Map<String, dynamic> _item({
     'shipping_cost': shipping,
     'shipping_discount_idr': discount,
     'insurance_fee_idr': insurance,
+    if (koin > 0) 'koin_idr': koin,
+    if (koinRefunded > 0) 'koin_refunded_idr': koinRefunded,
+    if (partialRefund > 0) 'partial_refund_amount': partialRefund,
     'status': 'shipped',
     'paid_at': '2026-10-01T09:00:00+00:00',
     'commission_amount': 750,
@@ -146,6 +152,83 @@ void main() {
       expect(result.paidTotal, 2000);
       expect(result.cancelledAmount, 40275);
       expect(result.originalPaidTotal, 42275);
+    });
+  });
+
+  group('Koin on buyer totals', () {
+    test('web worked example: Koin 20.000 shown, Total pesanan 45.000', () {
+      final p = computePackagePayment([
+        const PackagePaymentLine(
+          subtotal: 50000,
+          shippingCost: 10000,
+          shippingDiscount: 10000,
+          koin: 20000,
+        ),
+        const PackagePaymentLine(
+          subtotal: 30000,
+          koin: 10000,
+          koinRefunded: 10000,
+          partialRefund: 15000,
+        ),
+      ], null);
+      expect(p.koin, 20000);
+      expect(p.koinSpent, 30000);
+      expect(p.partialRefund, 15000);
+      expect(p.paidTotal, 45000);
+      expect(p.originalPaidTotal, 50000);
+    });
+
+    test('a fully cancelled Koin order: paid 0, original = cash share', () {
+      final p = computePackagePayment([
+        const PackagePaymentLine(
+          subtotal: 40000,
+          shippingCost: 9000,
+          koin: 40000,
+          koinRefunded: 40000,
+          cancelled: true,
+        ),
+      ], null);
+      expect(p.koin, 0);
+      expect(p.paidTotal, 0);
+      expect(p.cancelledAmount, 49000);
+      expect(p.originalPaidTotal, 9000);
+    });
+
+    test('Koin covering everything pays Rp0', () {
+      final p = computePackagePayment([
+        const PackagePaymentLine(subtotal: 20000, koin: 20000),
+      ], null);
+      expect(p.paidTotal, 0);
+    });
+
+    test('Rp300.000 order with Rp50.000 Koin lists and details Rp250.000', () {
+      final order = OrderModel.fromRow(
+        _orderRow([_item(price: 300000, koin: 50000)]),
+        storeName: 'Toko',
+      );
+      expect(order.total, 250000);
+      expect(order.payment.paidTotal, 250000);
+      expect(order.payment.koin, 50000);
+    });
+
+    test('the list total takes Koin off but not a partial refund', () {
+      final order = OrderModel.fromRow(
+        _orderRow([_item(price: 80000, koin: 30000, partialRefund: 15000)]),
+        storeName: 'Toko',
+      );
+      expect(order.total, 50000);
+      expect(order.payment.paidTotal, 35000);
+    });
+
+    test('the seller detail ignores Koin even when the row carries it', () {
+      final row = _orderRow([_item(price: 220000, koin: 50000)]);
+      final detail = SellerOrderDetail.fromRow(
+        row,
+        order: OrderModel.fromRow(row, storeName: 'Pembeli'),
+      );
+      // The buyer paid 220.000 for the goods; how they funded it (Koin) is
+      // not the seller's number.
+      expect(detail.buyerPaid, 220000);
     });
   });
 

@@ -157,6 +157,13 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     return me != null && me.isNotEmpty && me == listing.sellerId;
   }
 
+  /// Whether the viewer owns [store] — the same check, for when no listing
+  /// is left to compare against.
+  bool _isOwnStore(StoreModel store) {
+    final me = ref.read(authProvider).valueOrNull?.id;
+    return me != null && me.isNotEmpty && me == store.userId;
+  }
+
   Future<void> _makeOffer(ListingModel listing) async {
     if (_isOwnListing(listing)) {
       // `submit_offer` answers `cannot_offer_on_own_listing`; better to say
@@ -178,8 +185,9 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
 
   /// Opens the conversation with this seller, reusing the existing room when
   /// there is one. A room with nobody in it yet isn't created here — the
-  /// first message does that, via `ensure_direct_room`.
-  Future<void> _contactSeller(StoreModel store, ListingModel listing) async {
+  /// first message does that, via `ensure_direct_room`. Without a [listing]
+  /// (every copy sold) it's a plain conversation with the seller.
+  Future<void> _contactSeller(StoreModel store, ListingModel? listing) async {
     if (ref.read(authProvider).valueOrNull == null) {
       context.push(Routes.login);
       return;
@@ -195,7 +203,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
         .withUser(
           otherUserId: sellerId,
           title: store.storeName,
-          listingId: listing.id,
+          listingId: listing?.id,
         );
     if (!mounted) return;
 
@@ -204,17 +212,19 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
     final target = ChatTarget(
       otherUserId: sellerId,
       title: store.storeName,
-      listingId: listing.id,
-      listingContext: ChatListingContext(
-        listingOrderId: listing.id,
-        cardId: listing.card.id,
-        priceIdr: listing.price,
-        cardName: listing.card.name,
-        cardImage: listing.card.imageUrl,
-        packSlug: listing.card.packSlug,
-        variantKey: listing.variantKey,
-        condition: listing.condition.raw,
-      ),
+      listingId: listing?.id,
+      listingContext: listing == null
+          ? null
+          : ChatListingContext(
+              listingOrderId: listing.id,
+              cardId: listing.card.id,
+              priceIdr: listing.price,
+              cardName: listing.card.name,
+              cardImage: listing.card.imageUrl,
+              packSlug: listing.card.packSlug,
+              variantKey: listing.variantKey,
+              condition: listing.condition.raw,
+            ),
     );
 
     final slug = arg.slug;
@@ -222,7 +232,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       // The listing rides in the query so a deep link keeps it, and in
       // `extra` so the card is drawn before anything is fetched.
       context.push(
-        Routes.chatThread(slug, listingId: listing.id),
+        Routes.chatThread(slug, listingId: listing?.id),
         extra: target,
       );
     } else {
@@ -324,7 +334,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
       ),
       body: async.when(
         data: (data) {
-          if (data == null || data.listings.isEmpty) {
+          if (data == null) {
             return EmptyState(
               icon: LucideIcons.store,
               title: 'Listing tidak lagi tersedia',
@@ -338,6 +348,9 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             );
           }
 
+          // Every copy sold: the page stays, as the card's page, with the
+          // artwork marked "Sudah Habis" and nothing left to buy.
+          final soldOut = data.listings.isEmpty;
           final cheapestByCondition = <CardCondition, ListingModel>{};
           for (final listing in data.listings) {
             final existing = cheapestByCondition[listing.condition];
@@ -345,11 +358,12 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
               cheapestByCondition[listing.condition] = listing;
             }
           }
-          final activeCondition =
-              _selectedCondition ?? data.listings.first.condition;
-          final active =
-              cheapestByCondition[activeCondition] ?? data.listings.first;
-          final card = active.card;
+          final ListingModel? active = soldOut
+              ? null
+              : cheapestByCondition[_selectedCondition ??
+                        data.listings.first.condition] ??
+                    data.listings.first;
+          final card = active?.card ?? data.card;
           final store = data.store;
           final wishlisted = ref.watch(isWishlistedProvider(widget.cardId));
 
@@ -368,7 +382,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
 
           // The seller's own photos of this copy stand in for the catalog
           // artwork, exactly like `heroPhotos`/`heroImage` on the web.
-          final photos = active.photoUrls;
+          final photos = active?.photoUrls ?? const <String>[];
           final photoIndex = _photoIndex < photos.length ? _photoIndex : 0;
           final heroImage = photos.isEmpty ? card.imageUrl : photos[photoIndex];
 
@@ -409,9 +423,17 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                                 border: Border.all(color: context.borderColor),
                               ),
                               clipBehavior: Clip.antiAlias,
-                              child: CardArt(
-                                imageUrl: heroImage,
-                                borderRadius: AppRadius.lg,
+                              child: Stack(
+                                children: [
+                                  CardArt(
+                                    imageUrl: heroImage,
+                                    borderRadius: AppRadius.lg,
+                                  ),
+                                  if (soldOut)
+                                    const Positioned.fill(
+                                      child: _SoldOutOverlay(),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -445,31 +467,45 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                 CardTitleLine(card: card),
                 const SizedBox(height: 14),
 
-                // Buy block.
-                _PurchasePanel(
-                  cheapestByCondition: cheapestByCondition,
-                  active: active,
-                  store: store,
-                  otherSellersCount: data.otherSellersCount,
-                  globalCardHref: Routes.cardDetail(card.packSlug, card.id),
-                  positivePct: data.positivePct,
-                  feedbackScore: data.feedbackScore,
-                  following: _following,
-                  onSelectCondition: (c) => setState(() {
-                    _selectedCondition = c;
-                    _photoIndex = 0;
-                  }),
-                  onAddToCart: (qty) => _addToCart(active, qty, heroImage),
-                  onMakeOffer: () => _makeOffer(active),
-                  isOwnListing: _isOwnListing(active),
-                  myOffer: ref
-                      .watch(myOfferOnListingProvider(active.slug))
-                      .valueOrNull,
-                  onReport: () => _reportListing(active, card.name),
-                  onToggleFollow: () => _toggleFollow(store),
-                  onContact: () => _contactSeller(store, active),
-                  onShare: () => showStoreShareSheet(context, store: store),
-                ),
+                // Buy block — or, with nothing left, just the seller.
+                if (active == null)
+                  _SoldOutPanel(
+                    store: store,
+                    otherSellersCount: data.otherSellersCount,
+                    globalCardHref: Routes.cardDetail(card.packSlug, card.id),
+                    isOwnStore: _isOwnStore(store),
+                    positivePct: data.positivePct,
+                    feedbackScore: data.feedbackScore,
+                    following: _following,
+                    onToggleFollow: () => _toggleFollow(store),
+                    onContact: () => _contactSeller(store, null),
+                    onShare: () => showStoreShareSheet(context, store: store),
+                  )
+                else
+                  _PurchasePanel(
+                    cheapestByCondition: cheapestByCondition,
+                    active: active,
+                    store: store,
+                    otherSellersCount: data.otherSellersCount,
+                    globalCardHref: Routes.cardDetail(card.packSlug, card.id),
+                    positivePct: data.positivePct,
+                    feedbackScore: data.feedbackScore,
+                    following: _following,
+                    onSelectCondition: (c) => setState(() {
+                      _selectedCondition = c;
+                      _photoIndex = 0;
+                    }),
+                    onAddToCart: (qty) => _addToCart(active, qty, heroImage),
+                    onMakeOffer: () => _makeOffer(active),
+                    isOwnListing: _isOwnListing(active),
+                    myOffer: ref
+                        .watch(myOfferOnListingProvider(active.slug))
+                        .valueOrNull,
+                    onReport: () => _reportListing(active, card.name),
+                    onToggleFollow: () => _toggleFollow(store),
+                    onContact: () => _contactSeller(store, active),
+                    onShare: () => showStoreShareSheet(context, store: store),
+                  ),
                 const SizedBox(height: 20),
 
                 // "Histori Transaksi" then the price chart — web's
@@ -1095,6 +1131,100 @@ class _VacationNotice extends StatelessWidget {
   }
 }
 
+/// The artwork's "Sudah Habis" veil, for a card the seller has none left of.
+class _SoldOutOverlay extends StatelessWidget {
+  const _SoldOutOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.55),
+      child: Center(
+        child: Text(
+          'Sudah Habis',
+          style: AppTypography.h2(
+            Colors.white,
+          ).copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+/// Where the purchase panel was, once every copy is sold: no price, stepper
+/// or buy buttons — the way to other sellers' copies, then the seller.
+class _SoldOutPanel extends StatelessWidget {
+  const _SoldOutPanel({
+    required this.store,
+    required this.otherSellersCount,
+    required this.globalCardHref,
+    required this.isOwnStore,
+    required this.positivePct,
+    required this.feedbackScore,
+    required this.following,
+    required this.onToggleFollow,
+    required this.onContact,
+    required this.onShare,
+  });
+
+  final StoreModel store;
+  final int otherSellersCount;
+  final String globalCardHref;
+  final bool isOwnStore;
+  final double? positivePct;
+  final int feedbackScore;
+  final bool following;
+  final VoidCallback onToggleFollow;
+  final VoidCallback onContact;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: context.borderColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kartu ini sudah habis di toko ini.',
+                  style: AppTypography.body(context.mutedForeground),
+                ),
+                const SizedBox(height: 4),
+                _OtherListingsCta(
+                  count: otherSellersCount,
+                  href: globalCardHref,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: context.borderColor),
+          _SellerStrip(
+            store: store,
+            listing: null,
+            isOwnListing: isOwnStore,
+            positivePct: positivePct,
+            feedbackScore: feedbackScore,
+            following: following,
+            onToggleFollow: onToggleFollow,
+            onContact: onContact,
+            onShare: onShare,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConditionPill extends StatelessWidget {
   const _ConditionPill({
     required this.condition,
@@ -1149,7 +1279,10 @@ class _SellerStrip extends StatelessWidget {
   });
 
   final StoreModel store;
-  final ListingModel listing;
+
+  /// The listing on show; null once every copy is sold, when the store's own
+  /// profile stands in for it.
+  final ListingModel? listing;
 
   /// The viewer is the seller. Contacting and following are both about
   /// reaching someone else, so neither is drawn — `follow_shop` refuses a
@@ -1174,6 +1307,8 @@ class _SellerStrip extends StatelessWidget {
       if (store.completionPct != null) '${store.completionPct}% selesai',
       ?store.shipTimeLabel,
     ];
+    final storeName = listing?.storeName ?? store.storeName;
+    final cityName = listing?.cityName ?? store.cityName;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
@@ -1184,8 +1319,11 @@ class _SellerStrip extends StatelessWidget {
             child: Row(
               children: [
                 SellerAvatar(
-                  name: listing.storeName,
-                  imageUrl: listing.sellerImageUrl,
+                  name: storeName,
+                  imageUrl:
+                      listing?.sellerImageUrl ??
+                      store.avatarUrl ??
+                      store.logoUrl,
                   size: 36,
                 ),
                 const SizedBox(width: 12),
@@ -1197,7 +1335,7 @@ class _SellerStrip extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              listing.storeName,
+                              storeName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.bodySmSemibold(
@@ -1205,7 +1343,7 @@ class _SellerStrip extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (listing.isVerified) ...[
+                          if (listing?.isVerified ?? store.isVerified) ...[
                             const SizedBox(width: 4),
                             Icon(
                               LucideIcons.badgeCheck,
@@ -1234,7 +1372,7 @@ class _SellerStrip extends StatelessWidget {
                                   ' · Lihat barang lain',
                         style: AppTypography.caption(context.mutedForeground),
                       ),
-                      if (listing.cityName.isNotEmpty) ...[
+                      if (cityName.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
@@ -1246,7 +1384,7 @@ class _SellerStrip extends StatelessWidget {
                             const SizedBox(width: 2),
                             Expanded(
                               child: Text(
-                                listing.cityName,
+                                cityName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTypography.caption(

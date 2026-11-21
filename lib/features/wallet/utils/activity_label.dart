@@ -25,6 +25,7 @@ const _genericTitle = <String, String>{
   'dispute_partial_refund': 'Refund parsial hasil laporan',
   'seller_partial_refund': 'Refund sebagian dari penjual',
   'lost_package_refund': 'Refund paket hilang',
+  'checkout_refund': 'Refund pembayaran yang gagal diproses',
   'withdrawal_debit': 'Penarikan ke rekening',
   'withdrawal_reverse': 'Penarikan dibatalkan',
 };

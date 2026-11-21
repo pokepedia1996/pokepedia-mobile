@@ -22,6 +22,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
+import '../../referral/usecase/referral_providers.dart';
 import '../repository/models/order_model.dart';
 import '../repository/models/shipment_destination.dart';
 import '../usecase/orders_notifier.dart';
@@ -96,6 +97,9 @@ class _OrderDetailPageState extends ConsumerState<OrderDetailPage> {
 
     ref.invalidate(orderDetailProvider(widget.slug));
     ref.invalidate(ordersProvider);
+    // An instant cancel returns the Koin spent on the order.
+    ref.invalidate(koinBalanceProvider);
+    ref.invalidate(koinHistoryProvider);
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
@@ -959,6 +963,9 @@ class _ItemsSectionState extends State<_ItemsSection> {
     final count = order.items.length;
     final payment = order.payment;
     final hasCancelledItems = payment.cancelledCount > 0;
+    final hasRefunds = hasCancelledItems || payment.partialRefund > 0;
+    // A refund on an order paid partly with Koin goes back to Koin first.
+    final refundTo = payment.koinSpent > 0 ? 'saldo & Koin' : 'saldo';
 
     return _Section(
       title: 'Item dipesan',
@@ -984,11 +991,11 @@ class _ItemsSectionState extends State<_ItemsSection> {
               children: [
                 Expanded(
                   child: Text(
-                    hasCancelledItems ? 'Total pesanan' : 'Total dibayar',
+                    hasRefunds ? 'Total pesanan' : 'Total dibayar',
                     style: AppTypography.bodySmSemibold(colors.onSurface),
                   ),
                 ),
-                if (hasCancelledItems) ...[
+                if (hasRefunds) ...[
                   Text(
                     formatRupiah(payment.originalPaidTotal),
                     style: AppTypography.caption(
@@ -1043,13 +1050,27 @@ class _ItemsSectionState extends State<_ItemsSection> {
                     amount: payment.platformFee,
                     struck: payment.isPlatformFeeWaived,
                   ),
+                if (payment.koin > 0)
+                  _MoneyRow(
+                    label: 'Koin Pokepedia',
+                    amount: payment.koin,
+                    prefix: '− ',
+                    color: context.appSemantic.success,
+                  ),
                 if (hasCancelledItems)
                   _MoneyRow(
                     label:
                         'Item dibatalkan (${payment.cancelledCount}) · '
-                        'dikembalikan ke saldo',
+                        'dikembalikan ke $refundTo',
                     amount: payment.cancelledAmount,
                     struck: true,
+                  ),
+                if (payment.partialRefund > 0)
+                  _MoneyRow(
+                    label: 'Refund sebagian · dikembalikan ke $refundTo',
+                    amount: payment.partialRefund,
+                    prefix: '− ',
+                    color: context.appSemantic.success,
                   ),
               ],
             ),
