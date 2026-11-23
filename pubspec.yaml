@@ -146,9 +146,10 @@ flutter:
       fonts:
         - asset: assets/fonts/PatrickHand-Regular.ttf
 
-# Launcher icon. iOS and older Android take one opaque square; Android's
-# adaptive icon takes the mark alone over the brand cream, so a round mask
-# crops the tile's pattern rather than the mark.
+# Launcher icon. iOS and older Android take the tile as one opaque square;
+# Android's adaptive icon takes the whole tile scaled into the visible part
+# of the layer, so a round or squircle mask crops the tile's patterned
+# corners rather than the mark.
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
@@ -157,11 +158,12 @@ flutter_launcher_icons:
   # the cream they sit on and the platform masks its own corners over it.
   remove_alpha_ios: true
   background_color_ios: "#F9F5E8"
-  adaptive_icon_background: "#F9F5E8"
+  # The tile's own cream, so a layer nudged by the launcher shows no seam.
+  adaptive_icon_background: "#EEE8D2"
   adaptive_icon_foreground: "branding/app-icon-foreground.png"
   # The generator insets the foreground 16% by default; the source is already
-  # padded to the safe zone, and both insets together shrink the mark to a
-  # speck.
+  # padded to the safe zone (the whole tile scaled to the visible 72 of 108dp,
+  # cream around it), and both insets together shrink the mark to a speck.
   adaptive_icon_foreground_inset: 0
   min_sdk_android: 21
 
