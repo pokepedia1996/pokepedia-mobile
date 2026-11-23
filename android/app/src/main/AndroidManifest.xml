@@ -18,14 +18,18 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="id.pokepedia.app" android:host="login-callback"/>
+                <!-- id.pokepedia.app://r/<code>: an invite without a domain
+                     association, for trying the referral flow locally. -->
+                <data android:scheme="id.pokepedia.app" android:host="r"/>
             </intent-filter>
-            <!-- App Link for the emailed confirmation/recovery links. Verified
+            <!-- App Link for the emailed confirmation/recovery links and the
+                 Ajak Teman invite links (/r/<code>). Verified
                  against https://www.pokepedia.id/.well-known/assetlinks.json,
                  which is what lets these open the app instead of the browser —
                  and what stops another app claiming them, unlike the custom
                  scheme above.
 
-                 Scoped to /auth/confirm on purpose: claiming the whole host
+                 Scoped to those two paths on purpose: claiming the whole host
                  would send every pokepedia.id link in the OS to the app. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
@@ -47,6 +51,12 @@
                     android:scheme="https"
                     android:host="www.pokepedia.id"
                     android:pathPrefix="/auth/confirm"/>
+                <!-- Invite links. The referral link base is www for the same
+                     reason as above: an apex /r/ link can never verify. -->
+                <data
+                    android:scheme="https"
+                    android:host="www.pokepedia.id"
+                    android:pathPrefix="/r/"/>
             </intent-filter>
         </activity>
         <!-- Hands the share image to Instagram / WhatsApp directly (see

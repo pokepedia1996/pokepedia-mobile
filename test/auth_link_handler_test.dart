@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/core/providers/auth_link_handler.dart';
+import 'package:pokepedia_mobile/features/referral/usecase/pending_referral.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// The emailed links are App Links so the *app* redeems them: signup runs
@@ -85,6 +87,18 @@ void main() {
     // arrives on either must redeem.
     expect(await handler.handle(_link(host: 'pokepedia.id')), OtpType.signup);
   });
+
+  test(
+    'keeps an invite link\'s code for onboarding, redeeming nothing',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      addTearDown(() => PendingReferral.code.value = null);
+      final invite = Uri.parse('https://www.pokepedia.id/r/USER1266');
+      expect(await handler.handle(invite), isNull);
+      expect(PendingReferral.code.value, 'USER1266');
+      expect(auth.calls, isEmpty);
+    },
+  );
 
   test('ignores a link from a host we never claimed', () async {
     // Belt and braces over the manifest: a link reaching this handler by any

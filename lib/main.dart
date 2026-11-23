@@ -5,6 +5,7 @@ import 'app/app.dart';
 import 'app/startup_error_app.dart';
 import 'core/config/app_config.dart';
 import 'core/providers/theme_mode_provider.dart';
+import 'features/referral/usecase/pending_referral.dart';
 import 'features/onboarding/usecase/intro_flag.dart';
 
 Future<void> main() async {
@@ -32,7 +33,11 @@ Future<void> main() async {
 
   // Both read before the first frame: the router needs the intro flag
   // synchronously, and the theme must not flash the system one first.
-  await Future.wait([IntroFlag.load(), ThemeModeNotifier.load()]);
+  await Future.wait([
+    IntroFlag.load(),
+    ThemeModeNotifier.load(),
+    PendingReferral.load(),
+  ]);
 
   runApp(const ProviderScope(child: PokepediaApp()));
 }
