@@ -16,6 +16,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/coretan_kit.dart';
 import '../../../shared/widgets/scribble_drawing.dart';
 import '../../market/usecase/market_notifier.dart';
+import '../../referral/usecase/pending_referral.dart';
 import '../../referral/usecase/referral_providers.dart';
 import '../../user/usecase/user_notifier.dart';
 import '../usecase/onboarding_intents.dart';
@@ -74,9 +75,8 @@ class OnboardingGate extends ConsumerWidget {
   }
 }
 
-/// A referral code's shape: 1–5 letters or digits from the referrer's
-/// username, then 3 digits. Anything else is not worth a server call.
-final _referralShape = RegExp(r'^[A-Z0-9]{1,5}[0-9]{3}$');
+/// [referralCodeShape], under the name this page has always used.
+final _referralShape = referralCodeShape;
 
 /// What the availability check says about the typed name.
 ///
@@ -186,6 +186,21 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage>
   void initState() {
     super.initState();
     _seedFromAccount();
+    PendingReferral.code.addListener(_takeInviteCode);
+    _takeInviteCode();
+  }
+
+  /// A code from a tapped invite link (`/r/<code>`) fills the field when it
+  /// is empty, and is checked like a typed one. Also while this page is
+  /// open: the link can be tapped with onboarding already showing.
+  void _takeInviteCode() {
+    final code = PendingReferral.code.value;
+    if (code == null || _codeController.text.trim().isNotEmpty) return;
+    _codeController.text = code;
+    // `_onCodeChanged` sets state, which the first build does not allow.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onCodeChanged(code);
+    });
   }
 
   @override
@@ -209,6 +224,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage>
 
   @override
   void dispose() {
+    PendingReferral.code.removeListener(_takeInviteCode);
     _debounce?.cancel();
     _codeDebounce?.cancel();
     _controller.dispose();
@@ -395,6 +411,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage>
     setState(() => _continuing = false);
     if (applied) {
       _appliedCode = code;
+      unawaited(PendingReferral.clear());
     } else if (_codeState == _CodeState.valid) {
       // A rejected or unknown code was already said under the field; only a
       // valid one that then would not apply needs telling here.
@@ -511,6 +528,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage>
       return;
     }
 
+    // Applied or not, an invite code has no use past onboarding.
+    unawaited(PendingReferral.clear());
     final landing = intents.isEmpty ? null : intents.first;
     if (landing == OnboardingIntent.bid) {
       ref.read(marketWtbTipProvider.notifier).state = true;

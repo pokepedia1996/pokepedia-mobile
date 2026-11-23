@@ -48,25 +48,53 @@ class CourierTrackingLink extends StatelessWidget {
   }
 }
 
+/// Web's external-link button on the courier card: this parcel's own page
+/// at Biteship ([OrderModel.biteshipTrackingUrl]), already showing its
+/// tracking, unlike the courier's form [CourierTrackingLink] opens.
+///
+/// Before pickup the page may not know the parcel yet; it fills in once
+/// the courier has it.
+class BiteshipTrackingButton extends StatelessWidget {
+  const BiteshipTrackingButton({super.key, required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      tooltip: 'Lacak di Biteship',
+      onPressed: () => _openExternal(context, url),
+      icon: Icon(
+        LucideIcons.externalLink,
+        size: 16,
+        color: context.appColors.primary,
+      ),
+    );
+  }
+}
+
+Future<void> _openExternal(BuildContext context, String url) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final opened = await launchUrl(
+    Uri.parse(url),
+    mode: LaunchMode.externalApplication,
+  ).catchError((_) => false);
+  if (opened) return;
+  messenger
+    ..clearSnackBars()
+    ..showSnackBar(
+      const SnackBar(content: Text('Tidak bisa membuka halaman kurir.')),
+    );
+}
+
 class _Link extends StatelessWidget {
   const _Link({required this.label, required this.url});
 
   final String label;
   final String url;
 
-  Future<void> _open(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final opened = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    ).catchError((_) => false);
-    if (opened) return;
-    messenger
-      ..clearSnackBars()
-      ..showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka halaman kurir.')),
-      );
-  }
+  Future<void> _open(BuildContext context) => _openExternal(context, url);
 
   @override
   Widget build(BuildContext context) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,6 +55,30 @@ class SellerProductsPage extends ConsumerStatefulWidget {
 class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   final _search = TextEditingController();
 
+  /// Holds the listing search until typing pauses. Each query is a round
+  /// trip to `get_seller_listings_page` and a reload of the list, and one
+  /// per keystroke sent nine of them for "charizard".
+  Timer? _searchDebounce;
+  static const _searchDelay = Duration(milliseconds: 300);
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    // Clearing answers at once: there is nothing left to wait for.
+    if (value.trim().isEmpty) {
+      _applySearch(value);
+      return;
+    }
+    _searchDebounce = Timer(_searchDelay, () => _applySearch(value));
+  }
+
+  void _applySearch(String value) {
+    if (!mounted) return;
+    final query = ref.read(sellerListingQueryProvider.notifier);
+    // A trailing space is the same search; the server trims it anyway.
+    if (query.state.trim() == value.trim()) return;
+    query.state = value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +99,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     _draftSearch.dispose();
     _workspaceSearch.dispose();
@@ -414,14 +441,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                                     hintText:
                                         'Cari nama, ekspansi, nomor, kondisi...',
                                     controller: _search,
-                                    onChanged: (v) =>
-                                        ref
-                                                .read(
-                                                  sellerListingQueryProvider
-                                                      .notifier,
-                                                )
-                                                .state =
-                                            v,
+                                    onChanged: _onSearchChanged,
                                   ),
                                 ),
                                 const SizedBox(width: 10),

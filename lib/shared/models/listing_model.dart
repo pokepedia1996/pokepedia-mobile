@@ -254,7 +254,7 @@ class ListingModel {
       packSlug: expansionCode.toLowerCase(),
       collectorNumber: row['card_number'] as String? ?? '',
       rarity: row['card_rarity'] as String?,
-      language: CardLanguageX.fromRaw(row['card_language'] as String?),
+      language: CardLanguage.fromRaw(row['card_language'] as String?),
       variant: row['card_variant'] as String? ?? 'normal',
       imageUrl: proxyImageUrl(row['card_image'] as String?),
     );

@@ -89,6 +89,11 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
   /// one on asks of graded slabs. Capped at 4, like the seller form.
   final List<File> _photos = [];
 
+  /// The two ask settings web's form offers. Off by default, as on web;
+  /// the seller can still change them per listing afterwards.
+  bool _acceptsOffers = false;
+  bool _autoRelist = false;
+
   bool get _isBid => widget.side == 'bid';
 
   /// What the order is written with — NM for a sealed product, whose picker
@@ -189,6 +194,8 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
       condition: _orderCondition,
       quantity: _quantity,
       replace: replace,
+      autoRelist: !_isBid && _autoRelist,
+      acceptsOffers: !_isBid && _acceptsOffers,
       photoUrls: photoUrls,
     );
     if (!mounted) return;
@@ -202,7 +209,7 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
           ..showSnackBar(
             SnackBar(
               content: Text(
-                _isBid ? 'Bid berhasil dipasang!' : 'Ask berhasil dipasang!',
+                _isBid ? 'Bid berhasil dipasang!' : 'Listing WTS berhasil dipasang!',
               ),
             ),
           );
@@ -340,50 +347,52 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
         top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _isBid ? 'Pasang Bid (WTB)' : 'Pasang Ask (WTS)',
-                  style: AppTypography.h3(colors.onSurface),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _isBid ? 'Pasang Bid (WTB)' : 'Pasang Ask (WTS)',
+                    style: AppTypography.h3(colors.onSurface),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(LucideIcons.x, size: 20),
+                ),
+              ],
+            ),
+            Text(
+              '${widget.card.name} · ${widget.card.collectorNumber}',
+              style: AppTypography.bodySm(context.mutedForeground),
+            ),
+            const SizedBox(height: 16),
+            if (user == null)
+              _Blocked(
+                message: 'Masuk dulu untuk memasang order.',
+                actionLabel: 'Masuk',
+                onAction: () {
+                  Navigator.of(context).pop();
+                  context.push(Routes.login);
+                },
+              )
+            else
+              eligibility.when(
+                data: (gates) => _form(gates),
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) => const _Blocked(
+                  message: 'Gagal memeriksa status akun. Coba lagi.',
                 ),
               ),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(LucideIcons.x, size: 20),
-              ),
-            ],
-          ),
-          Text(
-            '${widget.card.name} · ${widget.card.collectorNumber}',
-            style: AppTypography.bodySm(context.mutedForeground),
-          ),
-          const SizedBox(height: 16),
-          if (user == null)
-            _Blocked(
-              message: 'Masuk dulu untuk memasang order.',
-              actionLabel: 'Masuk',
-              onAction: () {
-                Navigator.of(context).pop();
-                context.push(Routes.login);
-              },
-            )
-          else
-            eligibility.when(
-              data: (gates) => _form(gates),
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (_, __) => const _Blocked(
-                message: 'Gagal memeriksa status akun. Coba lagi.',
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -526,6 +535,21 @@ class _PlaceOrderSheetState extends ConsumerState<_PlaceOrderSheet> {
                 ),
             ],
           ),
+          const SizedBox(height: 14),
+          _AskOption(
+            title: 'Terima penawaran',
+            description: 'Pembeli bisa menawar harga di bawah harga listing',
+            value: _acceptsOffers,
+            onChanged: (value) => setState(() => _acceptsOffers = value),
+          ),
+          const SizedBox(height: 8),
+          _AskOption(
+            title: 'Perpanjang otomatis',
+            description:
+                'Listing diperpanjang otomatis tiap 30 hari saat kadaluarsa',
+            value: _autoRelist,
+            onChanged: (value) => setState(() => _autoRelist = value),
+          ),
         ],
         if (_error != null) ...[
           const SizedBox(height: 12),
@@ -591,6 +615,68 @@ class _Blocked extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// A checkbox with its explanation, the whole card tappable — web's ask
+/// options in `PlaceOrderModal`.
+class _AskOption extends StatelessWidget {
+  const _AskOption({
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(4, 6, 12, 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.borderColor),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: (checked) => onChanged(checked ?? false),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppTypography.bodySmSemibold(
+                        context.appColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -5,6 +5,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/card_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/catalog_language_provider.dart';
 
 /// Ports `ScannerTopBar` — back, then pause / torch / sound in one group on
 /// the left, and the language toggle on the right. Layout, grouping and icons
@@ -128,7 +130,7 @@ class _Glass extends StatelessWidget {
   }
 }
 
-class _LanguageToggle extends StatelessWidget {
+class _LanguageToggle extends ConsumerWidget {
   const _LanguageToggle({
     required this.language,
     required this.enabled,
@@ -144,10 +146,15 @@ class _LanguageToggle extends StatelessWidget {
   final ValueChanged<CardLanguage> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    const options = CardLanguage.values;
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Only what the scanner's index covers: a catalog it cannot read (CN,
+    // for now) would only ever scan to nothing.
+    final options = [
+      for (final option in watchCatalogLanguages(ref))
+        if (option.inScanner) option,
+    ];
     const gap = 4.0;
-    final index = options.indexOf(language);
+    final index = options.indexOf(language).clamp(0, options.length - 1);
     return _Glass(
       child: SizedBox(
         height: 36,

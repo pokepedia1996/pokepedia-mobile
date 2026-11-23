@@ -16,6 +16,7 @@ import '../../../portfolio/repository/portfolio_repository.dart'
     show cardPickerPageSize;
 import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../repository/seller_listings_repository.dart';
+import '../../../../core/providers/catalog_language_provider.dart';
 
 /// "Tambahkan Listing" — find cards, tick several, send them all to Draft.
 ///
@@ -475,14 +476,14 @@ class _SearchBox extends StatelessWidget {
 /// current one has to be readable at a glance while scrolling the grid, and
 /// switching is the thing a seller does repeatedly while working through a
 /// binder of mixed prints.
-class _LanguageChips extends StatelessWidget {
+class _LanguageChips extends ConsumerWidget {
   const _LanguageChips({required this.value, required this.onChanged});
 
   final CardLanguage? value;
   final ValueChanged<CardLanguage?> onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 46,
       child: ListView(
@@ -494,7 +495,7 @@ class _LanguageChips extends StatelessWidget {
             selected: value == null,
             onTap: () => onChanged(null),
           ),
-          for (final language in CardLanguage.values) ...[
+          for (final language in watchCatalogLanguages(ref)) ...[
             const SizedBox(width: 8),
             _LanguageChip(
               label: language.shortLabel,

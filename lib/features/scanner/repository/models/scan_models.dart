@@ -111,7 +111,7 @@ class ScanCard {
       collectorNumber: json['collector_number'] as String?,
       // Null rather than defaulted to `id`: an unknown language here would
       // silently mislabel the print, and the badge is better off absent.
-      language: rawLanguage == null ? null : CardLanguageX.fromRaw(rawLanguage),
+      language: rawLanguage == null ? null : CardLanguage.fromRaw(rawLanguage),
       variant: json['variant'] as String? ?? 'normal',
       baseNameId: json['base_name_id'] as String?,
       artworkGroupId: (json['artwork_group_id'] as num?)?.toInt(),

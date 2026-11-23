@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pokepedia_mobile/core/providers/catalog_language_provider.dart';
 import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/expansions/repository/expansions_repository.dart';
@@ -42,8 +43,10 @@ class _FakeSearch implements QuickSearchRepository {
     Set<CardLanguage> languages = const {},
   }) async {
     asked.add(languages);
-    final langs = languages.isEmpty ? CardLanguage.values : languages;
-    final cards = [for (final l in langs) _card(l.index + 1, l)];
+    final langs = languages.isEmpty ? CardLanguage.builtIn : languages;
+    final cards = [
+      for (final l in langs) _card(CardLanguage.builtIn.indexOf(l) + 1, l),
+    ];
     return FullSearchPage(cards: cards, total: cards.length, hasNext: false);
   }
 
@@ -151,22 +154,29 @@ void main() {
   Widget bar({
     Set<CardLanguage> languages = const {},
     ValueChanged<Set<CardLanguage>>? onLanguagesChanged,
-  }) => MaterialApp(
-    theme: AppTheme.light,
-    home: Scaffold(
-      body: SingleChildScrollView(
-        child: CardFilterBar(
-          // One card, so the Kategori section has an option and is drawn.
-          cards: [_card(1, CardLanguage.id)],
-          filters: const CardFilters(),
-          onFiltersChanged: (_) {},
-          sortBy: CardSortOption.setDesc,
-          onSortChanged: (_) {},
-          viewMode: CardViewMode.grid,
-          onViewModeChanged: (_) {},
-          showSearch: false,
-          languages: languages,
-          onLanguagesChanged: onLanguagesChanged ?? (_) {},
+  }) => ProviderScope(
+    overrides: [
+      catalogLanguagesProvider.overrideWith(
+        (ref) async => CardLanguage.builtIn,
+      ),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.light,
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: CardFilterBar(
+            // One card, so the Kategori section has an option and is drawn.
+            cards: [_card(1, CardLanguage.id)],
+            filters: const CardFilters(),
+            onFiltersChanged: (_) {},
+            sortBy: CardSortOption.setDesc,
+            onSortChanged: (_) {},
+            viewMode: CardViewMode.grid,
+            onViewModeChanged: (_) {},
+            showSearch: false,
+            languages: languages,
+            onLanguagesChanged: onLanguagesChanged ?? (_) {},
+          ),
         ),
       ),
     ),
@@ -186,9 +196,9 @@ void main() {
     final bahasa = tester.getTopLeft(find.text('Bahasa'));
     expect(bahasa.dy, lessThan(tester.getTopLeft(find.text('Kategori')).dy));
 
-    // Three chips splitting the row evenly, as in the market filter.
+    // One chip per catalog, splitting the row evenly as in the market filter.
     final widths = [
-      for (final label in ['ID', 'EN', 'JP'])
+      for (final label in ['ID', 'EN', 'JP', 'CN'])
         tester
             .getSize(
               find

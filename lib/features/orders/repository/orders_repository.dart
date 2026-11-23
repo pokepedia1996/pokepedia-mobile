@@ -58,6 +58,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history)';
 
   /// The buyer's *detail* columns: [_orderColumns] plus where the parcel is
@@ -82,6 +83,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
       'destination_full_address, destination_district, destination_city,'
@@ -603,6 +605,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
       'destination_full_address, destination_district, destination_city,'

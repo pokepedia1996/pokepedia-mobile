@@ -809,6 +809,8 @@ class _TrackingCard extends StatelessWidget {
                   '· $name',
                   style: AppTypography.caption(context.mutedForeground),
                 ),
+              if (order.biteshipTrackingUrl case final url?)
+                BiteshipTrackingButton(url: url),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Salin nomor resi',
