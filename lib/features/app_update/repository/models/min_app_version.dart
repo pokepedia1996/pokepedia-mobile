@@ -10,8 +10,8 @@ import 'package:flutter/foundation.dart';
 ///  "iosStoreUrl": "https://apps.apple.com/app/id…"}
 /// ```
 ///
-/// A platform left out has no minimum. `androidStoreUrl` is optional; the
-/// Play Store page follows from the package name.
+/// A platform left out has no minimum. Both store URLs are optional: each
+/// defaults to the app's own page in its store.
 class MinAppVersion {
   const MinAppVersion({
     this.ios,
@@ -28,8 +28,9 @@ class MinAppVersion {
   static const _playStoreUrl =
       'https://play.google.com/store/apps/details?id=id.pokepedia.app';
 
-  /// The App Store itself, for an iOS minimum set without its page.
-  static const _appStoreUrl = 'https://apps.apple.com';
+  /// The app's App Store page, for an iOS minimum set without one.
+  static const _appStoreUrl =
+      'https://apps.apple.com/us/app/pokepedia-id/id6808564481';
 
   /// Null for anything that isn't the object above: a bad row must not lock
   /// everyone out of the app.
