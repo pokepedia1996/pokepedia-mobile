@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/account/presentation/account_page.dart';
+import '../not_found_page.dart';
 import '../../features/account/presentation/addresses_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -81,7 +82,13 @@ final appRouter = GoRouter(
   refreshListenable: GoRouterRefreshStream(
     Supabase.instance.client.auth.onAuthStateChange,
   ),
+  // A location with no page: a friendly page, not go_router's exception.
+  errorBuilder: (_, __) => const NotFoundPage(),
   redirect: (context, state) {
+    // A link through the app's own scheme (an invite,
+    // `id.pokepedia.app://r/<code>`, or the login callback) is acted on by
+    // the link handlers; the router only needs somewhere to stand.
+    if (state.uri.scheme == 'id.pokepedia.app') return Routes.home;
     final loggedIn = Supabase.instance.client.auth.currentSession != null;
     final loggingIn =
         state.matchedLocation == Routes.login ||
@@ -275,6 +282,10 @@ final appRouter = GoRouter(
     // moment later and the auth listener drives whatever comes next —
     // onboarding for a fresh account, the account page for a returning one.
     GoRoute(path: Routes.authConfirm, redirect: (_, __) => Routes.home),
+    // An invite link (`/r/<code>`): `AuthLinkHandler` keeps the code for
+    // onboarding off the same link, and the app shell opens signup for a
+    // guest. Home is only where the user stands meanwhile.
+    GoRoute(path: '/r/:code', redirect: (_, __) => Routes.home),
     GoRoute(path: Routes.welcome, builder: (_, __) => const IntroPage()),
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
