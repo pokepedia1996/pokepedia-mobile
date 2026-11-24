@@ -1,5 +1,6 @@
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/models/card_model.dart';
 import '../../../../shared/utils/postgrest_embed.dart';
 
 /// `disputes.current_status` check constraint.
@@ -394,10 +395,15 @@ class DisputeModel {
           ? null
           : DisputeItem(
               slug: item['slug'] as String? ?? '',
-              cardName: card?['name_id'] as String? ?? 'Kartu',
+              cardName:
+                  card?['name_id'] as String? ??
+                  item['title'] as String? ??
+                  'Kartu',
               cardId: (item['card_id'] as num?)?.toInt(),
               orderId: (item['order_id'] as num?)?.toInt(),
-              cardImageUrl: card?['image_url'] as String?,
+              cardImageUrl:
+                  card?['image_url'] as String? ??
+                  CardModel.customFromRow(item).imageUrl,
               expansionCode: card?['expansion_code'] as String?,
               collectorNumber: card?['collector_number'] as String?,
               orderNumber: item['order_number'] as String?,

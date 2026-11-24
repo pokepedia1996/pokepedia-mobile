@@ -313,11 +313,18 @@ class _ItemRow extends StatelessWidget {
                 children: [
                   if (item.card.expansionCode.isNotEmpty)
                     ExpansionChip(code: item.card.expansionCode),
-                  Text(
-                    '#${item.card.collectorNumber}',
-                    style: AppTypography.caption(context.mutedForeground),
-                  ),
-                  ConditionBadge(condition: item.condition, dense: true),
+                  if (item.card.isCustom)
+                    Text(
+                      'Custom',
+                      style: AppTypography.caption(context.mutedForeground),
+                    )
+                  else ...[
+                    Text(
+                      '#${item.card.collectorNumber}',
+                      style: AppTypography.caption(context.mutedForeground),
+                    ),
+                    ConditionBadge(condition: item.condition, dense: true),
+                  ],
                 ],
               ),
               const SizedBox(height: 4),

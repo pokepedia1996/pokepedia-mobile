@@ -335,7 +335,7 @@ class _PosterTile extends StatelessWidget {
           // Condition, abbreviated — "NM" reads at poster scale where "Near
           // Mint" would wrap or shrink. A sealed product has none to show, as
           // `drawTile` skips the badge for it.
-          if (!listing.card.isSealed)
+          if (listing.card.hasCondition)
             Positioned(
               top: 6,
               right: 6,

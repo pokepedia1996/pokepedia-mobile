@@ -40,6 +40,9 @@ String? appRouteForActionUrl(String? actionUrl) {
     case 'chat':
       return segments.length > 1 ? Routes.chatThread(segments[1]) : Routes.chat;
     case 'market':
+      if (segments.length > 3 && segments[2] == 'listing') {
+        return Routes.customListing(segments[1], segments[3]);
+      }
       return segments.length > 1
           ? Routes.storeDetail(segments[1])
           : Routes.market;

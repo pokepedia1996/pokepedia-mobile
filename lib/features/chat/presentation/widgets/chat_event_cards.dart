@@ -70,11 +70,13 @@ class ChatEventCard extends StatelessWidget {
             CardConditionX.fromRaw(condition).short,
           formatRupiah(listing.priceIdr),
         ].join(' · '),
-        footer: listing.packSlug == null ? null : 'Lihat Kartu',
-        onTap: listing.packSlug == null
+        footer: listing.packSlug == null || listing.cardId == null
+            ? null
+            : 'Lihat Kartu',
+        onTap: listing.packSlug == null || listing.cardId == null
             ? null
             : () => context.push(
-                Routes.cardDetail(listing.packSlug!, listing.cardId),
+                Routes.cardDetail(listing.packSlug!, listing.cardId!),
               ),
       );
     }

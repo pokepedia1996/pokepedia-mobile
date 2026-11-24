@@ -605,13 +605,15 @@ class _CartLine extends ConsumerWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          '${card.collectorNumber} · ${card.expansionCode.toUpperCase()}',
+                          card.isCustom
+                              ? 'Custom'
+                              : '${card.collectorNumber} · ${card.expansionCode.toUpperCase()}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption(context.mutedForeground),
                         ),
                       ),
-                      if (!card.isSealed) ...[
+                      if (card.hasCondition) ...[
                         const SizedBox(width: 6),
                         ConditionBadge(
                           condition: listing.condition,

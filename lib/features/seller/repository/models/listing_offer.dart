@@ -1,4 +1,5 @@
 import '../../../../shared/models/card_condition.dart';
+import '../../../../shared/models/card_model.dart';
 
 /// Who moved last, and who each history entry belongs to.
 enum OfferActor {
@@ -133,6 +134,7 @@ class ListingOffer {
     required this.createdAt,
     required this.cardName,
     required this.cardId,
+    this.isCustom = false,
     this.variantKey,
     this.message,
     this.history = const [],
@@ -154,6 +156,8 @@ class ListingOffer {
     final listing = row['listings'] as Map<String, dynamic>?;
     final orderItem = row['order_items'] as Map<String, dynamic>?;
 
+    // `listing_offers.card_id` is null only for an offer on a custom listing.
+    final isCustom = row['card_id'] == null;
     final status = OfferStatus.from(row['status'] as String?);
     final expiresAt =
         DateTime.tryParse(row['expires_at'] as String? ?? '')?.toLocal() ??
@@ -192,9 +196,18 @@ class ListingOffer {
         expiresAt: expiresAt,
       ),
       buyerId: row['buyer_id'] as String?,
-      cardId: (card?['id'] as num?)?.toInt() ?? (row['card_id'] as num).toInt(),
-      cardName: card?['name_id'] as String? ?? 'Kartu',
-      cardImageUrl: card?['image_url'] as String?,
+      cardId:
+          (card?['id'] as num?)?.toInt() ?? (row['card_id'] as num?)?.toInt(),
+      isCustom: isCustom,
+      // A custom listing has no card: its own title and first photo stand in,
+      // when the listing is still readable.
+      cardName:
+          card?['name_id'] as String? ??
+          listing?['title'] as String? ??
+          (isCustom ? 'Listing custom' : 'Kartu'),
+      cardImageUrl:
+          card?['image_url'] as String? ??
+          (listing == null ? null : CardModel.customFromRow(listing).imageUrl),
       expansionCode: card?['expansion_code'] as String?,
       collectorNumber: card?['collector_number'] as String?,
       variant: switch (card?['variant'] as String?) {
@@ -229,7 +242,11 @@ class ListingOffer {
   final String? buyerId;
   final String? buyerUsername;
   final String? buyerAvatarUrl;
-  final int cardId;
+  final int? cardId;
+
+  /// The listing is a seller's own title and photos, not a catalog card
+  /// (`listings.kind = 'custom'`): no condition, number or set to show.
+  final bool isCustom;
   final String cardName;
   final String? cardImageUrl;
   final String? expansionCode;
@@ -314,6 +331,7 @@ class ListingOffer {
     buyerUsername: buyerUsername ?? this.buyerUsername,
     buyerAvatarUrl: buyerAvatarUrl ?? this.buyerAvatarUrl,
     cardId: cardId,
+    isCustom: isCustom,
     cardName: cardName,
     cardImageUrl: cardImageUrl,
     expansionCode: expansionCode,

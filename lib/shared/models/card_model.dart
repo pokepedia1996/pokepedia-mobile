@@ -428,7 +428,37 @@ class CardModel {
     this.priceSource,
     this.owned = 0,
     this.imageUrl,
+    this.isCustom = false,
   });
+
+  /// The stand-in for a custom listing: the seller's own title and first
+  /// photo, with no catalog card behind it — so no number, set, language or
+  /// page of its own. Lets every screen that draws a listing's `card` draw
+  /// one without a second code path for the name and picture.
+  const CardModel.custom({required String title, String? imageUrl})
+    : this(
+        id: 0,
+        category: CardCategory.pokemon,
+        nameId: title,
+        expansionCode: '',
+        packSlug: '',
+        collectorNumber: '',
+        rarity: null,
+        imageUrl: imageUrl,
+        isCustom: true,
+      );
+
+  /// [CardModel.custom] for a `listings` or `order_items` row of a custom
+  /// listing, which carries its `title` and `photo_urls` in place of a
+  /// `card_id`.
+  factory CardModel.customFromRow(Map<String, dynamic> row) => CardModel.custom(
+    title: row['title'] as String? ?? 'Listing custom',
+    imageUrl: proxyImageUrl(
+      ((row['photo_urls'] as List?) ?? const [])
+          .whereType<String>()
+          .firstOrNull,
+    ),
+  );
 
   final int id;
   final CardCategory category;
@@ -458,6 +488,10 @@ class CardModel {
   /// (non-catalog) data, in which case UI falls back to a placeholder.
   final String? imageUrl;
 
+  /// A custom listing's stand-in (see [CardModel.custom]) rather than a row
+  /// of the catalog.
+  final bool isCustom;
+
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
 
@@ -465,6 +499,10 @@ class CardModel {
   /// in a deck. Either signal is enough — a card built from a listing row
   /// carries only its id, one built from `cards` carries its category.
   bool get isSealed => category == CardCategory.sealed || isSealedCardId(id);
+
+  /// Whether a grade belongs next to this card: a sealed product has none,
+  /// and a custom listing is whatever its seller says it is.
+  bool get hasCondition => !isSealed && !isCustom;
 
   /// The condition an order or listing of this card is written with: what
   /// the seller picked, or NM for a sealed product, whose picker is hidden.
@@ -523,6 +561,7 @@ class CardModel {
     priceSource: price?.source ?? priceSource,
     owned: owned ?? this.owned,
     imageUrl: imageUrl,
+    isCustom: isCustom,
   );
 
   /// Maps a `cards` row (optionally with an embedded `expansions` join) as

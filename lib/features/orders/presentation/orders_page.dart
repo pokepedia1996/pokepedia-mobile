@@ -636,11 +636,21 @@ class _CardBody extends StatelessWidget {
                     children: [
                       if (first!.card.expansionCode.isNotEmpty)
                         ExpansionChip(code: first!.card.expansionCode),
-                      Text(
-                        '#${first!.card.collectorNumber}',
-                        style: AppTypography.caption(context.mutedForeground),
-                      ),
-                      ConditionBadge(condition: first!.condition, dense: true),
+                      if (first!.card.isCustom)
+                        Text(
+                          'Custom',
+                          style: AppTypography.caption(context.mutedForeground),
+                        )
+                      else ...[
+                        Text(
+                          '#${first!.card.collectorNumber}',
+                          style: AppTypography.caption(context.mutedForeground),
+                        ),
+                        ConditionBadge(
+                          condition: first!.condition,
+                          dense: true,
+                        ),
+                      ],
                       Text(
                         '×${first!.matchedQuantity}',
                         style: AppTypography.caption(context.mutedForeground),

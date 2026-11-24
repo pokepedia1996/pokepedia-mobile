@@ -175,6 +175,11 @@ class Routes {
   static String storeCardDetail(String handle, int cardId) =>
       '/market/$handle/card/$cardId';
 
+  /// One custom listing — a seller's own title and photos rather than a
+  /// catalog card — by its `listings.slug`.
+  static String customListing(String handle, String slug) =>
+      '/market/$handle/listing/$slug';
+
   /// One WTB bid, by its listing slug. Top-level rather than under
   /// `/market/:handle`: a bid belongs to a buyer, and a buyer who has never
   /// sold anything has no storefront handle to hang it off.

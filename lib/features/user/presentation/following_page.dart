@@ -194,8 +194,12 @@ class _ListingThumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return InkWell(
-      onTap: () =>
-          context.push(Routes.storeCardDetail(shopSlug, listing.cardId)),
+      // A custom listing has no card (`cardId` 0), so it opens the shop.
+      onTap: () => context.push(
+        listing.cardId > 0
+            ? Routes.storeCardDetail(shopSlug, listing.cardId)
+            : Routes.storeDetail(shopSlug),
+      ),
       borderRadius: BorderRadius.circular(AppRadius.sm),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.sm),

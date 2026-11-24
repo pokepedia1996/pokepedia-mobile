@@ -191,7 +191,7 @@ class SellerGroupCard extends StatelessWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            if (!item.listing.card.isSealed)
+                            if (item.listing.card.hasCondition)
                               ConditionBadge(condition: item.listing.condition),
                             Text(
                               'Qty: ${item.quantity}',
