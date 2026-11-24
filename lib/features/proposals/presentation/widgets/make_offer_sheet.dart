@@ -153,8 +153,11 @@ class _MakeOfferSheetState extends ConsumerState<_MakeOfferSheet> {
             ],
           ),
           Text(
-            '${listing.card.name} · ${listing.condition.short} · '
-            '${listing.storeName}',
+            [
+              listing.card.name,
+              if (listing.card.hasCondition) listing.condition.short,
+              listing.storeName,
+            ].join(' · '),
             style: AppTypography.bodySm(context.mutedForeground),
           ),
           const SizedBox(height: 4),

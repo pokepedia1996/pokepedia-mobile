@@ -142,7 +142,10 @@ class _ListingCardState extends ConsumerState<ListingCard> {
       return;
     }
     final listing = widget.listing;
-    if (listing.side == ListingSide.bid) {
+    if (listing.isCustom) {
+      if (listing.storeSlug.isEmpty || listing.slug.isEmpty) return;
+      context.push(Routes.customListing(listing.storeSlug, listing.slug));
+    } else if (listing.side == ListingSide.bid) {
       // A wanted-ad has its own page now. Without a slug there's nothing to
       // look it up by, so the catalog card page stays the fallback — that's
       // where web's `linkHref` sends every bid.
@@ -197,7 +200,7 @@ class _ListingCardState extends ConsumerState<ListingCard> {
               child: Stack(
                 children: [
                   CardArt(imageUrl: listing.tileImageUrl, size: ImageSize.half),
-                  if (!listing.card.isSealed)
+                  if (listing.card.hasCondition)
                     Positioned(
                       right: 6,
                       top: 6,
@@ -229,22 +232,24 @@ class _ListingCardState extends ConsumerState<ListingCard> {
                         ),
                       ),
                     ),
-                  Positioned(
-                    // Flush with the artwork's corner, which is where web's
-                    // `left-2 top-2` puts it: that offset is measured from the
-                    // card, whose 8px padding is exactly where the image
-                    // starts. Dropping to the image's own corner instead of
-                    // insetting again is what closes the gap.
-                    left: 0,
-                    top: listing.isFeatured ? 36 : 0,
-                    child: _WishlistBadge(
-                      wishlisted: wishlisted,
-                      loading: _wishlistToggling,
-                      onTap: _wishlistToggling
-                          ? null
-                          : () => _toggleWishlist(wishlisted),
+                  // A custom listing has no card to wish for.
+                  if (!listing.isCustom)
+                    Positioned(
+                      // Flush with the artwork's corner, which is where web's
+                      // `left-2 top-2` puts it: that offset is measured from
+                      // the card, whose 8px padding is exactly where the image
+                      // starts. Dropping to the image's own corner instead of
+                      // insetting again is what closes the gap.
+                      left: 0,
+                      top: listing.isFeatured ? 36 : 0,
+                      child: _WishlistBadge(
+                        wishlisted: wishlisted,
+                        loading: _wishlistToggling,
+                        onTap: _wishlistToggling
+                            ? null
+                            : () => _toggleWishlist(wishlisted),
+                      ),
                     ),
-                  ),
                   // On the artwork, not under it, for the same reason
                   // "Unggulan" above is: a grid cell is one height for every
                   // tile in it, so a row that only *some* listings carry is a
@@ -297,30 +302,39 @@ class _ListingCardState extends ConsumerState<ListingCard> {
             Row(
               children: [
                 Expanded(
-                  child: Row(
-                    children: [
-                      CardLanguageBadge(language: listing.card.language),
-                      const SizedBox(width: 4),
-                      // _setSymbol(context, listing),
-                      Flexible(
-                        child: Text(
-                          listing.card.expansionCode.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption(context.mutedForeground),
+                  child: listing.isCustom
+                      ? const Align(
+                          alignment: Alignment.centerLeft,
+                          child: _CustomBadge(),
+                        )
+                      : Row(
+                          children: [
+                            CardLanguageBadge(language: listing.card.language),
+                            const SizedBox(width: 4),
+                            // _setSymbol(context, listing),
+                            Flexible(
+                              child: Text(
+                                listing.card.expansionCode.toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.caption(
+                                  context.mutedForeground,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                listing.card.collectorNumber,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.caption(
+                                  context.mutedForeground,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          listing.card.collectorNumber,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption(context.mutedForeground),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(width: 6),
                 Container(
@@ -475,6 +489,25 @@ class _ListingCardState extends ConsumerState<ListingCard> {
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
       ),
+    );
+  }
+}
+
+/// The tile's marker for a custom listing, in the place a card's set code
+/// sits and drawn like it — web's `SET_BADGE_CLASS`.
+class _CustomBadge extends StatelessWidget {
+  const _CustomBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.secondary,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Text('CUSTOM', style: AppTypography.badge(colors.onSurface)),
     );
   }
 }

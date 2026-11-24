@@ -114,10 +114,13 @@ class OrderItemModel {
       id: (row['id'] as num?)?.toInt(),
       slug: row['slug'] as String? ?? '',
       orderNumber: row['order_number'] as String? ?? '',
-      // A card row is always joined; the placeholder keeps a row with a
-      // deleted card from taking the whole list down.
+      // A card row is joined unless the item is a custom listing, which has
+      // none and is drawn from its own title and photo; the placeholder keeps
+      // a row with a deleted card from taking the whole list down.
       card: card != null
           ? CardModel.fromRow(card)
+          : row['title'] != null
+          ? CardModel.customFromRow(row)
           : CardModel(
               id: (row['card_id'] as num?)?.toInt() ?? 0,
               category: CardCategory.pokemon,

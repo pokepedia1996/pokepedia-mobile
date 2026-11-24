@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/network/pokepedia_api.dart';
@@ -117,13 +118,16 @@ class CartRepository {
         .from('listings')
         .select(
           'id, slug, side, price, condition, card_id, variant_key, quantity, '
-          'qty_locked, status, accepts_offers, view_count, created_at, user_id',
+          'qty_locked, status, accepts_offers, view_count, created_at, user_id, '
+          'kind, title, photo_urls',
         )
         .inFilter('id', askIds);
     if (listingRows.isEmpty) return const [];
 
+    // A custom listing has no card, so only the rows that do are looked up.
     final cardIds = listingRows
-        .map((r) => r['card_id'] as int)
+        .map((r) => r['card_id'] as int?)
+        .whereType<int>()
         .toSet()
         .toList();
     final sellerIds = listingRows
@@ -197,6 +201,31 @@ class CartRepository {
       // Best effort: a failure here costs the shop name, not the cart.
     }
 
+    // `get_listings_by_ids` joins `cards`, so it has nothing to say about a
+    // custom listing — its seller's storefront comes from `get_store_identities`.
+    final sellersWithoutStore = {
+      for (final row in listingRows)
+        if (!storeByListing.containsKey(row['id'] as int))
+          row['user_id'] as String,
+    };
+    var storeBySeller = <String, Map<String, dynamic>>{};
+    if (sellersWithoutStore.isNotEmpty) {
+      try {
+        final rows =
+            await _client.rpc(
+                  'get_store_identities',
+                  params: {'p_user_ids': sellersWithoutStore.toList()},
+                )
+                as List;
+        storeBySeller = {
+          for (final raw in rows.whereType<Map<String, dynamic>>())
+            if (raw['user_id'] case final String id) id: raw,
+        };
+      } catch (_) {
+        // Same as above: the shop name falls back to the username.
+      }
+    }
+
     final cardById = {
       for (final r in cardRows) r['id'] as int: CardModel.fromRow(r),
     };
@@ -204,29 +233,19 @@ class CartRepository {
 
     final listingById = <int, ListingModel>{};
     for (final row in listingRows) {
-      final card = cardById[row['card_id'] as int];
-      if (card == null) continue;
+      final sellerId = row['user_id'] as String;
       final listingId = row['id'] as int;
+      final listing = listingFromCartRow(
+        row,
+        cardById: cardById,
+        profile: profileById[sellerId],
+        store: storeByListing[listingId] ?? storeBySeller[sellerId],
+      );
+      if (listing == null) continue;
       if (row['slug'] case final String slug) {
         _slugByListingId[listingId] = slug;
       }
-      final sellerId = row['user_id'] as String;
-      final profile = profileById[sellerId];
-      final store = storeByListing[listingId];
-      listingById[listingId] = ListingModel.fromRow(
-        row,
-        card: card,
-        storeSlug: store?['store_slug'] as String?,
-        storeName: store?['store_name'] as String?,
-        sellerUsername: profile?['username'] as String?,
-        // Neither is on the RPC, and the direct `seller_profiles` read they
-        // used to come from returned nothing for another seller anyway — so
-        // these were already false/blank here, not a regression.
-        isVerified: false,
-        cityName: '',
-        sellerAvatarUrl: profile?['avatar_url'] as String?,
-        storeLogoUrl: store?['store_logo_url'] as String?,
-      );
+      listingById[listingId] = listing;
     }
 
     final items = <CartItem>[];
@@ -247,6 +266,36 @@ class CartRepository {
       );
     }
     return items;
+  }
+
+  /// One `listings` row of a cart as a [ListingModel]; null when it is a card
+  /// listing whose card can't be found. A custom listing has no card to find:
+  /// its own title and first photo stand in for it.
+  @visibleForTesting
+  static ListingModel? listingFromCartRow(
+    Map<String, dynamic> row, {
+    required Map<int, CardModel> cardById,
+    required Map<String, dynamic>? profile,
+    required Map<String, dynamic>? store,
+  }) {
+    final card = row['kind'] == 'custom'
+        ? CardModel.customFromRow(row)
+        : cardById[row['card_id'] as int?];
+    if (card == null) return null;
+    return ListingModel.fromRow(
+      row,
+      card: card,
+      storeSlug: store?['store_slug'] as String?,
+      storeName: store?['store_name'] as String?,
+      sellerUsername: profile?['username'] as String?,
+      // Neither is on the RPC, and the direct `seller_profiles` read they
+      // used to come from returned nothing for another seller anyway — so
+      // these were already false/blank here, not a regression.
+      isVerified: false,
+      cityName: '',
+      sellerAvatarUrl: profile?['avatar_url'] as String?,
+      storeLogoUrl: store?['store_logo_url'] as String?,
+    );
   }
 
   /// `POST /api/cart`. [listingId] is `listings.id`; the route takes the

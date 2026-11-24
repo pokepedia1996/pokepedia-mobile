@@ -22,7 +22,7 @@ const _offerColumns =
     '''
 slug, condition, quantity, listing_price, current_price, last_actor, status,
 buyer_counter_count, seller_counter_count, message, created_at, expires_at,
-seller_id, listing:ask_order_id(slug), card:cards!inner($_cardColumns)
+seller_id, listing:ask_order_id(slug, title, photo_urls), card:cards($_cardColumns)
 ''';
 
 const _proposalColumns =
@@ -764,9 +764,16 @@ class ProposalsRepository {
   }
 
   ListingOfferModel _mapOffer(Map<String, dynamic> row, String? storeName) {
+    final card = row['card'] as Map<String, dynamic>?;
     return ListingOfferModel(
       slug: row['slug'] as String? ?? '',
-      card: CardModel.fromRow(row['card'] as Map<String, dynamic>),
+      // An offer on a custom listing has no card: the listing's own title and
+      // first photo stand in, once the buyer can still read the listing.
+      card: card != null
+          ? CardModel.fromRow(card)
+          : CardModel.customFromRow(
+              row['listing'] as Map<String, dynamic>? ?? const {},
+            ),
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: (row['quantity'] as num?)?.toInt() ?? 1,
       listingPrice: (row['listing_price'] as num?)?.toInt() ?? 0,

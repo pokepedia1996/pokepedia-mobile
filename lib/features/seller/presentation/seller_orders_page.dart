@@ -570,9 +570,11 @@ class SellerOrderCard extends StatelessWidget {
                         )
                       else if (first != null)
                         Text(
-                          '${first.card.expansionCode.toUpperCase()} · '
-                          '#${first.card.collectorNumber} · '
-                          '×${first.matchedQuantity}',
+                          first.card.isCustom
+                              ? 'Custom · ×${first.matchedQuantity}'
+                              : '${first.card.expansionCode.toUpperCase()} · '
+                                    '#${first.card.collectorNumber} · '
+                                    '×${first.matchedQuantity}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption(context.mutedForeground),
@@ -837,8 +839,7 @@ class _PendingCard extends StatelessWidget {
                       extra > 0
                           ? '+ $extra item lain · Total ×'
                                 '${checkout.totalQuantity}'
-                          : '${first.expansionCode.toUpperCase()} · '
-                                '#${first.collectorNumber} · ×${first.quantity}',
+                          : first.summaryLine,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption(context.mutedForeground),

@@ -21,6 +21,7 @@ import '../../features/content/presentation/tutorial_page.dart';
 import '../../features/expansions/presentation/card_detail_page.dart';
 import '../../features/expansions/presentation/pack_detail_page.dart';
 import '../../features/home/presentation/home_page.dart';
+import '../../features/market/presentation/custom_listing_page.dart';
 import '../../features/market/presentation/market_page.dart';
 import '../../features/market/presentation/bid_listing_page.dart';
 import '../../features/market/presentation/store_card_listing_page.dart';
@@ -177,6 +178,14 @@ final appRouter = GoRouter(
                             0,
                       ),
                     ),
+                    GoRoute(
+                      path: 'listing/:slug',
+                      parentNavigatorKey: rootNavigatorKey,
+                      builder: (_, state) => CustomListingPage(
+                        storeSlug: state.pathParameters['handle'] ?? '',
+                        listingSlug: state.pathParameters['slug'] ?? '',
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -249,10 +258,15 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: ':cardId',
-          builder: (_, state) => CardDetailPage(
-            packSlug: state.pathParameters['packSlug']!,
-            cardId: int.parse(state.pathParameters['cardId']!),
-          ),
+          builder: (_, state) {
+            final cardId = int.tryParse(state.pathParameters['cardId']!);
+            return cardId == null
+                ? const NotFoundPage()
+                : CardDetailPage(
+                    packSlug: state.pathParameters['packSlug']!,
+                    cardId: cardId,
+                  );
+          },
         ),
       ],
     ),

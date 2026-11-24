@@ -20,6 +20,7 @@ const _detailColumns =
     'settlements!inner(slug, buyer_id, seller_id, escrow_amount, '
     'shipping_cost, condition, '
     'order_items!inner(slug, card_id, order_id, order_number, match_price, '
+    'title, photo_urls, '
     'matched_quantity, package_order:orders!order_id(order_number), '
     'cards(name_id, image_url, expansion_code, collector_number))), '
     'dispute_events(event_type, actor_role, payload, created_at), '
@@ -114,7 +115,7 @@ class DisputesRepository {
     final rows = await _client
         .from('disputes')
         .select(
-          'slug, order_items!inner(order_id, order_number, cards(name_id))',
+          'slug, order_items!inner(order_id, order_number, title, cards(name_id))',
         )
         .eq('order_items.order_id', orderId)
         .not('current_status', 'in', '(resolved,closed)')
@@ -126,7 +127,9 @@ class DisputesRepository {
           SiblingDispute(
             slug: row['slug'] as String? ?? '',
             cardName:
-                embeddedRow(item['cards'])?['name_id'] as String? ?? 'Kartu',
+                embeddedRow(item['cards'])?['name_id'] as String? ??
+                item['title'] as String? ??
+                'Kartu',
             orderNumber: item['order_number'] as String? ?? '',
           ),
     ];

@@ -169,11 +169,11 @@ class ChatListingContext {
   static ChatListingContext? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final listingOrderId = (raw['listing_order_id'] as num?)?.toInt();
-    final cardId = (raw['card_id'] as num?)?.toInt();
-    if (listingOrderId == null || cardId == null) return null;
+    if (listingOrderId == null) return null;
     return ChatListingContext(
       listingOrderId: listingOrderId,
-      cardId: cardId,
+      // Null for a custom listing, which has no card behind it.
+      cardId: (raw['card_id'] as num?)?.toInt(),
       priceIdr: (raw['price_idr'] as num?)?.toInt() ?? 0,
       cardName: raw['card_name'] as String?,
       // Through the CDN proxy, like every other image in the app — the
@@ -187,7 +187,7 @@ class ChatListingContext {
   }
 
   final int listingOrderId;
-  final int cardId;
+  final int? cardId;
   final int priceIdr;
   final String? cardName;
   final String? cardImage;
