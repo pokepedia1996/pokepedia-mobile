@@ -57,6 +57,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     'staging.doku.com',
     'sandbox.doku.com',
     'jokul.doku.com',
+    'checkout.doku.com',
   };
 
   /// Our own return URLs. They need a session cookie the app doesn't have,

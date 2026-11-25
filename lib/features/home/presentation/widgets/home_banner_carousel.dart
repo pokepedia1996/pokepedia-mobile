@@ -1,59 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/router/routes.dart';
 import '../../../../core/theme/design_palette.dart';
+import '../../../../shared/widgets/app_network_image.dart';
+import '../../../ads/repository/ads_repository.dart';
+import '../../../ads/usecase/ad_link.dart';
+import '../../../ads/usecase/ads_notifier.dart';
 
-/// One of Beranda's banners: its artwork and where a tap goes.
+/// One of Beranda's banners: a booking from the `ads` table.
 class HomeBanner {
   const HomeBanner({
-    required this.asset,
+    required this.imageUrl,
     required this.label,
     required this.open,
   });
 
-  final String asset;
+  /// Its creative, its advertiser as the label, and its `href` (see
+  /// [AdLinkTarget.parse]).
+  factory HomeBanner.fromAd(AdModel ad) => HomeBanner(
+    imageUrl: ad.imageUrl,
+    label: ad.companyName,
+    open: (context) => openAdLink(context, ad.href),
+  );
+
+  final String imageUrl;
 
   /// What the artwork says, for screen readers.
   final String label;
   final void Function(BuildContext context) open;
 }
 
-/// The banners, in the design's order. The design's "Tersedia di App Store"
-/// and "Tersedia di Google Play" banners are left out: they ask a reader to
-/// install the app they are already in.
-final homeBanners = <HomeBanner>[
-  HomeBanner(
-    asset: 'assets/images/home/banner-jual.png',
-    label: 'Jual kartu, 0% potongan',
-    // Jual is a tab of its own.
-    open: (context) => context.go(Routes.seller),
-  ),
-  HomeBanner(
-    asset: 'assets/images/home/banner-scan.png',
-    label: 'Scan kartu tanpa batas',
-    open: (context) => context.push(Routes.scan),
-  ),
-  HomeBanner(
-    asset: 'assets/images/home/banner-deckbuilder.png',
-    label: 'Rakit deck pakai Deckbuilder',
-    open: (context) => context.push(Routes.decks),
-  ),
-];
-
 /// The swipeable banner row under the portfolio: one banner at a time with
 /// the next one peeking in, and dots marking which is in view.
-class HomeBannerCarousel extends StatefulWidget {
+///
+/// Its banners are what the `ads` table has booked for `home` today, in
+/// `slot_position` order. Nothing booked, or the bookings not read, and the
+/// row is not there at all — its gap below included.
+class HomeBannerCarousel extends ConsumerStatefulWidget {
   const HomeBannerCarousel({super.key, this.banners});
 
-  /// Defaults to [homeBanners].
+  /// In place of the bookings.
   final List<HomeBanner>? banners;
 
+  /// The space between the row and the section under it.
+  static const bottomGap = 14.0;
+
   @override
-  State<HomeBannerCarousel> createState() => _HomeBannerCarouselState();
+  ConsumerState<HomeBannerCarousel> createState() => _HomeBannerCarouselState();
 }
 
-class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
+class _HomeBannerCarouselState extends ConsumerState<HomeBannerCarousel> {
   /// The design's 340×150 banner on a 430-wide screen: the same share of the
   /// width on any phone, so the next banner always shows its edge.
   static const _widthShare = 340 / 430;
@@ -67,7 +63,14 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
   double _viewport = 0;
   int _page = 0;
 
-  List<HomeBanner> get _banners => widget.banners ?? homeBanners;
+  List<HomeBanner> get _banners =>
+      widget.banners ??
+      [
+        for (final ad
+            in ref.watch(adsProvider(AdPlacement.home)).valueOrNull ??
+                const <AdModel>[])
+          HomeBanner.fromAd(ad),
+      ];
 
   @override
   void dispose() {
@@ -95,6 +98,8 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
     final palette = DesignPalette.of(context);
     final banners = _banners;
     if (banners.isEmpty) return const SizedBox.shrink();
+    // A refresh can bring back fewer bookings than the page in view.
+    if (_page >= banners.length) _page = 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -102,42 +107,45 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
         final bannerWidth = viewport * _widthShare;
         final controller = _controllerFor(viewport, bannerWidth + _gutter);
 
-        return Column(
-          children: [
-            SizedBox(
-              height: bannerWidth / _aspect,
-              child: PageView.builder(
-                controller: controller,
-                padEnds: false,
-                itemCount: banners.length,
-                onPageChanged: (page) => setState(() => _page = page),
-                itemBuilder: (context, i) => Padding(
-                  padding: const EdgeInsets.only(left: _gutter),
-                  child: _BannerTile(banner: banners[i]),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: HomeBannerCarousel.bottomGap),
+          child: Column(
+            children: [
+              SizedBox(
+                height: bannerWidth / _aspect,
+                child: PageView.builder(
+                  controller: controller,
+                  padEnds: false,
+                  itemCount: banners.length,
+                  onPageChanged: (page) => setState(() => _page = page),
+                  itemBuilder: (context, i) => Padding(
+                    padding: const EdgeInsets.only(left: _gutter),
+                    child: _BannerTile(banner: banners[i]),
+                  ),
                 ),
               ),
-            ),
-            if (banners.length > 1) ...[
-              const SizedBox(height: 14),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < banners.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 6),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: i == _page ? 18 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: i == _page ? palette.brand : palette.border,
-                        borderRadius: BorderRadius.circular(3),
+              if (banners.length > 1) ...[
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < banners.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: i == _page ? 18 : 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: i == _page ? palette.brand : palette.border,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+              ],
             ],
-          ],
+          ),
         );
       },
     );
@@ -158,10 +166,14 @@ class _BannerTile extends StatelessWidget {
         onTap: () => banner.open(context),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            banner.asset,
-            fit: BoxFit.cover,
-            excludeFromSemantics: true,
+          child: ColoredBox(
+            color: DesignPalette.of(context).chip,
+            child: cachedNetworkImage(
+              banner.imageUrl,
+              fit: BoxFit.cover,
+              excludeFromSemantics: true,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           ),
         ),
       ),

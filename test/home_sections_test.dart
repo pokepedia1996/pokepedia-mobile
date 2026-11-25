@@ -284,15 +284,35 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(_app(const HomeBannerCarousel()));
+    final banners = [
+      for (var i = 1; i <= 3; i++)
+        HomeBanner(
+          imageUrl: 'https://example.com/banner-$i.png',
+          label: 'Banner $i',
+          open: (_) {},
+        ),
+    ];
+    await tester.pumpWidget(_app(HomeBannerCarousel(banners: banners)));
     await tester.pumpAndSettle();
 
     final dots = find.byType(AnimatedContainer);
-    expect(dots, findsNWidgets(homeBanners.length));
+    expect(dots, findsNWidgets(banners.length));
     expect(tester.getSize(dots.first).width, 18);
     expect(tester.getSize(dots.at(1)).width, 6);
     // The design's 340-wide banner on a 430-wide screen.
-    expect(tester.getSize(find.byType(Image).first).width, closeTo(340, 0.5));
+    expect(
+      tester
+          .getSize(
+            find
+                .descendant(
+                  of: find.byType(PageView),
+                  matching: find.byType(ClipRRect),
+                )
+                .first,
+          )
+          .width,
+      closeTo(340, 0.5),
+    );
 
     await tester.drag(find.byType(PageView), const Offset(-300, 0));
     await tester.pumpAndSettle();

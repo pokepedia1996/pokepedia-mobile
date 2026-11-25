@@ -128,8 +128,7 @@ flutter:
     # one, since a directory entry does not include them.
     - assets/images/toko/
     - assets/images/grader/
-    # Beranda: the banner carousel and the "Pilih TCG" logos.
-    - assets/images/home/
+    # Beranda: the "Pilih TCG" logos.
     - assets/images/tcg/
     - assets/images/referral/
     - assets/images/referral/kartu-polos/

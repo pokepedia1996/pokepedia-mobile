@@ -7,7 +7,6 @@ import '../../promos/presentation/promo_popup_gate.dart';
 import '../usecase/home_notifier.dart';
 import '../usecase/portfolio_value_notifier.dart';
 import '../usecase/store_shelves_notifier.dart';
-import 'widgets/home_ad_slot.dart';
 import 'widgets/home_banner_carousel.dart';
 import 'widgets/home_loading_gate.dart';
 import 'widgets/home_tasks_section.dart';
@@ -78,13 +77,12 @@ class HomePage extends ConsumerWidget {
                           // Absent when nothing does.
                           HomeTasksSection(),
                           _sectionGap,
+                          // Banners booked in `ads`; nothing when none are,
+                          // gap below included.
                           HomeBannerCarousel(),
-                          SizedBox(height: 14),
                           TcgPickerSection(),
                           _sectionGap,
                           LatestReleasesSection(),
-                          // A booked campaign, when there is one.
-                          HomeAdSlot(),
                           _sectionGap,
                           StoreShelvesSection(),
                         ],
