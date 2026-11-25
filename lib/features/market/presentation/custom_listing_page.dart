@@ -11,12 +11,13 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../shared/models/card_condition.dart';
 import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
+import '../../../shared/widgets/app_network_image.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
-import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/fly_to_cart.dart';
 import '../../../shared/widgets/image_lightbox.dart';
@@ -281,7 +282,11 @@ class _CustomListingPageState extends ConsumerState<CustomListingPage> {
                 activeIndex: photoIndex,
                 heroKey: _photoKey,
                 onSelect: (i) => setState(() => _photoIndex = i),
-                onOpen: () => showImageLightbox(context, imageUrl: heroImage),
+                onOpen: () => showImageGalleryLightbox(
+                  context,
+                  imageUrls: photos,
+                  initialIndex: photoIndex,
+                ),
               ),
             ),
           ),
@@ -311,6 +316,28 @@ class _CustomListingPageState extends ConsumerState<CustomListingPage> {
             onContact: () => _contactSeller(store, listing),
             onShare: () => showStoreShareSheet(context, store: store),
           ),
+          // The owner changes a custom listing in its own form: its title,
+          // photos and tagged cards have nowhere else to be edited.
+          if (own) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await context.push<bool>(Routes.customListingEdit(detail.slug));
+                if (!mounted) return;
+                ref.invalidate(
+                  customListingProvider((
+                    storeSlug: widget.storeSlug,
+                    slug: widget.listingSlug,
+                  )),
+                );
+              },
+              icon: const Icon(LucideIcons.pencil, size: 16),
+              label: const Text('Edit listing'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ],
           if (detail.tags.isNotEmpty) ...[
             const SizedBox(height: 20),
             _TaggedCards(tags: detail.tags),
@@ -350,52 +377,69 @@ class _Gallery extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: photos.isEmpty ? null : onOpen,
+          // Whole, not cropped, as web's `object-contain`: a bundle photo
+          // is seldom the card's shape, and a crop can cut off what is in
+          // the bundle.
           child: Container(
             key: heroKey,
             decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(color: context.borderColor),
             ),
             clipBehavior: Clip.antiAlias,
-            child: CardArt(
-              imageUrl: photos.isEmpty ? null : photos[activeIndex],
+            child: AspectRatio(
               aspectRatio: 4 / 5,
-              borderRadius: AppRadius.lg,
+              child: photos.isEmpty
+                  ? CardArt(imageUrl: null, aspectRatio: 4 / 5)
+                  : cachedNetworkImage(
+                      photos[activeIndex],
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          CardArt(imageUrl: null, aspectRatio: 4 / 5),
+                    ),
             ),
           ),
         ),
         if (photos.length > 1) ...[
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (var i = 0; i < photos.length; i++)
-                InkWell(
-                  onTap: () => onSelect(i),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: colors.secondary,
+          // One row that scrolls, as web's strip does, rather than wrapping
+          // eight photos onto a second line.
+          SizedBox(
+            height: 56,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (var i = 0; i < photos.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
+                    child: InkWell(
+                      onTap: () => onSelect(i),
                       borderRadius: BorderRadius.circular(AppRadius.md),
-                      border: Border.all(
-                        color: i == activeIndex
-                            ? colors.primary
-                            : context.borderColor,
-                        width: i == activeIndex ? 2 : 1,
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: colors.secondary,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          border: Border.all(
+                            color: i == activeIndex
+                                ? colors.primary
+                                : context.borderColor,
+                            width: i == activeIndex ? 2 : 1,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: cachedNetworkImage(
+                          photos[i],
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
                       ),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: CardArt(
-                      imageUrl: photos[i],
-                      aspectRatio: 1,
-                      borderRadius: AppRadius.md,
-                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ],
       ],
@@ -505,11 +549,28 @@ class _TaggedCardRow extends StatelessWidget {
                     children: [
                       CardLanguageBadge(language: tag.language),
                       const SizedBox(width: 6),
+                      // The set code as web's dark tag, then the number and
+                      // how many copies are in the bundle.
+                      if (tag.expansionCode.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.onSurface,
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Text(
+                            tag.expansionCode.toUpperCase(),
+                            style: AppTypography.badge(colors.surface),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Flexible(
                         child: Text(
                           [
-                            if (tag.expansionCode.isNotEmpty)
-                              tag.expansionCode.toUpperCase(),
                             if (tag.collectorNumber.isNotEmpty)
                               tag.collectorNumber,
                             '×${tag.quantity}',
@@ -525,7 +586,21 @@ class _TaggedCardRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            ConditionBadge(condition: tag.condition, dense: true),
+            // A plain grade pill, as web's: on a bundle the grade is a fact
+            // about one card in it, not a price tier to colour-code.
+            Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colors.secondary,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                tag.condition.short,
+                style: AppTypography.captionSemibold(colors.onSurface),
+              ),
+            ),
           ],
         ),
       ),
@@ -546,14 +621,28 @@ class _Info extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(detail.title, style: AppTypography.h2(colors.onSurface)),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        // Between two rules, as web sets it off (`border-y py-2`).
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: colors.secondary,
-            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.symmetric(
+              horizontal: BorderSide(color: context.borderColor),
+            ),
           ),
-          child: Text('Custom', style: AppTypography.caption(colors.onSurface)),
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: colors.secondary,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Text(
+              'Custom',
+              style: AppTypography.captionSemibold(colors.onSurface),
+            ),
+          ),
         ),
         if (detail.hasDescription) ...[
           const SizedBox(height: 16),

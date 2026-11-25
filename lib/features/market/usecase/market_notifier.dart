@@ -7,6 +7,7 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../repository/market_repository.dart';
+import '../repository/models/card_custom_listing.dart';
 import '../repository/models/custom_listing_detail.dart';
 import '../repository/models/listing_facets.dart';
 import '../repository/models/market_page.dart';
@@ -214,6 +215,19 @@ final marketStoresProvider = FutureProvider<List<StoreModel>>((ref) {
   final query = ref.watch(marketQueryProvider);
   return ref.read(marketRepositoryProvider).fetchStores(query: query);
 });
+
+/// The custom listings a card is tagged on, for its page. Empty on any
+/// failure: the section is an extra, and its absence says nothing wrong.
+final cardCustomListingsProvider =
+    FutureProvider.family<List<CardCustomListing>, int>((ref, cardId) async {
+      try {
+        return await ref
+            .read(marketRepositoryProvider)
+            .fetchCardCustomListings(cardId);
+      } catch (_) {
+        return const [];
+      }
+    });
 
 final storeDetailProvider = FutureProvider.family<StoreModel?, String>((
   ref,

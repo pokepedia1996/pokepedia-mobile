@@ -30,6 +30,135 @@ Future<void> showImageLightbox(
   );
 }
 
+/// The same overlay over several images — a listing's photos — swiped
+/// between, opening on [initialIndex], with "2 / 5" to say where you are.
+/// Web's `ImageLightbox` with `srcs`.
+Future<void> showImageGalleryLightbox(
+  BuildContext context, {
+  required List<String> imageUrls,
+  int initialIndex = 0,
+}) {
+  if (imageUrls.length < 2) {
+    return showImageLightbox(context, imageUrl: imageUrls.firstOrNull);
+  }
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Tutup gambar',
+    barrierColor: Colors.black.withValues(alpha: 0.85),
+    transitionDuration: const Duration(milliseconds: 200),
+    pageBuilder: (context, animation, secondaryAnimation) => _GalleryLightbox(
+      imageUrls: imageUrls,
+      initialIndex: initialIndex.clamp(0, imageUrls.length - 1),
+    ),
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: child,
+      );
+    },
+  );
+}
+
+class _GalleryLightbox extends StatefulWidget {
+  const _GalleryLightbox({required this.imageUrls, required this.initialIndex});
+
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  @override
+  State<_GalleryLightbox> createState() => _GalleryLightboxState();
+}
+
+class _GalleryLightboxState extends State<_GalleryLightbox> {
+  late final _controller = PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: widget.imageUrls.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, i) => GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              behavior: HitTestBehavior.opaque,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: InteractiveViewer(
+                      minScale: 1,
+                      maxScale: 4,
+                      child: cachedNetworkImage(
+                        widget.imageUrls[i],
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Image.asset(
+                              'assets/images/backcard.webp',
+                              fit: BoxFit.contain,
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: SafeArea(
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(LucideIcons.x),
+                color: Colors.white,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.4),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 16,
+            child: SafeArea(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${_index + 1} / ${widget.imageUrls.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ImageLightbox extends StatelessWidget {
   const _ImageLightbox({required this.imageUrl, required this.heroTag});
 

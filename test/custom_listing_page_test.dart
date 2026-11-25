@@ -190,8 +190,9 @@ void main() {
   ) async {
     await _pump(tester, viewer: _buyer);
 
-    // One badge per tagged card, none for the listing itself.
-    expect(find.byType(ConditionBadge), findsNWidgets(2));
+    // One grade per tagged card (both NM), none for the listing itself.
+    expect(find.text('NM'), findsNWidgets(2));
+    expect(find.byType(ConditionBadge), findsNothing);
     expect(find.text('Lihat semua listing kartu ini'), findsNothing);
   });
 

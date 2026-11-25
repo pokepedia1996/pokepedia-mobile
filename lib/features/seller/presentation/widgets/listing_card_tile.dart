@@ -26,6 +26,7 @@ class ListingCardTile extends StatefulWidget {
     required this.onToggleAutoRelist,
     required this.onToggleOffers,
     required this.onMenu,
+    this.onEdit,
   });
 
   final SellerListing listing;
@@ -36,6 +37,11 @@ class ListingCardTile extends StatefulWidget {
   final ValueChanged<bool> onToggleAutoRelist;
   final ValueChanged<bool> onToggleOffers;
   final VoidCallback onMenu;
+
+  /// Opens the listing's own editor — a custom listing's form, where its
+  /// title, photos and tagged cards are changed. A tap on its picture or
+  /// title goes there, as a click on web's row does.
+  final VoidCallback? onEdit;
 
   @override
   State<ListingCardTile> createState() => _ListingCardTileState();
@@ -74,20 +80,23 @@ class _ListingCardTileState extends State<ListingCardTile> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 42,
-                child: Stack(
-                  children: [
-                    CardArt(imageUrl: listing.card.imageUrl),
-                    Positioned(
-                      left: 0,
-                      bottom: 0,
-                      child: _StockBadge(
-                        available: listing.available,
-                        total: listing.quantity,
+              GestureDetector(
+                onTap: widget.onEdit,
+                child: SizedBox(
+                  width: 42,
+                  child: Stack(
+                    children: [
+                      CardArt(imageUrl: listing.card.imageUrl),
+                      Positioned(
+                        left: 0,
+                        bottom: 0,
+                        child: _StockBadge(
+                          available: listing.available,
+                          total: listing.quantity,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -97,17 +106,24 @@ class _ListingCardTileState extends State<ListingCardTile> {
                   children: [
                     Row(
                       children: [
-                        CardLanguageBadge(language: listing.card.language),
-                        const SizedBox(width: 6),
+                        if (!listing.isCustom) ...[
+                          CardLanguageBadge(language: listing.card.language),
+                          const SizedBox(width: 6),
+                        ],
                         Expanded(
-                          child: Text(
-                            listing.card.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodySemibold(colors.onSurface),
+                          child: GestureDetector(
+                            onTap: widget.onEdit,
+                            child: Text(
+                              listing.card.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodySemibold(
+                                colors.onSurface,
+                              ),
+                            ),
                           ),
                         ),
-                        if (!listing.card.isSealed) ...[
+                        if (listing.card.hasCondition) ...[
                           const SizedBox(width: 6),
                           _ConditionPill(label: listing.condition.short),
                         ],
@@ -121,11 +137,17 @@ class _ListingCardTileState extends State<ListingCardTile> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        _Chip(text: listing.card.expansionCode.toUpperCase()),
+                        _Chip(
+                          text: listing.isCustom
+                              ? 'CUSTOM'
+                              : listing.card.expansionCode.toUpperCase(),
+                        ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            listing.card.collectorNumber,
+                            listing.isCustom
+                                ? '${listing.photoUrls.length} foto'
+                                : listing.card.collectorNumber,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption(
