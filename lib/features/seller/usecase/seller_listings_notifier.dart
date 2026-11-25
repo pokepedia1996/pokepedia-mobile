@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/auth_provider.dart';
+import '../repository/custom_listings_repository.dart';
+import '../repository/models/custom_listing_form.dart';
 import '../repository/models/seller_listing.dart';
 import '../repository/seller_listings_repository.dart';
 
@@ -258,6 +260,14 @@ final sellerDraftsProvider = FutureProvider<List<SellerDraft>>((ref) {
   final user = ref.watch(authProvider).valueOrNull;
   if (user == null) return Future.value(const <SellerDraft>[]);
   return ref.read(sellerListingsRepositoryProvider).fetchDrafts();
+});
+
+/// The seller's unpublished custom listings, shown above the card drafts.
+/// They are `listings` rows, not `listing_drafts`, so they come separately.
+final customDraftsProvider = FutureProvider<List<CustomDraftSummary>>((ref) {
+  final user = ref.watch(authProvider).valueOrNull;
+  if (user == null) return Future.value(const <CustomDraftSummary>[]);
+  return ref.read(customListingsRepositoryProvider).fetchDrafts();
 });
 
 /// The seller's listing defaults, for the Preferensi tab.

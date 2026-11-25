@@ -137,6 +137,12 @@ class Routes {
   static String sellerListingOffers(String listingSlug) =>
       '/seller/products/offers/$listingSlug';
 
+  /// A new custom listing — a seller's own title and photos — and one
+  /// already saved, by its `listings.slug`. Web's paths.
+  static const customListingNew = '/seller/products/custom/new';
+  static String customListingEdit(String slug) =>
+      '/seller/products/custom/$slug';
+
   /// One order as its seller. Web calls the parameter `matchId`; the app
   /// passes `orders.slug`, which is the same value that route resolves.
   static String sellerOrderDetail(String orderSlug) =>

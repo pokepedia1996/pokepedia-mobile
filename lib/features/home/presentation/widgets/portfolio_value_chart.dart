@@ -16,9 +16,17 @@ import '../../../../core/errors/user_message.dart';
 /// instead of drawing a flat line at zero, which would read as a portfolio
 /// that lost all its value.
 class PortfolioValueChart extends ConsumerWidget {
-  const PortfolioValueChart({super.key, this.height = 140});
+  const PortfolioValueChart({
+    super.key,
+    this.height = 140,
+    this.hideValues = false,
+  });
 
   final double height;
+
+  /// Masks the rupiah on the axis and in the crosshair's label, for
+  /// Beranda's hidden-values eye. The line itself still shows the shape.
+  final bool hideValues;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,7 +81,7 @@ class PortfolioValueChart extends ConsumerWidget {
           // value/date axes, plus a crosshair that follows a touch, a drag,
           // or — on desktop/web — a hovering mouse.
           if (series.length < 2) return PortfolioSparkline(series: series);
-          return _PortfolioLineChart(series: series);
+          return _PortfolioLineChart(series: series, hideValues: hideValues);
         },
       ),
     );
@@ -214,9 +222,10 @@ class _ValueLinePainter extends CustomPainter {
 /// Only reached with two or more points — see [PortfolioValueChart]'s call
 /// site for why a single reading stays on the bare sparkline instead.
 class _PortfolioLineChart extends StatefulWidget {
-  const _PortfolioLineChart({required this.series});
+  const _PortfolioLineChart({required this.series, this.hideValues = false});
 
   final List<PortfolioValuePoint> series;
+  final bool hideValues;
 
   @override
   State<_PortfolioLineChart> createState() => _PortfolioLineChartState();
@@ -274,6 +283,7 @@ class _PortfolioLineChartState extends State<_PortfolioLineChart> {
                 labelColor: context.mutedForeground,
                 foreground: colors.onSurface,
                 surface: Theme.of(context).cardColor,
+                hideValues: widget.hideValues,
               ),
             ),
           ),
@@ -304,7 +314,11 @@ class _PortfolioChartPainter extends CustomPainter {
     required this.labelColor,
     required this.foreground,
     required this.surface,
+    this.hideValues = false,
   });
+
+  /// What a hidden figure reads as.
+  static const _masked = 'Rp•••';
 
   static const leftPadding = 50.0;
   static const rightPadding = 6.0;
@@ -319,6 +333,7 @@ class _PortfolioChartPainter extends CustomPainter {
   final Color labelColor;
   final Color foreground;
   final Color surface;
+  final bool hideValues;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -401,7 +416,10 @@ class _PortfolioChartPainter extends CustomPainter {
         paint,
       );
       final value = yMin + (yMax - yMin) * t;
-      final label = _text(formatRupiahCompact(value), labelColor);
+      final label = _text(
+        hideValues ? _masked : formatRupiahCompact(value),
+        labelColor,
+      );
       label.paint(
         canvas,
         Offset(plot.left - 6 - label.width, y - label.height / 2),
@@ -456,7 +474,11 @@ class _PortfolioChartPainter extends CustomPainter {
     // Date above value, the same order the sparkline's own tooltip-free
     // neighbor — the market price chart's crosshair — uses.
     final dateLabel = _text(formatShortDateId(point.day), labelColor);
-    final valueLabel = _text(formatRupiah(point.value), foreground, bold: true);
+    final valueLabel = _text(
+      hideValues ? _masked : formatRupiah(point.value),
+      foreground,
+      bold: true,
+    );
     final width =
         [dateLabel.width, valueLabel.width].reduce((a, b) => a > b ? a : b) +
         20;
@@ -523,7 +545,10 @@ class _PortfolioChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PortfolioChartPainter old) =>
-      old.series != series || old.selected != selected || old.line != line;
+      old.series != series ||
+      old.selected != selected ||
+      old.line != line ||
+      old.hideValues != hideValues;
 }
 
 class _ChartMessage extends StatelessWidget {

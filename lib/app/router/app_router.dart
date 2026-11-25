@@ -50,6 +50,7 @@ import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/search/presentation/search_results_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
 import '../../features/seller/presentation/store_setup/store_setup_page.dart';
+import '../../features/seller/presentation/custom_listing_form_page.dart';
 import '../../features/seller/presentation/seller_listing_offers_page.dart';
 import '../../features/seller/presentation/seller_order_detail_page.dart';
 import '../../features/seller/presentation/seller_orders_page.dart';
@@ -413,6 +414,16 @@ final appRouter = GoRouter(
           builder: (_, state) => SellerListingOffersPage(
             listingSlug: state.pathParameters['slug'] ?? '',
           ),
+        ),
+        // `new` before `:slug`, which would otherwise take it as a slug.
+        GoRoute(
+          path: 'custom/new',
+          builder: (_, __) => const CustomListingFormPage(),
+        ),
+        GoRoute(
+          path: 'custom/:slug',
+          builder: (_, state) =>
+              CustomListingFormPage(slug: state.pathParameters['slug']),
         ),
       ],
     ),

@@ -94,6 +94,7 @@ final portfolioHoldingsProvider = FutureProvider<List<PortfolioHolding>>((
           unitPrice: card.marketPrice ?? 0,
           imageUrl: card.imageUrl,
           priceChangePct: card.priceChangePct,
+          language: card.language,
         ),
   ];
 });
