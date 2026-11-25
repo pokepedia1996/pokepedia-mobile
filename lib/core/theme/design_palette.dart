@@ -22,6 +22,8 @@ class DesignPalette {
     required this.successText,
     required this.successSoft,
     required this.error,
+    required this.errorText,
+    required this.errorSoft,
     required this.ctaBackground,
     required this.ctaForeground,
   });
@@ -43,6 +45,8 @@ class DesignPalette {
         successText: const Color(0xFF15803D),
         successSoft: const Color(0xFFDCFCE7),
         error: colors.error,
+        errorText: const Color(0xFFD9473F),
+        errorSoft: const Color(0xFFFDE8E6),
         ctaBackground: const Color(0xFF1C1413),
         ctaForeground: const Color(0xFFFFFFFF),
       );
@@ -61,6 +65,8 @@ class DesignPalette {
       successText: context.appSemantic.success,
       successSoft: context.appSemantic.success.withValues(alpha: 0.16),
       error: colors.error,
+      errorText: colors.error,
+      errorSoft: colors.error.withValues(alpha: 0.16),
       ctaBackground: colors.onSurface,
       ctaForeground: colors.surface,
     );
@@ -87,6 +93,10 @@ class DesignPalette {
   /// Behind a success mark: the "Aktif" pill, a finished step's tick.
   final Color successSoft;
   final Color error;
+
+  /// A fall in value: the text of a falling move, and the pill behind it.
+  final Color errorText;
+  final Color errorSoft;
 
   /// The dark pill and dark tile; [ctaForeground] is what sits on them.
   final Color ctaBackground;

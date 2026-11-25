@@ -54,6 +54,21 @@ final catalogLanguagesProvider = FutureProvider<List<CardLanguage>>((
 });
 
 /// The list to draw right now: the server's once it is in, the built-in
-/// one until then, so no switch ever renders empty.
-List<CardLanguage> watchCatalogLanguages(WidgetRef ref) =>
-    ref.watch(catalogLanguagesProvider).valueOrNull ?? CardLanguage.known;
+/// one until then, so no switch ever renders empty. In
+/// [orderCatalogLanguages]' order, so every picker in the app agrees.
+List<CardLanguage> watchCatalogLanguages(WidgetRef ref) => orderCatalogLanguages(
+  ref.watch(catalogLanguagesProvider).valueOrNull ?? CardLanguage.known,
+);
+
+/// The order catalogs are offered in: Indonesian first, as the home
+/// catalog, then the rest A–Z by label — whatever order the server lists
+/// them in (`catalog_categories.sort_order` decides only what the web
+/// shows).
+List<CardLanguage> orderCatalogLanguages(List<CardLanguage> languages) {
+  int rank(CardLanguage l) => l == CardLanguage.id ? 0 : 1;
+  return [...languages]..sort((a, b) {
+    final byRank = rank(a).compareTo(rank(b));
+    if (byRank != 0) return byRank;
+    return a.shortLabel.toUpperCase().compareTo(b.shortLabel.toUpperCase());
+  });
+}
