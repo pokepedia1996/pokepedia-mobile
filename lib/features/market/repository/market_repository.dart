@@ -7,6 +7,7 @@ import '../../../shared/models/store_model.dart';
 import '../../expansions/repository/models/store_identity.dart';
 import '../../seller/repository/models/my_reliability.dart';
 import '../usecase/market_filters.dart';
+import 'models/card_custom_listing.dart';
 import 'models/custom_listing_detail.dart';
 import 'models/listing_facets.dart';
 import 'models/market_page.dart';
@@ -22,6 +23,22 @@ class MarketRepository {
   MarketRepository(this._client);
 
   final SupabaseClient _client;
+
+  /// The open custom listings that tag [cardId] — web's
+  /// `CardCustomListings` on a card's page (`get_card_custom_listings`,
+  /// granted to `anon` too, so it reads signed out).
+  Future<List<CardCustomListing>> fetchCardCustomListings(int cardId) async {
+    final rows =
+        await _client.rpc(
+              'get_card_custom_listings',
+              params: {'p_card_id': cardId, 'p_limit': 20},
+            )
+            as List;
+    return [
+      for (final row in rows.whereType<Map<String, dynamic>>())
+        CardCustomListing.fromRow(row),
+    ];
+  }
 
   /// One custom listing with the cards tagged on it, or null when there is
   /// none the viewer may see: `get_custom_listing` answers only for an open

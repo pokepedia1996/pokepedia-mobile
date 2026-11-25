@@ -73,6 +73,7 @@ class SellerListing {
     this.archivedAt,
     this.expiresAt,
     this.photoUrls = const [],
+    this.isCustom = false,
   });
 
   /// Absent from `get_seller_listings_page` rows, which key on [slug].
@@ -100,6 +101,11 @@ class SellerListing {
   /// how many there are, because a graded listing needs at least one.
   final List<String> photoUrls;
 
+  /// A custom listing (`kind = 'custom'`): the seller's own title and photos
+  /// rather than a catalog card. [card] is then a stand-in carrying the
+  /// title and the cover photo, and the listing has no condition.
+  final bool isCustom;
+
   bool get isArchived => archivedAt != null;
 
   /// What the whole row is worth at the asking price — web's value column.
@@ -126,12 +132,18 @@ class SellerListing {
   /// beside the listing's (`card_id`, `card_name`, ...), or a `listings` row
   /// with its card embedded under `cards`.
   factory SellerListing.fromRow(Map<String, dynamic> row) {
+    final isCustom = row['kind'] == 'custom';
     return SellerListing(
       id: (row['id'] as num?)?.toInt(),
       slug: row['slug'] as String? ?? '',
-      card: CardModel.fromRow(
-        row['cards'] as Map<String, dynamic>? ?? _flatCard(row),
-      ),
+      isCustom: isCustom,
+      // A custom row has no card behind it: without this it read as
+      // "Kartu #0" with no picture and an NM badge.
+      card: isCustom
+          ? CardModel.customFromRow(row)
+          : CardModel.fromRow(
+              row['cards'] as Map<String, dynamic>? ?? _flatCard(row),
+            ),
       price: (row['price'] as num?)?.toInt() ?? 0,
       condition: CardConditionX.fromRaw(row['condition'] as String? ?? 'NM'),
       quantity: (row['quantity'] as num?)?.toInt() ?? 0,

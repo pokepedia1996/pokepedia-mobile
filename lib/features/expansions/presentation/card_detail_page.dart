@@ -18,6 +18,7 @@ import '../usecase/expansions_notifier.dart';
 import 'widgets/add_to_portfolio_panel.dart';
 import 'widgets/card_details_section.dart';
 import 'widgets/related_cards_section.dart';
+import '../../market/presentation/widgets/card_custom_listings_section.dart';
 import 'widgets/card_listings_section.dart';
 import 'widgets/card_market_header.dart';
 import 'widgets/market_activity_section.dart';
@@ -103,6 +104,10 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
                 // those prices.
                 CardListingsSection(cardId: card.id),
                 const SizedBox(height: 16),
+                // Sellers' own bundles with this card in them, right after
+                // the singles as on web. Takes its own gap; nothing when
+                // there are none.
+                CardCustomListingsSection(cardId: card.id),
                 SalesHistorySection(cardId: card.id),
                 const SizedBox(height: 16),
                 MarketActivitySection(cardId: card.id),
