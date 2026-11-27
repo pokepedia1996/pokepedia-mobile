@@ -13,7 +13,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/inline_pill.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../orders/presentation/widgets/order_rating_section.dart';
@@ -50,7 +50,7 @@ class SellerOrderDetailPage extends ConsumerWidget {
         ),
       ),
       body: async.when(
-        loading: () => const Center(child: PikachuLoader()),
+        loading: () => const Center(child: AppLoader()),
         error: (_, _) => const EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat pesanan',

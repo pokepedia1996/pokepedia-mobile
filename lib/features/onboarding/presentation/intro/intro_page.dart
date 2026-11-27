@@ -716,11 +716,7 @@ class _IntroPageState extends ConsumerState<IntroPage>
                   : null,
               background: onbInk,
               foreground: Colors.white,
-              leading: const Icon(
-                LucideIcons.apple,
-                size: 18,
-                color: Colors.white,
-              ),
+              leading: const Icon(Icons.apple, size: 20, color: Colors.white),
             ),
           ),
         ],

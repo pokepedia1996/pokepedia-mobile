@@ -12,7 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import 'widgets/empty_cart_card.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../account/presentation/widgets/address_form_sheet.dart';
@@ -482,7 +482,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // rebuild this into "Keranjang kosong" and flash it through the
         // route transition — a page the buyer never asked to see.
         child: _paying
-            ? const PikachuLoader()
+            ? const AppLoader()
             // An empty cart and an empty selection are different problems
             // with different exits, so they are separate branches rather
             // than one empty state with swapped copy.
@@ -644,7 +644,7 @@ class _DealCheckoutUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const PikachuLoader();
+    if (loading) return const AppLoader();
     final error = this.error;
     if (error != null) {
       return EmptyState(

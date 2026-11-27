@@ -11,7 +11,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/theme/design_palette.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/setup_kit.dart';
 import '../../../shared/widgets/store_card.dart' show TopSellerBadge;
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -74,7 +74,7 @@ class _DashboardBody extends ConsumerWidget {
     final hasStore = ref.watch(hasStoreProvider);
 
     return hasStore.when(
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const _DashboardScroll(),
       // No store yet: Buka Toko's launcher, where the dashboard would be.
       data: (has) =>
@@ -99,7 +99,7 @@ class _DashboardScroll extends ConsumerWidget {
     final window = ref.watch(sellerWindowProvider);
     final reliability = ref.watch(myReliabilityProvider).valueOrNull;
 
-    if (async.isLoading && !async.hasValue) return const PikachuLoader();
+    if (async.isLoading && !async.hasValue) return const AppLoader();
 
     // A null payload means the RPC failed. The web keeps the whole layout
     // and puts a banner on top of zeroed numbers rather than swapping in an
@@ -914,7 +914,7 @@ class SellerPerformancePage extends ConsumerWidget {
     return Scaffold(
       appBar: const TransparentAppBar(title: Text('Performa')),
       body: async.isLoading && !async.hasValue
-          ? const PikachuLoader()
+          ? const AppLoader()
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [

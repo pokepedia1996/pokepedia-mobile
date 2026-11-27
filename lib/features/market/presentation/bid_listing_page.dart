@@ -15,7 +15,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -162,7 +162,7 @@ class BidListingPage extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: PikachuLoader()),
+        loading: () => const Center(child: AppLoader()),
         error: (_, __) => const Center(
           child: EmptyState(
             icon: LucideIcons.circleAlert,

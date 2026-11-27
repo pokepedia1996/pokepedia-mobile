@@ -6,7 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/design_palette.dart';
 import '../../../../shared/widgets/coretan_kit.dart';
-import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../../shared/widgets/app_loader.dart';
 import '../../../../shared/widgets/scribble_drawing.dart';
 import '../../../../shared/widgets/setup_kit.dart';
 import '../../usecase/store_setup.dart';
@@ -123,7 +123,7 @@ class _CourierStepState extends ConsumerState<CourierStep>
         if (catalog == null && async.isLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: PikachuLoader(),
+            child: AppLoader(),
           )
         else if (!ready)
           _Unavailable(onRetry: () => ref.invalidate(courierServicesProvider))

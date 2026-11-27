@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/coretan_kit.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/store_profile.dart';
 import '../repository/store_profile_repository.dart';
@@ -166,7 +166,7 @@ class _SellerCouriersPageState extends ConsumerState<SellerCouriersPage> {
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: profileAsync.when(
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => EmptyState(
             icon: LucideIcons.truck,
             title: 'Gagal memuat pengaturan kurir',
@@ -198,7 +198,7 @@ class _SellerCouriersPageState extends ConsumerState<SellerCouriersPage> {
                 servicesAsync.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
-                    child: PikachuLoader(),
+                    child: AppLoader(),
                   ),
                   error: (error, _) => _Unavailable(
                     profile: profile,

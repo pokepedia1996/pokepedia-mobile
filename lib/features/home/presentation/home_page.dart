@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/app_top_bar.dart';
 import '../../promos/presentation/promo_popup_gate.dart';
+import '../../proposals/usecase/proposals_notifier.dart';
+import '../../seller/usecase/offers_notifier.dart';
+import '../../seller/usecase/seller_notifier.dart';
 import '../usecase/home_notifier.dart';
 import '../usecase/portfolio_value_notifier.dart';
 import '../usecase/store_shelves_notifier.dart';
@@ -73,13 +76,11 @@ class HomePage extends ConsumerWidget {
                           // first: it has no value or holdings to show yet.
                           OnboardingShortcutsSection(),
                           PortfolioValueSection(),
-                          // What needs answering, before anything to browse.
-                          // Absent when nothing does.
-                          HomeTasksSection(),
                           _sectionGap,
                           // Banners booked in `ads`; nothing when none are,
                           // gap below included.
                           HomeBannerCarousel(),
+                          HomeTasksSection(),
                           TcgPickerSection(),
                           _sectionGap,
                           LatestReleasesSection(),
@@ -103,6 +104,9 @@ class HomePage extends ConsumerWidget {
     // dropping back to spinners.
     final refreshing = ref.read(homeRefreshingProvider.notifier);
     refreshing.state = true;
+    ref.invalidate(proposalsSummaryProvider);
+    ref.invalidate(receivedOffersProvider);
+    ref.invalidate(sellerDashboardProvider);
     ref.invalidate(portfolioHoldingsProvider);
     ref.invalidate(collectionSummaryProvider);
     ref.invalidate(portfolioValueSeriesProvider);

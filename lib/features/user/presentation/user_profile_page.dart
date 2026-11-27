@@ -17,7 +17,7 @@ import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../moderation/presentation/blocked_user_notice.dart';
@@ -234,7 +234,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                       !collectionAsync.hasError)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 32),
-                      child: PikachuLoader(size: 120),
+                      child: AppLoader(size: 120),
                     )
                   else if (collection.isEmpty)
                     const _NoticeBox(
@@ -328,7 +328,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
               ),
             );
           },
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => const EmptyState(
             icon: LucideIcons.circleAlert,
             title: 'Gagal memuat profil',

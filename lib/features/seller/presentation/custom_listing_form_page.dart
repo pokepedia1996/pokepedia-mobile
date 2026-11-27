@@ -13,7 +13,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../repository/custom_listings_repository.dart';
 import '../repository/models/custom_listing_form.dart';
 import '../repository/seller_listings_repository.dart';
@@ -247,7 +247,7 @@ class _CustomListingFormPageState extends ConsumerState<CustomListingFormPage> {
         ),
       );
     }
-    if (value == null) return const PikachuLoader();
+    if (value == null) return const AppLoader();
 
     final colors = context.appColors;
     final titleError = _showErrors ? customTitleError(value.title) : null;

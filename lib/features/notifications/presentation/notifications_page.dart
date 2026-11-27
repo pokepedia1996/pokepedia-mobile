@@ -8,7 +8,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../usecase/notification_push_notifier.dart';
 import '../usecase/notification_route.dart';
 import '../usecase/notifications_notifier.dart';
@@ -148,7 +148,7 @@ class NotificationsPage extends ConsumerWidget {
                   ),
                 );
               },
-              loading: () => const PikachuLoader(),
+              loading: () => const AppLoader(),
               error: (_, __) => EmptyState(
                 icon: LucideIcons.circleAlert,
                 title: 'Gagal memuat notifikasi',

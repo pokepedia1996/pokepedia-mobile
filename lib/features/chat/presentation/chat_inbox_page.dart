@@ -8,7 +8,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../repository/models/chat_models.dart';
 import '../usecase/chat_notifier.dart';
@@ -124,7 +124,7 @@ class _ChatInboxPageState extends ConsumerState<ChatInboxPage>
                   ),
                 );
               },
-              loading: () => const PikachuLoader(),
+              loading: () => const AppLoader(),
               error: (_, __) => EmptyState(
                 icon: LucideIcons.circleAlert,
                 title: 'Gagal memuat pesan',

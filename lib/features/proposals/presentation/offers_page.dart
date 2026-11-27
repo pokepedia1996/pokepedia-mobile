@@ -9,7 +9,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/utils/price_input_formatter.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/listing_offer_model.dart';
@@ -74,7 +74,7 @@ class _OffersTab extends ConsumerWidget {
           itemBuilder: (context, i) => _OfferTile(offer: items[i]),
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat penawaran')),
     );
   }

@@ -15,7 +15,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../moderation/presentation/user_safety_menu.dart';
 import '../../moderation/usecase/moderation_notifier.dart';
@@ -288,7 +288,7 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
         ],
       ),
       body: async.when(
-        loading: () => const PikachuLoader(),
+        loading: () => const AppLoader(),
         error: (_, __) => const EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat percakapan',

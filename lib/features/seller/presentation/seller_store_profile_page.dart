@@ -14,7 +14,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/utils/image_crop.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/map_picker_sheet.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../account/repository/address_repository.dart';
 import '../../account/repository/models/address_model.dart';
@@ -43,7 +43,7 @@ class SellerStoreProfilePage extends ConsumerWidget {
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: async.when(
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => EmptyState(
             icon: LucideIcons.store,
             title: 'Gagal memuat profil penjual',

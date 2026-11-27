@@ -18,7 +18,7 @@ import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../core/providers/card_ownership_controller.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/wishlist_heart.dart';
 import '../../home/usecase/portfolio_value_notifier.dart';
@@ -339,7 +339,7 @@ class _CollectionTabState extends ConsumerState<_CollectionTab> {
         return const [
           SliverPadding(
             padding: EdgeInsets.only(top: 48),
-            sliver: SliverToBoxAdapter(child: PikachuLoader()),
+            sliver: SliverToBoxAdapter(child: AppLoader()),
           ),
         ];
       }

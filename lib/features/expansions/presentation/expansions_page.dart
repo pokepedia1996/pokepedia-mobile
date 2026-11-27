@@ -13,7 +13,7 @@ import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/catalog_language_toggle.dart';
 import '../../../shared/widgets/expansion_list_item.dart';
 import '../../../shared/widgets/pack_card.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/shimmer_box.dart';
 import '../../../shared/widgets/view_mode_toggle.dart';
 import '../usecase/expansions_notifier.dart';
@@ -74,7 +74,7 @@ class _ExpansionsBrowserState extends ConsumerState<ExpansionsBrowser> {
           _toolbar(null),
           const Padding(
             padding: EdgeInsets.only(top: 48),
-            child: PikachuLoader(),
+            child: AppLoader(),
           ),
         ],
       ),

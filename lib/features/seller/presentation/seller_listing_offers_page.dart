@@ -10,7 +10,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
@@ -79,7 +79,7 @@ class _SellerListingOffersPageState
           await ref.read(receivedOffersProvider.future);
         },
         child: async.isLoading && offers.isEmpty
-            ? const Center(child: PikachuLoader())
+            ? const Center(child: AppLoader())
             : async.hasError || offers.isEmpty
             // Centred in the room under the header, and still pullable.
             ? ScrollableEmptyState(

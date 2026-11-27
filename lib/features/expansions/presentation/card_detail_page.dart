@@ -12,7 +12,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/expansions_notifier.dart';
 import 'widgets/add_to_portfolio_panel.dart';
@@ -129,7 +129,7 @@ class _CardDetailPageState extends ConsumerState<CardDetailPage> {
             ),
           );
         },
-        loading: () => const PikachuLoader(),
+        loading: () => const AppLoader(),
         error: (_, __) => const EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat kartu',

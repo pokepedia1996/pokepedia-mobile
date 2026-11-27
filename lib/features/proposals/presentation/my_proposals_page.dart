@@ -7,7 +7,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/bid_proposal_model.dart';
 import '../repository/models/sent_proposal.dart';
@@ -115,7 +115,7 @@ class _MyProposalsPageState extends ConsumerState<MyProposalsPage> {
                 ...title,
                 const Padding(
                   padding: EdgeInsets.only(top: 48),
-                  child: PikachuLoader(),
+                  child: AppLoader(),
                 ),
               ],
             ),

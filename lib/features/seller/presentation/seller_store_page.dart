@@ -9,7 +9,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/store_profile.dart';
 import '../usecase/store_profile_notifier.dart';
@@ -34,7 +34,7 @@ class SellerStorePage extends ConsumerWidget {
       appBar: const TransparentAppBar(),
       body: AppBarOverlayBody(
         child: async.when(
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => EmptyState(
             icon: LucideIcons.store,
             title: 'Gagal memuat toko',

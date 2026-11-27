@@ -12,7 +12,7 @@ import '../../../shared/utils/card_filtering.dart';
 import '../../../shared/widgets/card_filter_bar.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/quick_search_field.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
@@ -153,7 +153,7 @@ class SearchResultsPage extends ConsumerWidget {
               if (state.loading)
                 const SliverFillRemaining(
                   hasScrollBody: false,
-                  child: PikachuLoader(),
+                  child: AppLoader(),
                 )
               else if (state.failed)
                 SliverFillRemaining(

@@ -4,7 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/portfolio_notifier.dart';
 
@@ -45,7 +45,7 @@ class ListDetailPage extends ConsumerWidget {
               ],
             );
           },
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => const Center(child: Text('Gagal memuat list')),
         ),
       ),

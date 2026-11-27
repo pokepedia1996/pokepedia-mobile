@@ -13,7 +13,7 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/card_condition.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/card_art.dart';
-import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../../shared/widgets/app_loader.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 import '../../usecase/portfolio_notifier.dart';
 import 'add_destination_sheet.dart';
@@ -200,7 +200,7 @@ class _CollectionAddSheetState extends ConsumerState<_CollectionAddSheet> {
                           },
                           loading: () => const Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
-                            child: PikachuLoader(size: 96),
+                            child: AppLoader(size: 96),
                           ),
                           error: (_, __) =>
                               _hint('Gagal memuat hasil pencarian.'),

@@ -13,7 +13,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/presentation/checkout_page.dart';
@@ -107,7 +107,7 @@ class _CardProposalsPageState extends ConsumerState<CardProposalsPage>
           // this the page dropped to the loader instead of keeping the
           // proposals up until the new ones landed.
           skipLoadingOnReload: true,
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => Center(
             child: Text(
               'Gagal memuat proposal',

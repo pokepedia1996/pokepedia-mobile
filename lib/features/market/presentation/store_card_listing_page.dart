@@ -23,7 +23,7 @@ import '../../../shared/widgets/condition_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/fly_to_cart.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import 'widgets/report_listing_sheet.dart';
@@ -543,7 +543,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
             ),
           );
         },
-        loading: () => const PikachuLoader(),
+        loading: () => const AppLoader(),
         error: (_, __) => EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat listing',
