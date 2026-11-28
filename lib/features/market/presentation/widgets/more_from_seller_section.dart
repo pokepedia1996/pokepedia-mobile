@@ -112,8 +112,11 @@ class _SellerListingThumb extends StatelessWidget {
     return SizedBox(
       width: 116,
       child: InkWell(
-        onTap: () =>
-            context.push(Routes.storeCardDetail(storeHandle, listing.card.id)),
+        onTap: () => context.push(
+          listing.isCustom
+              ? Routes.customListing(storeHandle, listing.slug)
+              : Routes.storeCardDetail(storeHandle, listing.card.id),
+        ),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -144,7 +147,7 @@ class _SellerListingThumb extends StatelessWidget {
                     // Kept in layout for a sealed product so its tile
                     // lines up with the singles beside it.
                     Visibility(
-                      visible: !listing.card.isSealed,
+                      visible: listing.card.hasCondition,
                       maintainSize: true,
                       maintainAnimation: true,
                       maintainState: true,

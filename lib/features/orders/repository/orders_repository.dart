@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/postgrest_embed.dart';
 import 'models/open_dispute.dart';
 import 'models/order_model.dart';
@@ -42,7 +43,7 @@ class OrdersRepository {
   static String _orderColumns({required bool koin}) =>
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
-      'status, created_at, cards($_cardColumns),'
+      'status, created_at, title, photo_urls, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'shipping_discount_idr, insurance_fee_idr,'
       '${koin ? 'koin_idr, koin_refunded_idr,' : ''}'
@@ -58,6 +59,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history)';
 
   /// The buyer's *detail* columns: [_orderColumns] plus where the parcel is
@@ -68,7 +70,7 @@ class OrdersRepository {
   static const _buyerOrderDetailColumns =
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
-      'status, created_at, cards($_cardColumns),'
+      'status, created_at, title, photo_urls, cards($_cardColumns),'
       'settlements(slug, condition, escrow_amount, shipping_cost, status,'
       'shipping_discount_idr, insurance_fee_idr,'
       // What the buyer paid with Koin, and what a refund already returned.
@@ -82,6 +84,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
       'destination_full_address, destination_district, destination_city,'
@@ -337,21 +340,32 @@ class OrdersRepository {
     if (askIds.isEmpty) return const {};
 
     final listings =
-        await _client
-                .from('listings')
-                .select('id, card_id')
-                .inFilter('id', askIds.toList())
-            as List;
+        (await _client
+                    .from('listings')
+                    .select('id, card_id, kind, title, photo_urls')
+                    .inFilter('id', askIds.toList())
+                as List)
+            .cast<Map<String, dynamic>>();
 
-    final cardIdByAsk = <int, int>{
-      for (final row in listings.cast<Map<String, dynamic>>())
-        (row['id'] as num).toInt(): (row['card_id'] as num).toInt(),
+    // A custom listing has no card: its title and first photo stand in.
+    final customArt = <int, Map<String, dynamic>>{
+      for (final row in listings)
+        if (row['kind'] == 'custom')
+          (row['id'] as num).toInt(): {
+            'name_id': row['title'],
+            'image_url': CardModel.customFromRow(row).imageUrl,
+          },
     };
-    if (cardIdByAsk.isEmpty) return const {};
+    final cardIdByAsk = <int, int>{
+      for (final row in listings)
+        if ((row['card_id'] as num?)?.toInt() case final cardId?)
+          (row['id'] as num).toInt(): cardId,
+    };
 
     final byCardId = await _cardArtById(cardIdByAsk.values.toSet());
 
     return {
+      ...customArt,
       for (final entry in cardIdByAsk.entries)
         if (byCardId[entry.value] != null) entry.key: byCardId[entry.value]!,
     };
@@ -587,7 +601,7 @@ class OrdersRepository {
   static const _sellerOrderColumns =
       'id, slug, order_number, status, created_at, seller_id, buyer_id,'
       'order_items(id, slug, order_number, card_id, matched_quantity, match_price,'
-      'status, created_at, cards($_cardColumns),'
+      'status, created_at, title, photo_urls, cards($_cardColumns),'
       'settlements(condition, escrow_amount, shipping_cost, status,'
       'paid_at, payment_deadline, cancel_status, cancel_reason,'
       'commission_amount, seller_net_amount, shipping_discount_idr,'
@@ -603,6 +617,7 @@ class OrdersRepository {
       'shipments!shipments_order_id_fkey(slug, tracking_number, courier,'
       'courier_code, status,'
       'shipped_at, delivered_at, shipment_deadline, biteship_order_id,'
+      'courier_link,'
       'biteship_book_error, origin_collection_method, status_history,'
       'destination_contact_name, destination_contact_phone,'
       'destination_full_address, destination_district, destination_city,'

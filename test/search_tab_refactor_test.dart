@@ -218,13 +218,41 @@ void main() {
       // catalog fades out under it, so both are briefly on screen together.
       await tester.pumpAndSettle();
       expect(find.text('Filter Pencarian'), findsOneWidget);
-      // The panel takes the body, so the catalog is not behind it.
-      expect(find.byType(ExpansionsBrowser), findsNothing);
+      // A dropdown over the catalog, not a page in place of it.
+      expect(find.byType(ExpansionsBrowser), findsOneWidget);
 
       await tester.tap(find.byTooltip('Tutup'));
       await tester.pumpAndSettle();
       expect(find.text('Filter Pencarian'), findsNothing);
       expect(find.byType(ExpansionsBrowser), findsOneWidget);
+    });
+
+    testWidgets('the panel is only as tall as its form, and a tap below it '
+        'closes it', (tester) async {
+      // Tall enough for the whole form, so the card has room to spare
+      // below it and shows whether it fills that room or stops.
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await _pump(tester);
+      await tester.tap(find.bySemanticsLabel('Buka filter pencarian'));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Filter Pencarian'),
+              matching: find.byType(Container),
+            )
+            .last,
+      );
+      final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+      expect(card.bottom, lessThan(screen.height - 150));
+
+      await tester.tapAt(Offset(screen.width / 2, card.bottom + 40));
+      await tester.pumpAndSettle();
+      expect(find.text('Filter Pencarian'), findsNothing);
     });
   });
 

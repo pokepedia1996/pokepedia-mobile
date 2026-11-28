@@ -809,6 +809,8 @@ class _TrackingCard extends StatelessWidget {
                   '· $name',
                   style: AppTypography.caption(context.mutedForeground),
                 ),
+              if (order.biteshipTrackingUrl case final url?)
+                BiteshipTrackingButton(url: url),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Salin nomor resi',
@@ -1159,11 +1161,18 @@ class _OrderItemRow extends StatelessWidget {
                   children: [
                     if (item.card.expansionCode.isNotEmpty)
                       ExpansionChip(code: item.card.expansionCode),
-                    Text(
-                      '#${item.card.collectorNumber}',
-                      style: AppTypography.caption(context.mutedForeground),
-                    ),
-                    ConditionBadge(condition: item.condition, dense: true),
+                    if (item.card.isCustom)
+                      Text(
+                        'Custom',
+                        style: AppTypography.caption(context.mutedForeground),
+                      )
+                    else ...[
+                      Text(
+                        '#${item.card.collectorNumber}',
+                        style: AppTypography.caption(context.mutedForeground),
+                      ),
+                      ConditionBadge(condition: item.condition, dense: true),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),

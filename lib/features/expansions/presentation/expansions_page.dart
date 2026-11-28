@@ -14,6 +14,7 @@ import '../../../shared/widgets/catalog_language_toggle.dart';
 import '../../../shared/widgets/expansion_list_item.dart';
 import '../../../shared/widgets/pack_card.dart';
 import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/shimmer_box.dart';
 import '../../../shared/widgets/view_mode_toggle.dart';
 import '../usecase/expansions_notifier.dart';
 import '../utils/pack_sort.dart';
@@ -61,21 +62,49 @@ class _ExpansionsBrowserState extends ConsumerState<ExpansionsBrowser> {
   Widget build(BuildContext context) {
     final async = ref.watch(seriesGroupsProvider);
 
+    // The toolbar stays put while the catalog loads or fails. Switching the
+    // language reloads this provider, and dropping the toolbar with it made
+    // the switch the reader had just tapped vanish under their thumb — and on
+    // a failed load, left them no way to switch back.
     return async.when(
       data: (groups) => _buildBody(groups),
-      loading: () => const PikachuLoader(),
-      error: (_, __) => const Center(child: Text('Gagal memuat ekspansi')),
+      loading: () => ListView(
+        padding: _padding,
+        children: [
+          _toolbar(null),
+          const Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: PikachuLoader(),
+          ),
+        ],
+      ),
+      error: (_, __) => ListView(
+        padding: _padding,
+        children: [
+          _toolbar(null),
+          const Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: Center(child: Text('Gagal memuat ekspansi')),
+          ),
+        ],
+      ),
     );
   }
 
+  EdgeInsets get _padding =>
+      EdgeInsets.fromLTRB(16, 4, 16, AppBottomNav.reservedSpace(context) + 12);
+
+  /// [totalPacks] is null until the catalog has loaded.
+  Widget _toolbar(int? totalPacks) => _Toolbar(
+    totalPacks: totalPacks,
+    sortBy: _sortBy,
+    viewMode: _viewMode,
+    onSortChanged: (value) => setState(() => _sortBy = value),
+    onViewModeChanged: (value) => setState(() => _viewMode = value),
+  );
+
   Widget _buildBody(List<SeriesGroup> groups) {
     final totalPacks = groups.fold<int>(0, (sum, g) => sum + g.totalPacks);
-    final padding = EdgeInsets.fromLTRB(
-      16,
-      4,
-      16,
-      AppBottomNav.reservedSpace(context) + 12,
-    );
 
     // Sorting by name drops the series grouping, matching web's `isGrouped`.
     if (!_sortBy.isGrouped) {
@@ -83,15 +112,9 @@ class _ExpansionsBrowserState extends ConsumerState<ExpansionsBrowser> {
         for (final group in groups) ...group.packs,
       ], _sortBy);
       return ListView(
-        padding: padding,
+        padding: _padding,
         children: [
-          _Toolbar(
-            totalPacks: totalPacks,
-            sortBy: _sortBy,
-            viewMode: _viewMode,
-            onSortChanged: (value) => setState(() => _sortBy = value),
-            onViewModeChanged: (value) => setState(() => _viewMode = value),
-          ),
+          _toolbar(totalPacks),
           const SizedBox(height: 12),
           _PackCollection(packs: packs, viewMode: _viewMode),
         ],
@@ -103,15 +126,9 @@ class _ExpansionsBrowserState extends ConsumerState<ExpansionsBrowser> {
         : groups;
 
     return ListView(
-      padding: padding,
+      padding: _padding,
       children: [
-        _Toolbar(
-          totalPacks: totalPacks,
-          sortBy: _sortBy,
-          viewMode: _viewMode,
-          onSortChanged: (value) => setState(() => _sortBy = value),
-          onViewModeChanged: (value) => setState(() => _viewMode = value),
-        ),
+        _toolbar(totalPacks),
         for (final group in ordered) ...[
           const SizedBox(height: 20),
           _SeriesHeader(group: group),
@@ -194,7 +211,9 @@ class _Toolbar extends StatelessWidget {
     required this.onViewModeChanged,
   });
 
-  final int totalPacks;
+  /// Null while the catalog loads: the count shimmers, while the controls,
+  /// which don't depend on it, stay usable.
+  final int? totalPacks;
   final PackSortOption sortBy;
   final CardViewMode viewMode;
   final ValueChanged<PackSortOption> onSortChanged;
@@ -214,10 +233,21 @@ class _Toolbar extends StatelessWidget {
             _SortButton(sortBy: sortBy, onChanged: onSortChanged),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                '$totalPacks ekspansi',
-                style: AppTypography.bodySm(context.mutedForeground),
-              ),
+              child: totalPacks == null
+                  ? const Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: 84,
+                        height: 14,
+                        child: ShimmerBox(
+                          borderRadius: BorderRadius.all(Radius.circular(4)),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      '$totalPacks ekspansi',
+                      style: AppTypography.bodySm(context.mutedForeground),
+                    ),
             ),
             ViewModeToggle(value: viewMode, onChanged: onViewModeChanged),
           ],

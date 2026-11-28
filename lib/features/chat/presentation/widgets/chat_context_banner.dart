@@ -84,11 +84,11 @@ class ChatContextBanner extends StatelessWidget {
         color: colors.secondary.withValues(alpha: 0.35),
         border: Border(bottom: BorderSide(color: context.borderColor)),
       ),
-      child: slug == null
+      child: slug == null || listing.cardId == null
           ? body
           : InkWell(
               onTap: () =>
-                  context.push(Routes.cardDetail(slug, listing.cardId)),
+                  context.push(Routes.cardDetail(slug, listing.cardId!)),
               child: body,
             ),
     );

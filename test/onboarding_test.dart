@@ -10,6 +10,7 @@ import 'package:pokepedia_mobile/features/onboarding/presentation/onb_widgets.da
 import 'package:pokepedia_mobile/features/onboarding/presentation/onboarding_page.dart';
 import 'package:pokepedia_mobile/features/onboarding/usecase/onboarding_intents.dart';
 import 'package:pokepedia_mobile/features/referral/repository/referral_repository.dart';
+import 'package:pokepedia_mobile/features/referral/usecase/pending_referral.dart';
 import 'package:pokepedia_mobile/features/referral/usecase/referral_providers.dart';
 import 'package:pokepedia_mobile/features/user/repository/user_repository.dart';
 import 'package:pokepedia_mobile/features/user/usecase/user_notifier.dart';
@@ -591,6 +592,19 @@ void main() {
       await _pump(tester, user: _user(onboarded: false), referral: referral);
       await typeCode(tester, 'ab');
       expect(referral.validated, isEmpty);
+    });
+
+    testWidgets('an invite link fills the field and is checked', (
+      tester,
+    ) async {
+      await PendingReferral.save('SATOS728');
+      addTearDown(PendingReferral.clear);
+      final referral = _FakeReferral(checks: {'SATOS728': valid});
+      await _pump(tester, user: _user(onboarded: false), referral: referral);
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+      expect(referral.validated, ['SATOS728']);
+      expect(find.text('Diajak @satoshi 🎉'), findsOneWidget);
     });
 
     testWidgets('a good code shows who invited, in upper case', (tester) async {

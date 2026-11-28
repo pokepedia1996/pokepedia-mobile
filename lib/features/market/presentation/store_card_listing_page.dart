@@ -482,7 +482,7 @@ class _StoreCardListingPageState extends ConsumerState<StoreCardListingPage> {
                     onShare: () => showStoreShareSheet(context, store: store),
                   )
                 else
-                  _PurchasePanel(
+                  PurchasePanel(
                     cheapestByCondition: cheapestByCondition,
                     active: active,
                     store: store,
@@ -714,8 +714,12 @@ class _PhotoThumb extends StatelessWidget {
 /// Ports `store-purchase-panel.tsx` — one bordered card holding the
 /// condition picker, the price/quantity row, the buy actions, the seller
 /// strip and the report row, each separated by a hairline.
-class _PurchasePanel extends StatefulWidget {
-  const _PurchasePanel({
+///
+/// Public because the custom listing page draws the same panel for a custom
+/// listing, with no grades to pick from and no other sellers to compare.
+class PurchasePanel extends StatefulWidget {
+  const PurchasePanel({
+    super.key,
     required this.cheapestByCondition,
     required this.active,
     required this.store,
@@ -759,10 +763,10 @@ class _PurchasePanel extends StatefulWidget {
   final VoidCallback onShare;
 
   @override
-  State<_PurchasePanel> createState() => _PurchasePanelState();
+  State<PurchasePanel> createState() => _PurchasePanelState();
 }
 
-class _PurchasePanelState extends State<_PurchasePanel> {
+class _PurchasePanelState extends State<PurchasePanel> {
   int _qty = 1;
   bool _adding = false;
 
@@ -840,7 +844,7 @@ class _PurchasePanelState extends State<_PurchasePanel> {
   int get _maxQty => widget.active.available.clamp(0, 99);
 
   @override
-  void didUpdateWidget(covariant _PurchasePanel oldWidget) {
+  void didUpdateWidget(covariant PurchasePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.active.id != widget.active.id) {
       _qty = _qty.clamp(1, _maxQty == 0 ? 1 : _maxQty);
@@ -853,8 +857,9 @@ class _PurchasePanelState extends State<_PurchasePanel> {
     final store = widget.store;
     final colors = context.appColors;
     final vacationHard = store.vacationMode == 'hard';
-    // `hideCondition` on web: a sealed product is sold as-is, ungraded.
-    final hideCondition = active.card.isSealed;
+    // `hideCondition` on web: a sealed product is sold as-is, ungraded, and a
+    // custom listing has no grade to show.
+    final hideCondition = !active.card.hasCondition;
 
     // Grades grouped by company, in `CONDITION_COMPANIES` order.
     final byCompany = <String, List<CardCondition>>{};
@@ -974,10 +979,11 @@ class _PurchasePanelState extends State<_PurchasePanel> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                _OtherListingsCta(
-                  count: widget.otherSellersCount,
-                  href: widget.globalCardHref,
-                ),
+                if (!active.isCustom)
+                  _OtherListingsCta(
+                    count: widget.otherSellersCount,
+                    href: widget.globalCardHref,
+                  ),
                 if (store.onVacation) ...[
                   const SizedBox(height: 12),
                   _VacationNotice(store: store),

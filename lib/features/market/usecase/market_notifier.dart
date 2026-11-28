@@ -7,6 +7,8 @@ import '../../../shared/models/listing_model.dart';
 import '../../../shared/models/store_model.dart';
 import '../../expansions/usecase/expansions_notifier.dart';
 import '../repository/market_repository.dart';
+import '../repository/models/card_custom_listing.dart';
+import '../repository/models/custom_listing_detail.dart';
 import '../repository/models/listing_facets.dart';
 import '../repository/models/market_page.dart';
 import '../repository/models/store_feedback.dart';
@@ -214,6 +216,19 @@ final marketStoresProvider = FutureProvider<List<StoreModel>>((ref) {
   return ref.read(marketRepositoryProvider).fetchStores(query: query);
 });
 
+/// The custom listings a card is tagged on, for its page. Empty on any
+/// failure: the section is an extra, and its absence says nothing wrong.
+final cardCustomListingsProvider =
+    FutureProvider.family<List<CardCustomListing>, int>((ref, cardId) async {
+      try {
+        return await ref
+            .read(marketRepositoryProvider)
+            .fetchCardCustomListings(cardId);
+      } catch (_) {
+        return const [];
+      }
+    });
+
 final storeDetailProvider = FutureProvider.family<StoreModel?, String>((
   ref,
   handle,
@@ -317,6 +332,39 @@ final bidListingProvider = FutureProvider.family<BidListingData?, String>((
     feedbackScore: reputation.feedbackScore,
   );
 });
+
+/// A custom listing, the store it is sold by and the listing as the cart and
+/// offer code take it.
+typedef CustomListingData = ({
+  CustomListingDetail detail,
+  StoreModel store,
+  ListingModel listing,
+});
+
+/// One custom listing by slug — backs the page a custom tile opens (mirrors
+/// `app/market/[slug]/listing/[listingSlug]/page.tsx`).
+///
+/// Null when the listing isn't there for this viewer, or isn't sold by the
+/// store the link names — web answers both with a 404 as well.
+///
+/// Re-reads when the session changes: the owner sees their own draft, and
+/// the RPC hides a seller from anyone on either side of a block.
+final customListingProvider =
+    FutureProvider.family<
+      CustomListingData?,
+      ({String storeSlug, String slug})
+    >((ref, key) async {
+      ref.watch(authProvider.select((auth) => auth.valueOrNull?.id));
+      final detail = await ref
+          .read(marketRepositoryProvider)
+          .fetchCustomListing(key.slug);
+      if (detail == null) return null;
+
+      final store = await ref.watch(storeDetailProvider(key.storeSlug).future);
+      if (store == null || store.userId != detail.sellerId) return null;
+
+      return (detail: detail, store: store, listing: detail.toListing(store));
+    });
 
 /// One seller's open asks for a single card — backs the compact
 /// per-seller "product" page a WTS listing tap opens (mirrors

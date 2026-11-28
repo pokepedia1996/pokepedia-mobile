@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.1+7
+version: 1.2.2+8
 
 environment:
   sdk: ^3.9.2
@@ -128,6 +128,8 @@ flutter:
     # one, since a directory entry does not include them.
     - assets/images/toko/
     - assets/images/grader/
+    # Beranda: the "Pilih TCG" logos.
+    - assets/images/tcg/
     - assets/images/referral/
     - assets/images/referral/kartu-polos/
     - assets/images/referral/kartu-hadiah/
@@ -146,22 +148,23 @@ flutter:
       fonts:
         - asset: assets/fonts/PatrickHand-Regular.ttf
 
-# Launcher icon. iOS and older Android take one opaque square; Android's
-# adaptive icon takes the mark alone over the brand cream, so a round mask
-# crops the tile's pattern rather than the mark.
+# Launcher icon. iOS and older Android take the tile as one opaque square;
+# Android's adaptive icon takes the whole tile scaled into the visible part
+# of the layer, so a round or squircle mask crops the tile's patterned
+# corners rather than the mark.
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
   image_path: "branding/app-icon.png"
-  # iOS renders alpha as black, so the tile's rounded corners are filled with
-  # the cream they sit on and the platform masks its own corners over it.
+  # A flat square; iOS masks its own corners over it.
   remove_alpha_ios: true
-  background_color_ios: "#F9F5E8"
-  adaptive_icon_background: "#F9F5E8"
+  background_color_ios: "#F6F4E8"
+  # The tile's own cream, so a layer nudged by the launcher shows no seam.
+  adaptive_icon_background: "#F6F4E8"
   adaptive_icon_foreground: "branding/app-icon-foreground.png"
   # The generator insets the foreground 16% by default; the source is already
-  # padded to the safe zone, and both insets together shrink the mark to a
-  # speck.
+  # padded to the safe zone (the whole tile at 64%, so the wordmark stays in
+  # the 66dp circle round masks keep), and both insets together shrink it.
   adaptive_icon_foreground_inset: 0
   min_sdk_android: 21
 

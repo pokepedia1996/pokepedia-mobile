@@ -202,6 +202,14 @@ class PendingCheckoutItem {
   final int? askOrderId;
   final String? sellerId;
 
+  /// "SV2D · #12 · ×1", leaving out the set and number a custom listing
+  /// does not have.
+  String get summaryLine => [
+    if (expansionCode.isNotEmpty) expansionCode.toUpperCase(),
+    if (collectorNumber.isNotEmpty) '#$collectorNumber',
+    '×$quantity',
+  ].join(' · ');
+
   PendingCheckoutItem withCard({
     String? cardName,
     String? imageUrl,

@@ -1,3 +1,5 @@
+import '../../../../shared/models/card_model.dart';
+
 /// One point on the collection-worth chart: what the whole portfolio was
 /// worth at the close of [day].
 class PortfolioValuePoint {
@@ -63,6 +65,7 @@ class PortfolioHolding {
     required this.unitPrice,
     this.imageUrl,
     this.priceChangePct,
+    this.language = CardLanguage.id,
   });
 
   final int cardId;
@@ -79,6 +82,9 @@ class PortfolioHolding {
   /// where there is nothing honest to say — the price has to be a confirmed
   /// one, built from actual sales, before a trend can be drawn through it.
   final double? priceChangePct;
+
+  /// Which catalog's print it is, for the flag beside the set code.
+  final CardLanguage language;
 
   /// What this line is worth — the number the row shows on the right.
   int get value => unitPrice * quantity;

@@ -166,6 +166,10 @@ class ListingModel {
   /// `quantity - qty_locked`, i.e. what a buyer can actually purchase.
   int get available => quantity - qtyLocked;
 
+  /// A seller's own title and photos rather than a catalog card
+  /// (`listings.kind = 'custom'`); [card] is then only the stand-in for them.
+  bool get isCustom => card.isCustom;
+
   /// The seller's avatar/logo image, preferring the store logo — mirrors
   /// `resolveSellerDisplay`'s `storeLogoUrl ?? avatarUrl`.
   String? get sellerImageUrl => storeLogoUrl ?? sellerAvatarUrl;
@@ -246,18 +250,21 @@ class ListingModel {
   /// `card_id` instead of relying on this card object.
   factory ListingModel.fromMarketplaceRow(Map<String, dynamic> row) {
     final expansionCode = row['expansion_code'] as String? ?? '';
-    final card = CardModel(
-      id: row['card_id'] as int,
-      category: CardCategory.pokemon,
-      nameId: row['card_name'] as String? ?? '',
-      expansionCode: expansionCode,
-      packSlug: expansionCode.toLowerCase(),
-      collectorNumber: row['card_number'] as String? ?? '',
-      rarity: row['card_rarity'] as String?,
-      language: CardLanguageX.fromRaw(row['card_language'] as String?),
-      variant: row['card_variant'] as String? ?? 'normal',
-      imageUrl: proxyImageUrl(row['card_image'] as String?),
-    );
+    final photoUrls = _parsePhotoUrls(row);
+    final card = row['kind'] == 'custom'
+        ? CardModel.customFromRow(row)
+        : CardModel(
+            id: row['card_id'] as int,
+            category: CardCategory.pokemon,
+            nameId: row['card_name'] as String? ?? '',
+            expansionCode: expansionCode,
+            packSlug: expansionCode.toLowerCase(),
+            collectorNumber: row['card_number'] as String? ?? '',
+            rarity: row['card_rarity'] as String?,
+            language: CardLanguage.fromRaw(row['card_language'] as String?),
+            variant: row['card_variant'] as String? ?? 'normal',
+            imageUrl: proxyImageUrl(row['card_image'] as String?),
+          );
     return ListingModel(
       id: (row['id'] as num).toInt(),
       // The RPC returns this and it was being dropped, which left every row
@@ -300,7 +307,7 @@ class ListingModel {
       sellerAvatarUrl: proxyImageUrl(row['avatar_url'] as String?),
       storeLogoUrl: proxyImageUrl(row['store_logo_url'] as String?),
       sellerFeedbackScore: (row['seller_feedback_score'] as num?)?.toInt() ?? 0,
-      photoUrls: _parsePhotoUrls(row),
+      photoUrls: photoUrls,
     );
   }
 

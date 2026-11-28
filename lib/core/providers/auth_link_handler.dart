@@ -5,11 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../features/referral/usecase/pending_referral.dart';
 import 'supabase_provider.dart';
 
 /// The path the emailed links land on, claimed by the Android intent filter
-/// and the iOS associated domain. Anything else is left alone — the OS only
-/// hands us this one, but a stray link should still fall through quietly.
+/// and the iOS associated domain beside the invite links (`/r/<code>`).
+/// Anything else is left alone — the OS only hands us those, but a stray
+/// link should still fall through quietly.
 const _confirmPath = '/auth/confirm';
 
 /// The hosts whose links this app is allowed to redeem. Both are claimed,
@@ -70,6 +72,12 @@ class AuthLinkHandler {
   /// of ours or could not be completed. Visible for testing.
   @visibleForTesting
   Future<OtpType?> handle(Uri uri) async {
+    // An invite link: keep the code for onboarding's referral field. Checked
+    // first, as it vets its own hosts (and the app's scheme, for testing).
+    if (PendingReferral.codeFromLink(uri) case final code?) {
+      await PendingReferral.save(code);
+      return null;
+    }
     if (!_hosts.contains(uri.host)) return null;
     if (!uri.path.startsWith(_confirmPath)) return null;
 

@@ -16,6 +16,7 @@ import '../../../portfolio/repository/portfolio_repository.dart'
     show cardPickerPageSize;
 import '../../../portfolio/usecase/portfolio_notifier.dart';
 import '../../repository/seller_listings_repository.dart';
+import '../../../../core/providers/catalog_language_provider.dart';
 
 /// "Tambahkan Listing" — find cards, tick several, send them all to Draft.
 ///
@@ -39,6 +40,25 @@ Future<bool?> showAddListingSheet(BuildContext context) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
     ),
     builder: (_) => const _AddListingSheet(),
+  );
+}
+
+/// One card picked to tag on a custom listing, and how many copies of it.
+typedef TaggedCardPick = ({CardModel card, int quantity});
+
+/// The same picker in web's `variant="tag"`: "Tag kartu" on a custom
+/// listing. The cards picked come back to the caller instead of becoming
+/// drafts; null when the sheet is closed without any.
+Future<List<TaggedCardPick>?> showTagCardsSheet(BuildContext context) {
+  return showModalBottomSheet<List<TaggedCardPick>>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).cardColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+    ),
+    builder: (_) => const _AddListingSheet(tagging: true),
   );
 }
 
@@ -81,7 +101,10 @@ class _Pick {
 }
 
 class _AddListingSheet extends ConsumerStatefulWidget {
-  const _AddListingSheet();
+  const _AddListingSheet({this.tagging = false});
+
+  /// Picking cards to tag on a custom listing rather than to draft.
+  final bool tagging;
 
   @override
   ConsumerState<_AddListingSheet> createState() => _AddListingSheetState();
@@ -208,6 +231,13 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
 
   Future<void> _addToDraft() async {
     if (_selected.isEmpty || _saving) return;
+    if (widget.tagging) {
+      Navigator.of(context).pop<List<TaggedCardPick>>([
+        for (final pick in _selected)
+          (card: pick.card, quantity: pick.quantity),
+      ]);
+      return;
+    }
     setState(() => _saving = true);
 
     final result = await ref.read(sellerListingsRepositoryProvider).addDrafts([
@@ -262,14 +292,14 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Tambahkan Listing',
+                      widget.tagging ? 'Tag kartu' : 'Tambahkan Listing',
                       style: AppTypography.h3(colors.onSurface),
                     ),
                   ),
                   IconButton(
                     icon: const Icon(LucideIcons.x, size: 20),
                     tooltip: 'Tutup',
-                    onPressed: () => Navigator.of(context).pop(false),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
@@ -306,6 +336,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                 cards: _selected.length,
                 copies: _copies,
                 busy: _saving,
+                tagging: widget.tagging,
                 onTap: _addToDraft,
               ),
           ],
@@ -475,14 +506,14 @@ class _SearchBox extends StatelessWidget {
 /// current one has to be readable at a glance while scrolling the grid, and
 /// switching is the thing a seller does repeatedly while working through a
 /// binder of mixed prints.
-class _LanguageChips extends StatelessWidget {
+class _LanguageChips extends ConsumerWidget {
   const _LanguageChips({required this.value, required this.onChanged});
 
   final CardLanguage? value;
   final ValueChanged<CardLanguage?> onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 46,
       child: ListView(
@@ -494,7 +525,7 @@ class _LanguageChips extends StatelessWidget {
             selected: value == null,
             onTap: () => onChanged(null),
           ),
-          for (final language in CardLanguage.values) ...[
+          for (final language in watchCatalogLanguages(ref)) ...[
             const SizedBox(width: 8),
             _LanguageChip(
               label: language.shortLabel,
@@ -1022,12 +1053,14 @@ class _AddBar extends StatelessWidget {
     required this.copies,
     required this.busy,
     required this.onTap,
+    this.tagging = false,
   });
 
   final int cards;
   final int copies;
   final bool busy;
   final VoidCallback onTap;
+  final bool tagging;
 
   @override
   Widget build(BuildContext context) {
@@ -1054,7 +1087,11 @@ class _AddBar extends StatelessWidget {
                       )
                     : const Icon(LucideIcons.plus, size: 18),
                 label: Text(
-                  cards == copies
+                  tagging
+                      ? (cards == copies
+                            ? 'Tag $cards kartu'
+                            : 'Tag $cards kartu · $copies lembar')
+                      : cards == copies
                       ? 'Tambahkan $cards kartu ke Draft'
                       : 'Tambahkan $cards kartu · $copies lembar ke Draft',
                   maxLines: 1,
@@ -1076,7 +1113,9 @@ class _AddBar extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Harga, kondisi & foto bisa diatur setelah ditambahkan',
+              tagging
+                  ? 'Kondisi tiap kartu bisa diatur setelah di-tag'
+                  : 'Harga, kondisi & foto bisa diatur setelah ditambahkan',
               style: AppTypography.caption(context.mutedForeground),
             ),
           ],

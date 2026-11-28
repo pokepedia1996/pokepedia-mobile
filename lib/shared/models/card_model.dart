@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/utils/image_url.dart';
 import 'card_condition.dart';
 import 'card_market_price.dart';
@@ -128,62 +130,128 @@ extension EvolutionStageX on EvolutionStage {
 }
 
 /// `cards.language` check constraint.
-enum CardLanguage { id, en, jp }
+/// Which catalog a card belongs to: `cards.language`, whose valid values
+/// now live in the database (`catalog_categories`) rather than in code.
+///
+/// A value, not an enum, so a catalog added on the server reaches the app
+/// without a release: [known] holds the server's list once it has loaded
+/// (`catalogLanguagesProvider`), and a code nobody has described yet still
+/// parses as itself, labelled with its own code, instead of passing for
+/// Indonesian. The four the app ships with stay as constants, so
+/// `CardLanguage.id` and friends keep working, and are the list until the
+/// server's arrives.
+@immutable
+class CardLanguage {
+  const CardLanguage({
+    required this.raw,
+    required this.shortLabel,
+    required this.labelId,
+    this.iconUrl,
+    this.inScanner = false,
+  });
 
-extension CardLanguageX on CardLanguage {
-  String get raw => name;
+  /// The code stored in `cards.language` and sent in `p_card_languages`.
+  final String raw;
 
   /// Two-letter form used by the catalog language switch, mirroring
   /// `LANGUAGE_LABELS` in `lib/catalog/language.ts`.
-  String get shortLabel {
-    switch (this) {
-      case CardLanguage.id:
-        return 'ID';
-      case CardLanguage.en:
-        return 'EN';
-      case CardLanguage.jp:
-        return 'JP';
-    }
+  final String shortLabel;
+
+  /// The catalog's name, as the card details chip shows it.
+  final String labelId;
+
+  /// The flag or logo the web serves for it (`/flags/cn.svg`), for a
+  /// catalog the app has no bundled artwork for.
+  final String? iconUrl;
+
+  /// Whether the card scanner's index covers it. CN is not in it yet.
+  final bool inScanner;
+
+  static const id = CardLanguage(
+    raw: 'id',
+    shortLabel: 'ID',
+    labelId: 'Indonesia',
+    iconUrl: '/flags/id.svg',
+    inScanner: true,
+  );
+  static const en = CardLanguage(
+    raw: 'en',
+    shortLabel: 'EN',
+    labelId: 'English',
+    iconUrl: '/flags/us.svg',
+    inScanner: true,
+  );
+  static const jp = CardLanguage(
+    raw: 'jp',
+    shortLabel: 'JP',
+    labelId: 'Japan',
+    iconUrl: '/flags/jp.svg',
+    inScanner: true,
+  );
+  static const cn = CardLanguage(
+    raw: 'cn',
+    shortLabel: 'CN',
+    labelId: 'China',
+    iconUrl: '/flags/cn.svg',
+  );
+
+  /// The catalogs this build knows on its own, in the switch's order.
+  static const builtIn = [id, en, jp, cn];
+
+  static List<CardLanguage> _known = builtIn;
+
+  /// The active catalogs, in order: the server's once loaded, else [builtIn].
+  static List<CardLanguage> get known => _known;
+
+  /// Adopts the server's list. An empty one is ignored: an app with nothing
+  /// to switch between is worse than one on its built-in list.
+  static void useServerList(List<CardLanguage> languages) {
+    if (languages.isNotEmpty) _known = List.unmodifiable(languages);
   }
 
-  /// The country flag for this catalog language, as a regional-indicator
-  /// pair the platform renders as a real flag.
-  ///
-  /// English shows 🇺🇸, matching `CardLanguageBadge`; the text label stays
-  /// "EN".
-  String get flag {
-    switch (this) {
-      case CardLanguage.id:
-        return '🇮🇩';
-      case CardLanguage.en:
-        return '🇺🇸';
-      case CardLanguage.jp:
-        return '🇯🇵';
-    }
-  }
+  @visibleForTesting
+  static void resetKnown() => _known = builtIn;
 
-  String get labelId {
-    switch (this) {
-      case CardLanguage.id:
-        return 'Indonesia';
-      case CardLanguage.en:
-        return 'English';
-      case CardLanguage.jp:
-        return 'Japan';
-    }
-  }
-
+  /// The catalog for [raw]: a known one, else one labelled with its own code.
+  /// Missing defaults to Indonesian, the catalog every row had before
+  /// `cards.language` existed.
   static CardLanguage fromRaw(String? raw) {
-    switch (raw) {
-      case 'en':
-        return CardLanguage.en;
-      case 'jp':
-        return CardLanguage.jp;
-      case 'id':
-      default:
-        return CardLanguage.id;
+    final code = raw?.trim().toLowerCase() ?? '';
+    if (code.isEmpty) return id;
+    for (final language in [..._known, ...builtIn]) {
+      if (language.raw == code) return language;
     }
+    return CardLanguage(
+      raw: code,
+      shortLabel: code.toUpperCase(),
+      labelId: code.toUpperCase(),
+    );
   }
+
+  /// A `catalog_categories` row.
+  static CardLanguage? fromCatalogRow(Map<String, dynamic> row) {
+    final code = (row['code'] as String?)?.trim().toLowerCase();
+    if (code == null || code.isEmpty) return null;
+    final label = (row['label'] as String?)?.trim();
+    final name = (row['name'] as String?)?.trim();
+    return CardLanguage(
+      raw: code,
+      shortLabel: label == null || label.isEmpty ? code.toUpperCase() : label,
+      labelId: name == null || name.isEmpty ? code.toUpperCase() : name,
+      iconUrl: row['icon_url'] as String?,
+      inScanner: row['in_scanner'] as bool? ?? false,
+    );
+  }
+
+  /// Same catalog, whichever list it came from.
+  @override
+  bool operator ==(Object other) => other is CardLanguage && other.raw == raw;
+
+  @override
+  int get hashCode => raw.hashCode;
+
+  @override
+  String toString() => 'CardLanguage($raw)';
 }
 
 /// One entry of a card's weakness/resistance (`details.weakness` /
@@ -360,7 +428,37 @@ class CardModel {
     this.priceSource,
     this.owned = 0,
     this.imageUrl,
+    this.isCustom = false,
   });
+
+  /// The stand-in for a custom listing: the seller's own title and first
+  /// photo, with no catalog card behind it — so no number, set, language or
+  /// page of its own. Lets every screen that draws a listing's `card` draw
+  /// one without a second code path for the name and picture.
+  const CardModel.custom({required String title, String? imageUrl})
+    : this(
+        id: 0,
+        category: CardCategory.pokemon,
+        nameId: title,
+        expansionCode: '',
+        packSlug: '',
+        collectorNumber: '',
+        rarity: null,
+        imageUrl: imageUrl,
+        isCustom: true,
+      );
+
+  /// [CardModel.custom] for a `listings` or `order_items` row of a custom
+  /// listing, which carries its `title` and `photo_urls` in place of a
+  /// `card_id`.
+  factory CardModel.customFromRow(Map<String, dynamic> row) => CardModel.custom(
+    title: row['title'] as String? ?? 'Listing custom',
+    imageUrl: proxyImageUrl(
+      ((row['photo_urls'] as List?) ?? const [])
+          .whereType<String>()
+          .firstOrNull,
+    ),
+  );
 
   final int id;
   final CardCategory category;
@@ -390,6 +488,10 @@ class CardModel {
   /// (non-catalog) data, in which case UI falls back to a placeholder.
   final String? imageUrl;
 
+  /// A custom listing's stand-in (see [CardModel.custom]) rather than a row
+  /// of the catalog.
+  final bool isCustom;
+
   /// Convenience alias — most UI code just wants the display name.
   String get name => nameId;
 
@@ -397,6 +499,10 @@ class CardModel {
   /// in a deck. Either signal is enough — a card built from a listing row
   /// carries only its id, one built from `cards` carries its category.
   bool get isSealed => category == CardCategory.sealed || isSealedCardId(id);
+
+  /// Whether a grade belongs next to this card: a sealed product has none,
+  /// and a custom listing is whatever its seller says it is.
+  bool get hasCondition => !isSealed && !isCustom;
 
   /// The condition an order or listing of this card is written with: what
   /// the seller picked, or NM for a sealed product, whose picker is hidden.
@@ -455,6 +561,7 @@ class CardModel {
     priceSource: price?.source ?? priceSource,
     owned: owned ?? this.owned,
     imageUrl: imageUrl,
+    isCustom: isCustom,
   );
 
   /// Maps a `cards` row (optionally with an embedded `expansions` join) as
@@ -475,7 +582,7 @@ class CardModel {
           : rarityRaw,
       regulationMark: row['regulation_mark'] as String?,
       illustrator: row['illustrator'] as String?,
-      language: CardLanguageX.fromRaw(row['language'] as String?),
+      language: CardLanguage.fromRaw(row['language'] as String?),
       variant: row['variant'] as String? ?? 'normal',
       details: CardDetails.fromJson(row['details'] as Map<String, dynamic>?),
       imageUrl: proxyImageUrl(row['image_url'] as String?),

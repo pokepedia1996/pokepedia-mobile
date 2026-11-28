@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +17,7 @@ import '../../../shared/widgets/pikachu_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import 'widgets/add_listing_sheet.dart';
+import 'widgets/custom_listing_widgets.dart';
 import 'widgets/draft_bulk_menu.dart';
 import 'widgets/draft_selection_bar.dart';
 import 'widgets/listing_card_tile.dart';
@@ -53,6 +56,30 @@ class SellerProductsPage extends ConsumerStatefulWidget {
 class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   final _search = TextEditingController();
 
+  /// Holds the listing search until typing pauses. Each query is a round
+  /// trip to `get_seller_listings_page` and a reload of the list, and one
+  /// per keystroke sent nine of them for "charizard".
+  Timer? _searchDebounce;
+  static const _searchDelay = Duration(milliseconds: 300);
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    // Clearing answers at once: there is nothing left to wait for.
+    if (value.trim().isEmpty) {
+      _applySearch(value);
+      return;
+    }
+    _searchDebounce = Timer(_searchDelay, () => _applySearch(value));
+  }
+
+  void _applySearch(String value) {
+    if (!mounted) return;
+    final query = ref.read(sellerListingQueryProvider.notifier);
+    // A trailing space is the same search; the server trims it anyway.
+    if (query.state.trim() == value.trim()) return;
+    query.state = value;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +100,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     _draftSearch.dispose();
     _workspaceSearch.dispose();
@@ -189,6 +217,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
   /// draft makes a listing, so the list and the tab counts are re-read too.
   Future<void> _refreshDrafts() async {
     ref.invalidate(sellerDraftsProvider);
+    ref.invalidate(customDraftsProvider);
     refreshSellerListingsFromWidget(ref);
     await ref.read(sellerDraftsProvider.future);
   }
@@ -223,15 +252,33 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
       );
   }
 
-  /// Web's "Tambah listing": pick a card, then post the ask through the
-  /// same form the catalog page uses.
+  /// Web's "Tambahkan Listing": a card from the catalog (picked into
+  /// drafts), or a custom listing with the seller's own title and photos.
   Future<void> _addListing() async {
+    final kind = await showAddListingChooser(context);
+    if (kind == null || !mounted) return;
+    if (kind == NewListingKind.custom) {
+      await _openCustom(null);
+      return;
+    }
     final added = await showAddListingSheet(context);
     if (added != true || !mounted) return;
     // The sheet makes drafts, not listings, so the Draft tab is where the
     // cards the seller just picked actually are.
     ref.read(sellerBucketProvider.notifier).state = SellerListingBucket.draft;
     await _refreshDrafts();
+  }
+
+  /// The custom listing form, new ([slug] null) or for one saved before.
+  /// Whatever happened there — a draft saved, a listing published — the
+  /// lists it shows up in are re-read on the way back.
+  Future<void> _openCustom(String? slug) async {
+    await context.push<bool>(
+      slug == null ? Routes.customListingNew : Routes.customListingEdit(slug),
+    );
+    if (!mounted) return;
+    ref.invalidate(customDraftsProvider);
+    refreshSellerListingsFromWidget(ref);
   }
 
   @override
@@ -414,14 +461,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                                     hintText:
                                         'Cari nama, ekspansi, nomor, kondisi...',
                                     controller: _search,
-                                    onChanged: (v) =>
-                                        ref
-                                                .read(
-                                                  sellerListingQueryProvider
-                                                      .notifier,
-                                                )
-                                                .state =
-                                            v,
+                                    onChanged: _onSearchChanged,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -582,6 +622,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
                 v ? 'Tawaran diaktifkan' : 'Tawaran dimatikan',
               ),
               onMenu: () => _showListingMenu(listing),
+              onEdit: listing.isCustom ? () => _openCustom(listing.slug) : null,
             );
           },
         ),
@@ -598,7 +639,27 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
 
   List<Widget> _draftSlivers() {
     final async = ref.watch(sellerDraftsProvider);
+    final customDrafts =
+        ref.watch(customDraftsProvider).valueOrNull ?? const [];
+    // Web's "Draft custom" sits above the card drafts, whatever state the
+    // card drafts are in.
+    final custom = SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      sliver: SliverToBoxAdapter(
+        child: CustomDraftsSection(onOpen: _openCustom),
+      ),
+    );
 
+    return [
+      custom,
+      ..._cardDraftSlivers(async, hasCustom: customDrafts.isNotEmpty),
+    ];
+  }
+
+  List<Widget> _cardDraftSlivers(
+    AsyncValue<List<SellerDraft>> async, {
+    required bool hasCustom,
+  }) {
     return async.when(
       loading: () => [_messageSliver(const PikachuLoader())],
       error: (_, __) => [
@@ -610,6 +671,8 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         ),
       ],
       data: (all) {
+        // Custom drafts above already fill the tab.
+        if (all.isEmpty && hasCustom) return const [];
         if (all.isEmpty) {
           return const [
             SliverToBoxAdapter(
@@ -707,6 +770,17 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // A custom listing's title, photos and tagged cards are changed
+            // in its own form, as web's row opens it.
+            if (listing.isCustom)
+              ListTile(
+                leading: const Icon(LucideIcons.pencil, size: 20),
+                title: const Text('Edit listing'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  _openCustom(listing.slug);
+                },
+              ),
             ListTile(
               leading: const Icon(LucideIcons.handCoins, size: 20),
               title: const Text('Lihat penawaran'),

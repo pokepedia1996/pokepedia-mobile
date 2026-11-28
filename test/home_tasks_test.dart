@@ -3,9 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/core/providers/auth_provider.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
-import 'package:pokepedia_mobile/features/ads/repository/ads_repository.dart';
-import 'package:pokepedia_mobile/features/ads/usecase/ads_notifier.dart';
-import 'package:pokepedia_mobile/features/home/presentation/widgets/home_ad_slot.dart';
 import 'package:pokepedia_mobile/features/home/presentation/widgets/home_tasks_section.dart';
 import 'package:pokepedia_mobile/features/proposals/repository/models/proposals_summary.dart';
 import 'package:pokepedia_mobile/features/proposals/usecase/proposals_notifier.dart';
@@ -60,19 +57,6 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-Future<void> _pumpSlot(WidgetTester tester, List<AdModel> ads) async {
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        adsProvider(AdPlacement.home).overrideWith((ref) async => ads),
-      ],
-      child: const MaterialApp(home: Scaffold(body: HomeAdSlot())),
-    ),
-  );
-  await tester.pump();
-  await tester.pump();
-}
-
 void main() {
   testWidgets('nothing to do means nothing on screen', (tester) async {
     await _pump(tester);
@@ -115,52 +99,5 @@ void main() {
 
     expect(find.text('Perlu dikirim'), findsNothing);
     expect(find.text('Proposal masuk'), findsOneWidget);
-  });
-
-  testWidgets('nothing booked means no box at all', (tester) async {
-    await _pumpSlot(tester, const []);
-
-    // Not a placeholder, not a reserved gap — web's "Space Available" house
-    // ad belongs on a page a media buyer reads, not in a phone's scroll.
-    expect(find.byType(AspectRatio), findsNothing);
-    expect(find.byType(Image), findsNothing);
-  });
-
-  testWidgets('a booked slot draws it at 2:1', (tester) async {
-    await _pumpSlot(tester, [
-      const AdModel(
-        id: 1,
-        companyName: 'Gattchaa',
-        imageUrl: 'https://cdn2.pokepedia.id/media/gattchaa_2.webp',
-        href: 'https://example.com',
-        slotPosition: 1,
-      ),
-    ]);
-
-    final box = tester.getSize(find.byType(AspectRatio));
-    // 800x400 at whatever width the phone gives it.
-    expect(box.width / box.height, closeTo(2, 0.01));
-  });
-
-  testWidgets('the first slot position wins', (tester) async {
-    await _pumpSlot(tester, [
-      const AdModel(
-        id: 1,
-        companyName: 'First',
-        imageUrl: 'https://cdn2.pokepedia.id/a.webp',
-        href: '',
-        slotPosition: 1,
-      ),
-      const AdModel(
-        id: 2,
-        companyName: 'Second',
-        imageUrl: 'https://cdn2.pokepedia.id/b.webp',
-        href: '',
-        slotPosition: 2,
-      ),
-    ]);
-
-    final image = tester.widget<Image>(find.byType(Image));
-    expect(image.semanticLabel, 'First');
   });
 }

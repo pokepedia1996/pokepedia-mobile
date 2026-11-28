@@ -7,8 +7,9 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../models/card_model.dart';
 
-/// Ports `components/layout/language-toggle.tsx` — the ID / EN / JP switch
-/// that picks which language's catalog to browse.
+/// Ports `components/layout/language-toggle.tsx` — the switch that picks
+/// which language's catalog to browse, one button per catalog the server
+/// lists (`catalogLanguagesProvider`).
 ///
 /// The web navigates to a localized URL on select; here it just moves
 /// [catalogLanguageProvider], which the expansions and search queries watch.
@@ -30,7 +31,7 @@ class CatalogLanguageToggle extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final language in catalogLanguages)
+          for (final language in watchCatalogLanguages(ref))
             _LanguageButton(
               language: language,
               selected: language == current,

@@ -270,11 +270,16 @@ class _ListingHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  [
-                    offer.expansionCode,
-                    offer.collectorNumber,
-                    offer.variant,
-                  ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                  offer.isCustom
+                      ? 'Custom'
+                      : [
+                              offer.expansionCode,
+                              offer.collectorNumber,
+                              offer.variant,
+                            ]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' · '),
                   style: AppTypography.caption(context.mutedForeground),
                 ),
                 const SizedBox(height: 6),
@@ -558,7 +563,9 @@ class _OfferDetailSheetState extends State<_OfferDetailSheet> {
                     style: AppTypography.h3(colors.onSurface),
                   ),
                   Text(
-                    '· ${offer.quantity}x · ${offer.condition.short}',
+                    offer.isCustom
+                        ? '· ${offer.quantity}x'
+                        : '· ${offer.quantity}x · ${offer.condition.short}',
                     style: AppTypography.caption(context.mutedForeground),
                   ),
                 ],

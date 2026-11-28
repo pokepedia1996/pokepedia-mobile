@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pokepedia_mobile/core/providers/catalog_language_provider.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
 import 'package:pokepedia_mobile/features/scanner/presentation/widgets/scan_price_burst.dart';
 import 'package:pokepedia_mobile/features/scanner/presentation/widgets/scan_status_pill.dart';
@@ -8,9 +10,16 @@ import 'package:pokepedia_mobile/shared/models/card_model.dart';
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.light,
-      home: Scaffold(backgroundColor: Colors.black, body: child),
+    ProviderScope(
+      overrides: [
+        catalogLanguagesProvider.overrideWith(
+          (ref) async => CardLanguage.builtIn,
+        ),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(backgroundColor: Colors.black, body: child),
+      ),
     ),
   );
   await tester.pump();
@@ -109,7 +118,7 @@ void main() {
     }) => Stack(
       children: [
         ScannerTopBar(
-          language: CardLanguage.values.first,
+          language: CardLanguage.id,
           onLanguageChanged: (_) {},
           busy: false,
           paused: paused,
@@ -138,9 +147,11 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Matikan suara'));
       expect(paused, 1);
       expect(sound, 1);
-      for (final lang in CardLanguage.values) {
+      for (final lang in CardLanguage.builtIn.where((l) => l.inScanner)) {
         expect(find.text(lang.shortLabel), findsOneWidget);
       }
+      // CN is not in the scanner's index, so it is not offered.
+      expect(find.text('CN'), findsNothing);
     });
 
     testWidgets('labels flip with state', (tester) async {

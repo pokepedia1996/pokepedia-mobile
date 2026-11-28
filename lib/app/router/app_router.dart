@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/account/presentation/account_page.dart';
+import '../not_found_page.dart';
 import '../../features/account/presentation/addresses_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -20,6 +21,7 @@ import '../../features/content/presentation/tutorial_page.dart';
 import '../../features/expansions/presentation/card_detail_page.dart';
 import '../../features/expansions/presentation/pack_detail_page.dart';
 import '../../features/home/presentation/home_page.dart';
+import '../../features/market/presentation/custom_listing_page.dart';
 import '../../features/market/presentation/market_page.dart';
 import '../../features/market/presentation/bid_listing_page.dart';
 import '../../features/market/presentation/store_card_listing_page.dart';
@@ -48,6 +50,7 @@ import '../../features/search/presentation/advanced_search_page.dart';
 import '../../features/search/presentation/search_results_page.dart';
 import '../../features/seller/presentation/seller_dashboard_page.dart';
 import '../../features/seller/presentation/store_setup/store_setup_page.dart';
+import '../../features/seller/presentation/custom_listing_form_page.dart';
 import '../../features/seller/presentation/seller_listing_offers_page.dart';
 import '../../features/seller/presentation/seller_order_detail_page.dart';
 import '../../features/seller/presentation/seller_orders_page.dart';
@@ -81,7 +84,13 @@ final appRouter = GoRouter(
   refreshListenable: GoRouterRefreshStream(
     Supabase.instance.client.auth.onAuthStateChange,
   ),
+  // A location with no page: a friendly page, not go_router's exception.
+  errorBuilder: (_, __) => const NotFoundPage(),
   redirect: (context, state) {
+    // A link through the app's own scheme (an invite,
+    // `id.pokepedia.app://r/<code>`, or the login callback) is acted on by
+    // the link handlers; the router only needs somewhere to stand.
+    if (state.uri.scheme == 'id.pokepedia.app') return Routes.home;
     final loggedIn = Supabase.instance.client.auth.currentSession != null;
     final loggingIn =
         state.matchedLocation == Routes.login ||
@@ -170,6 +179,14 @@ final appRouter = GoRouter(
                             0,
                       ),
                     ),
+                    GoRoute(
+                      path: 'listing/:slug',
+                      parentNavigatorKey: rootNavigatorKey,
+                      builder: (_, state) => CustomListingPage(
+                        storeSlug: state.pathParameters['handle'] ?? '',
+                        listingSlug: state.pathParameters['slug'] ?? '',
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -242,10 +259,15 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: ':cardId',
-          builder: (_, state) => CardDetailPage(
-            packSlug: state.pathParameters['packSlug']!,
-            cardId: int.parse(state.pathParameters['cardId']!),
-          ),
+          builder: (_, state) {
+            final cardId = int.tryParse(state.pathParameters['cardId']!);
+            return cardId == null
+                ? const NotFoundPage()
+                : CardDetailPage(
+                    packSlug: state.pathParameters['packSlug']!,
+                    cardId: cardId,
+                  );
+          },
         ),
       ],
     ),
@@ -275,6 +297,10 @@ final appRouter = GoRouter(
     // moment later and the auth listener drives whatever comes next —
     // onboarding for a fresh account, the account page for a returning one.
     GoRoute(path: Routes.authConfirm, redirect: (_, __) => Routes.home),
+    // An invite link (`/r/<code>`): `AuthLinkHandler` keeps the code for
+    // onboarding off the same link, and the app shell opens signup for a
+    // guest. Home is only where the user stands meanwhile.
+    GoRoute(path: '/r/:code', redirect: (_, __) => Routes.home),
     GoRoute(path: Routes.welcome, builder: (_, __) => const IntroPage()),
     GoRoute(path: Routes.login, builder: (_, __) => const LoginPage()),
     GoRoute(path: Routes.signup, builder: (_, __) => const SignupPage()),
@@ -388,6 +414,16 @@ final appRouter = GoRouter(
           builder: (_, state) => SellerListingOffersPage(
             listingSlug: state.pathParameters['slug'] ?? '',
           ),
+        ),
+        // `new` before `:slug`, which would otherwise take it as a slug.
+        GoRoute(
+          path: 'custom/new',
+          builder: (_, __) => const CustomListingFormPage(),
+        ),
+        GoRoute(
+          path: 'custom/:slug',
+          builder: (_, state) =>
+              CustomListingFormPage(slug: state.pathParameters['slug']),
         ),
       ],
     ),

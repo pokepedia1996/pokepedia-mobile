@@ -137,6 +137,12 @@ class Routes {
   static String sellerListingOffers(String listingSlug) =>
       '/seller/products/offers/$listingSlug';
 
+  /// A new custom listing — a seller's own title and photos — and one
+  /// already saved, by its `listings.slug`. Web's paths.
+  static const customListingNew = '/seller/products/custom/new';
+  static String customListingEdit(String slug) =>
+      '/seller/products/custom/$slug';
+
   /// One order as its seller. Web calls the parameter `matchId`; the app
   /// passes `orders.slug`, which is the same value that route resolves.
   static String sellerOrderDetail(String orderSlug) =>
@@ -174,6 +180,11 @@ class Routes {
   static String storeDetail(String handle) => '/market/$handle';
   static String storeCardDetail(String handle, int cardId) =>
       '/market/$handle/card/$cardId';
+
+  /// One custom listing — a seller's own title and photos rather than a
+  /// catalog card — by its `listings.slug`.
+  static String customListing(String handle, String slug) =>
+      '/market/$handle/listing/$slug';
 
   /// One WTB bid, by its listing slug. Top-level rather than under
   /// `/market/:handle`: a bid belongs to a buyer, and a buyer who has never

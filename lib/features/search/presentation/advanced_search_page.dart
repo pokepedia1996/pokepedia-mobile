@@ -122,53 +122,88 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
               ),
             ),
             Expanded(
-              // The panel used to appear and vanish between frames, which
-              // read as the page having been replaced rather than as
-              // something having opened over it. It drops in from under the
-              // button that opens it and lifts back out the same way, so the
-              // two are visibly the same object.
-              child: AnimatedSwitcher(
-                duration: _panelDuration,
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  // Only the panel travels. Sliding the catalog underneath it
-                  // as well would read as two pages passing each other.
-                  final incoming = child.key == _panelKey;
-                  return FadeTransition(
-                    opacity: animation,
-                    child: incoming
-                        ? SlideTransition(
+              child: Stack(
+                children: [
+                  // The catalog, or the results once anything is set. It
+                  // stays put under the panel: the panel is a dropdown over
+                  // the page, not a page of its own.
+                  Positioned.fill(
+                    child: AnimatedSwitcher(
+                      duration: _panelDuration,
+                      layoutBuilder: (current, previous) => Stack(
+                        // Top-aligned: centred, the shorter of the two
+                        // crossfading children drifts vertically while it goes.
+                        alignment: Alignment.topCenter,
+                        children: [...previous, if (current != null) current],
+                      ),
+                      child: _isSearching(state)
+                          ? KeyedSubtree(
+                              key: const ValueKey('results'),
+                              child: _resultsView(context, state, notifier),
+                            )
+                          : const ExpansionsBrowser(
+                              key: ValueKey('expansions'),
+                            ),
+                    ),
+                  ),
+                  // A tap anywhere off the panel closes it, as a dropdown's
+                  // does. Clear rather than dimmed: the panel's own card is the
+                  // only thing it draws.
+                  if (_filtersOpen)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _filtersOpen = false),
+                      ),
+                    ),
+                  // The panel drops in from under the button that opens it
+                  // and lifts back out the same way, so the two are visibly
+                  // the same object.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    // Down to the top of the floating nav pill, which the
+                    // card's foot should never sit behind. The card is only
+                    // as tall as its form within that: [Align] lets it be
+                    // shorter, and taps below it reach the page.
+                    bottom: AppBottomNav.reservedSpace(context),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: AnimatedSwitcher(
+                        duration: _panelDuration,
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
                             position: Tween(
                               begin: const Offset(0, -0.04),
                               end: Offset.zero,
                             ).animate(animation),
                             child: child,
-                          )
-                        : child,
-                  );
-                },
-                layoutBuilder: (current, previous) => Stack(
-                  // Top-aligned: centred, the shorter of the two crossfading
-                  // children drifts vertically while it goes.
-                  alignment: Alignment.topCenter,
-                  children: [...previous, if (current != null) current],
-                ),
-                child: _filtersOpen
-                    ? _FilterPanel(
-                        key: _panelKey,
-                        state: state,
-                        notifier: notifier,
-                        optionsAsync: optionsAsync,
-                        onClose: () => setState(() => _filtersOpen = false),
-                        onApplied: () => setState(() => _filtersOpen = false),
-                      )
-                    : _isSearching(state)
-                    ? KeyedSubtree(
-                        key: const ValueKey('results'),
-                        child: _resultsView(context, state, notifier),
-                      )
-                    : const ExpansionsBrowser(key: ValueKey('expansions')),
+                          ),
+                        ),
+                        layoutBuilder: (current, previous) => Stack(
+                          alignment: Alignment.topCenter,
+                          children: [...previous, if (current != null) current],
+                        ),
+                        child: _filtersOpen
+                            ? _FilterPanel(
+                                key: _panelKey,
+                                state: state,
+                                notifier: notifier,
+                                optionsAsync: optionsAsync,
+                                onClose: () =>
+                                    setState(() => _filtersOpen = false),
+                                onApplied: () =>
+                                    setState(() => _filtersOpen = false),
+                              )
+                            : const SizedBox.shrink(key: ValueKey('no-panel')),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -399,12 +434,12 @@ class _FilterToggle extends StatelessWidget {
   }
 }
 
-/// "Filter Pencarian" — the advanced form, in the page rather than over it.
+/// "Filter Pencarian" — the advanced form, as a dropdown over the page.
 ///
-/// It takes the body's whole height while open, so the form is read on its
-/// own instead of through a gap above the catalog. Closing it is the only
-/// way back, which is why the toggle turns into an X and the header carries
-/// one too.
+/// Its card is as tall as the form and no taller, so it covers what it
+/// holds and leaves the page below it in view; a form taller than the room
+/// above the nav pill scrolls inside the card. The X, the toggle (now an X
+/// too) and a tap off the card all close it.
 class _FilterPanel extends StatelessWidget {
   const _FilterPanel({
     super.key,
@@ -429,10 +464,18 @@ class _FilterPanel extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.borderColor),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x221C1413),
+            offset: Offset(0, 8),
+            blurRadius: 24,
+          ),
+        ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
@@ -453,14 +496,11 @@ class _FilterPanel extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
+          // Loose: as tall as the form, scrolling only once the form is
+          // taller than the room the page gives the card.
+          Flexible(
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                0,
-                16,
-                AppBottomNav.reservedSpace(context) + 12,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

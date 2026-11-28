@@ -49,7 +49,7 @@ class OffersRepository {
       'message, history, rejection_reason, rejection_note, expires_at, '
       'responded_at, created_at, seen_at, buyer_id, seller_id, card_id, '
       'order_item_id, qty_used, '
-      'listings:ask_order_id(slug), '
+      'listings:ask_order_id(slug, kind, title, photo_urls), '
       'cards:card_id(id, name_id, image_url, expansion_code, collector_number,'
       ' variant), '
       'order_items:order_item_id(status)';
