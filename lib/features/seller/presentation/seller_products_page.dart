@@ -13,7 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import 'widgets/add_listing_sheet.dart';
@@ -574,7 +574,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     SellerListingBucket bucket,
     SellerListingsFeedState feed,
   ) {
-    if (feed.loading) return [_messageSliver(const PikachuLoader())];
+    if (feed.loading) return [_messageSliver(const AppLoader())];
     if (feed.error) {
       return [
         _messageSliver(
@@ -631,7 +631,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
         const SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: PikachuLoader()),
+            child: Center(child: AppLoader()),
           ),
         ),
     ];
@@ -661,7 +661,7 @@ class _SellerProductsPageState extends ConsumerState<SellerProductsPage> {
     required bool hasCustom,
   }) {
     return async.when(
-      loading: () => [_messageSliver(const PikachuLoader())],
+      loading: () => [_messageSliver(const AppLoader())],
       error: (_, __) => [
         _messageSliver(
           Text(
@@ -1141,7 +1141,7 @@ class _PreferencesPanelState extends ConsumerState<_PreferencesPanel> {
     final async = ref.watch(listingDefaultsProvider);
 
     return async.when(
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => Center(
         child: Text(
           'Gagal memuat preferensi',

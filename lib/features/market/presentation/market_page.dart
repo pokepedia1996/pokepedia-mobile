@@ -14,7 +14,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/store_card.dart';
 import '../usecase/market_notifier.dart';
 import 'widgets/listing_filter_sheet.dart';
@@ -442,7 +442,7 @@ class _ListingGridState extends ConsumerState<_ListingGrid> {
     final state = ref.watch(marketListingsProvider(widget.bucket));
     final notifier = ref.read(marketListingsProvider(widget.bucket).notifier);
 
-    if (state.loading) return const PikachuLoader();
+    if (state.loading) return const AppLoader();
     if (state.error) {
       return RefreshIndicator(
         onRefresh: notifier.refresh,
@@ -607,7 +607,7 @@ class _StoreDirectoryState extends ConsumerState<_StoreDirectory> {
           ),
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => RefreshIndicator(
         onRefresh: refresh,
         child: const _PullableFill(

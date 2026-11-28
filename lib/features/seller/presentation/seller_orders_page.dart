@@ -14,7 +14,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../orders/repository/models/order_model.dart';
 import '../../orders/repository/models/pending_checkout.dart';
@@ -125,7 +125,7 @@ class _SellerOrdersPageState extends ConsumerState<SellerOrdersPage> {
                 ),
               )
             : async.when(
-                loading: () => const PikachuLoader(),
+                loading: () => const AppLoader(),
                 error: (error, _) => EmptyState(
                   icon: LucideIcons.circleAlert,
                   title: 'Gagal memuat pesanan',

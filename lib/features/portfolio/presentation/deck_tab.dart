@@ -14,7 +14,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/models/deck_model.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'deck_form_sheet.dart';
 
@@ -246,7 +246,7 @@ class _DeckTabState extends ConsumerState<DeckTab> {
           ],
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat deck')),
     );
   }

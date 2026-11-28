@@ -19,7 +19,7 @@ import '../../../shared/widgets/app_top_bar.dart';
 import '../../expansions/presentation/expansions_page.dart';
 import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/catalog_language_toggle.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/pokeball_icon.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/type_icon.dart';
@@ -250,7 +250,7 @@ class _AdvancedSearchPageState extends ConsumerState<AdvancedSearchPage> {
     }
     if (state.loading) {
       return const [
-        SliverFillRemaining(hasScrollBody: false, child: PikachuLoader()),
+        SliverFillRemaining(hasScrollBody: false, child: AppLoader()),
       ];
     }
     if (state.results.isEmpty) {

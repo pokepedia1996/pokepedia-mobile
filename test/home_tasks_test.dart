@@ -9,6 +9,8 @@ import 'package:pokepedia_mobile/features/proposals/usecase/proposals_notifier.d
 import 'package:pokepedia_mobile/features/seller/repository/models/seller_dashboard.dart';
 import 'package:pokepedia_mobile/features/seller/repository/seller_repository.dart';
 import 'package:pokepedia_mobile/features/seller/usecase/seller_notifier.dart';
+import 'package:pokepedia_mobile/features/seller/usecase/offers_notifier.dart';
+import 'package:pokepedia_mobile/features/seller/repository/models/listing_offer.dart';
 
 /// Beranda's task strip: eBay's "you have items to ship", and nothing at all
 /// on a day with nothing to do.
@@ -30,6 +32,7 @@ DashboardPayload _payload(DashboardKpi kpi) => DashboardPayload(
 Future<void> _pump(
   WidgetTester tester, {
   bool hasStore = true,
+  int incomingOffers = 0,
   DashboardKpi kpi = const DashboardKpi(),
   ProposalsSummary proposals = const ProposalsSummary(),
 }) async {
@@ -41,6 +44,15 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         authProvider.overrideWith(_FakeAuth.new),
+        offerCountsProvider.overrideWith(
+          (ref) => {
+            if (incomingOffers > 0)
+              'listing': OfferCount(
+                total: incomingOffers,
+                needsResponse: incomingOffers,
+              ),
+          },
+        ),
         hasStoreProvider.overrideWith((ref) async => hasStore),
         sellerIdentityProvider.overrideWith(
           (ref) async => const SellerIdentity(),
@@ -62,7 +74,17 @@ void main() {
     await _pump(tester);
 
     expect(find.byType(InkWell), findsNothing);
+    expect(find.text('Penawaran masuk'), findsNothing);
+    expect(find.text('WTB-mu dipenuhi'), findsNothing);
     expect(find.textContaining('Perlu dikirim'), findsNothing);
+  });
+
+  testWidgets('incoming offers appear only when a seller needs to respond', (
+    tester,
+  ) async {
+    await _pump(tester, incomingOffers: 4);
+    expect(find.text('Penawaran masuk'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
   });
 
   testWidgets('a job shows with its count', (tester) async {
@@ -77,13 +99,15 @@ void main() {
   testWidgets('jobs stack, seller and buyer side alike', (tester) async {
     await _pump(
       tester,
+      incomingOffers: 4,
       kpi: const DashboardKpi(toShip: 2, disputesOpen: 1),
       proposals: const ProposalsSummary(receivedPending: 3),
     );
 
     expect(find.text('Perlu dikirim'), findsOneWidget);
     expect(find.text('Komplain terbuka'), findsOneWidget);
-    expect(find.text('Proposal masuk'), findsOneWidget);
+    expect(find.text('Penawaran masuk'), findsOneWidget);
+    expect(find.text('WTB-mu dipenuhi'), findsOneWidget);
   });
 
   testWidgets('a buyer is never asked about a shop they do not have', (
@@ -93,11 +117,13 @@ void main() {
     await _pump(
       tester,
       hasStore: false,
+      incomingOffers: 4,
       kpi: const DashboardKpi(toShip: 9),
       proposals: const ProposalsSummary(receivedPending: 1),
     );
 
     expect(find.text('Perlu dikirim'), findsNothing);
-    expect(find.text('Proposal masuk'), findsOneWidget);
+    expect(find.text('WTB-mu dipenuhi'), findsOneWidget);
+    expect(find.text('Penawaran masuk'), findsNothing);
   });
 }

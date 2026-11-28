@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../../shared/widgets/app_loader.dart';
 import '../../usecase/home_notifier.dart';
 
 const _gateCapDuration = Duration(seconds: 3);
 
-/// Ports `components/home/home-loading-gate.tsx` — a full-screen Pikachu
+/// Ports `components/home/home-loading-gate.tsx` — a full-screen spinner
 /// animation shown once while the home page's initial data loads, capped at
 /// 3s so a slow connection never blocks the gate forever.
 class HomeLoadingGate extends ConsumerStatefulWidget {
@@ -56,7 +56,7 @@ class _HomeLoadingGateState extends ConsumerState<HomeLoadingGate> {
           Positioned.fill(
             child: ColoredBox(
               color: context.appColors.surface,
-              child: const PikachuLoader(size: 180),
+              child: const AppLoader(size: 180),
             ),
           ),
       ],

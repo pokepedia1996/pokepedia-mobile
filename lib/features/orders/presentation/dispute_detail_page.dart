@@ -13,7 +13,7 @@ import '../../../shared/models/card_condition.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/photo_strip.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/dispute_model.dart';
 import '../usecase/orders_notifier.dart';
@@ -52,7 +52,7 @@ class DisputeDetailPage extends ConsumerWidget {
                     title: 'Belum ada komplain untuk pesanan ini',
                   )
                 : _DisputeBody(slug: slug),
-            loading: () => const PikachuLoader(),
+            loading: () => const AppLoader(),
             error: (_, __) => const _LoadError(),
           );
     }
@@ -85,7 +85,7 @@ class _DisputeBody extends ConsumerWidget {
         .when(
           skipLoadingOnRefresh: true,
           skipLoadingOnReload: true,
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => const _LoadError(),
           data: (dispute) {
             if (dispute == null) {

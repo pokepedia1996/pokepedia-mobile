@@ -11,7 +11,7 @@ import 'package:pokepedia_mobile/features/user/presentation/user_profile_page.da
 import 'package:pokepedia_mobile/features/user/repository/models/profile_models.dart';
 import 'package:pokepedia_mobile/features/user/usecase/user_notifier.dart';
 import 'package:pokepedia_mobile/shared/models/card_model.dart';
-import 'package:pokepedia_mobile/shared/widgets/pikachu_loader.dart';
+import 'package:pokepedia_mobile/shared/widgets/app_loader.dart';
 
 /// Pull-to-refresh keeps the profile and its shelf on screen while the new
 /// data loads, then swaps it in — no loader in between.
@@ -92,7 +92,7 @@ void main() {
     expect(calls, 2);
     // Still loading: the old shelf stays, no loader replaces it.
     expect(find.text('Charizard'), findsOneWidget);
-    expect(find.byType(PikachuLoader), findsNothing);
+    expect(find.byType(AppLoader), findsNothing);
 
     second.complete([_card(2, 'Blastoise')]);
     await tester.pumpAndSettle();

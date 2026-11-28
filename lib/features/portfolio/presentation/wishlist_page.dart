@@ -18,7 +18,7 @@ import '../../../shared/widgets/card_grid_item.dart';
 import '../../../shared/widgets/card_list_item.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../usecase/portfolio_notifier.dart';
 import 'widgets/portfolio_picker_sheet.dart';
 import 'widgets/selection_sheet.dart';
@@ -221,7 +221,7 @@ class _WishlistViewState extends ConsumerState<WishlistView> {
           ),
         ],
       ),
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => EmptyState(
         icon: LucideIcons.circleAlert,
         title: 'Gagal memuat wishlist',

@@ -9,7 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../repository/models/profile_models.dart';
@@ -78,7 +78,7 @@ class FollowingPage extends ConsumerWidget {
                   ),
             ],
           ),
-          loading: () => const PikachuLoader(),
+          loading: () => const AppLoader(),
           error: (_, __) => const EmptyState(
             icon: LucideIcons.circleAlert,
             title: 'Gagal memuat toko',

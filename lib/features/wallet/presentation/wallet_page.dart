@@ -12,7 +12,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../usecase/payout_pricing.dart';
 import '../../referral/usecase/referral_providers.dart';
@@ -578,7 +578,7 @@ class _ActivityFeedCardState extends ConsumerState<_ActivityFeedCard> {
                   ),
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
-              child: PikachuLoader(),
+              child: AppLoader(),
             ),
             error: (_, __) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),

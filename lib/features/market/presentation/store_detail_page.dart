@@ -16,7 +16,7 @@ import '../../../shared/models/store_model.dart';
 import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/listing_card.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/reputation_star.dart';
 import '../../../shared/widgets/seller_avatar.dart';
 import '../../../shared/widgets/simple_markdown.dart';
@@ -239,7 +239,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
 
     final feed = ref.watch(storeFeedProvider(key));
     if (feed.loading) {
-      return const [SliverToBoxAdapter(child: PikachuLoader())];
+      return const [SliverToBoxAdapter(child: AppLoader())];
     }
     if (feed.failed) {
       return [
@@ -426,7 +426,7 @@ class _StoreDetailPageState extends ConsumerState<StoreDetailPage> {
             ),
           );
         },
-        loading: () => const PikachuLoader(),
+        loading: () => const AppLoader(),
         error: (_, __) => const EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat toko',

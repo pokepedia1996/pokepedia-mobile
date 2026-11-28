@@ -24,7 +24,7 @@ import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/card_language_badge.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../repository/models/inventory_entry.dart';
 import '../../../shared/utils/csv_export.dart';
@@ -545,7 +545,7 @@ class _DatabaseSectionState extends ConsumerState<_DatabaseSection> {
           ],
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat inventori')),
     );
   }
@@ -1255,7 +1255,7 @@ class _AddSectionState extends ConsumerState<_AddSection> {
             },
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
-              child: PikachuLoader(size: 96),
+              child: AppLoader(size: 96),
             ),
             error: (_, __) => const SizedBox.shrink(),
           ),
@@ -2571,7 +2571,7 @@ class _RemoveSectionState extends ConsumerState<_RemoveSection> {
           ],
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat inventori')),
     );
   }
@@ -2859,7 +2859,7 @@ class _ActivitySectionState extends ConsumerState<_ActivitySection> {
           ],
         );
       },
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => const Center(child: Text('Gagal memuat aktivitas')),
     );
   }

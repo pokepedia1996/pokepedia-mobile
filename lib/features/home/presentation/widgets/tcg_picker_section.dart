@@ -8,12 +8,13 @@ import '../../../../core/providers/catalog_language_provider.dart';
 import '../../../../core/theme/design_palette.dart';
 import '../../../../shared/models/card_model.dart';
 import '../../../../shared/widgets/card_language_badge.dart';
+import '../../../../shared/widgets/app_network_image.dart';
 
 /// "Pilih TCG": a tile per catalog, two to a row. A tap switches the catalog
 /// being browsed and opens Pencarian on it.
 ///
 /// The catalogs are `catalog_categories`' (see [catalogLanguagesProvider]),
-/// so a new one appears here without a release; one without bundled artwork
+/// so a new one appears here without a release; one without catalog artwork
 /// shows its flag. In the app's catalog order (see
 /// [orderCatalogLanguages]): Indonesian, then A–Z.
 class TcgPickerSection extends ConsumerWidget {
@@ -54,7 +55,8 @@ class _TcgTile extends ConsumerWidget {
 
   final CardLanguage language;
 
-  /// The bundled logos, and the room each wants around it: the designs pad
+  /// CDN logos match pokemon_web. Bundled art is the offline fallback.
+  /// The designs pad
   /// each one so the four read at the same weight.
   static const _logos = {
     'id': (
@@ -106,7 +108,12 @@ class _TcgTile extends ConsumerWidget {
                   ? Center(
                       child: CardLanguageBadge(language: language, size: 40),
                     )
-                  : Image.asset(logo.$1, fit: BoxFit.contain),
+                  : cachedNetworkImage(
+                      'https://cdn.pokepedia.id/tcg/logos/pokemon-${language.raw}.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          Image.asset(logo.$1, fit: BoxFit.contain),
+                    ),
             ),
             const SizedBox(height: 6),
             Text(

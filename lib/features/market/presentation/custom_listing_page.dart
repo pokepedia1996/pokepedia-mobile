@@ -21,7 +21,7 @@ import '../../../shared/widgets/cart_app_bar_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/fly_to_cart.dart';
 import '../../../shared/widgets/image_lightbox.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../../cart/repository/cart_repository.dart';
 import '../../cart/usecase/cart_notifier.dart';
@@ -237,7 +237,7 @@ class _CustomListingPageState extends ConsumerState<CustomListingPage> {
           }
           return _content(data);
         },
-        loading: () => const PikachuLoader(),
+        loading: () => const AppLoader(),
         error: (_, __) => EmptyState(
           icon: LucideIcons.circleAlert,
           title: 'Gagal memuat listing',

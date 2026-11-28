@@ -12,7 +12,7 @@ import '../../../shared/widgets/app_pagination.dart';
 import '../../../shared/widgets/app_search_field.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/proposal_card_group.dart';
@@ -261,7 +261,7 @@ class _CardFeedTabState extends ConsumerState<_CardFeedTab> {
     );
 
     return async.when(
-      loading: () => withHeading(const PikachuLoader()),
+      loading: () => withHeading(const AppLoader()),
       error: (_, __) => withHeading(
         Center(
           child: Text(

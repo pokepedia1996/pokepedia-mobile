@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokepedia_mobile/core/theme/app_theme.dart';
-import 'package:pokepedia_mobile/shared/widgets/pikachu_loader.dart';
+import 'package:pokepedia_mobile/shared/widgets/app_loader.dart';
 
 void main() {
-  testWidgets('the running Pikachu says what it is doing', (tester) async {
+  testWidgets('the spinner says what it is doing', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: const Scaffold(body: PikachuLoader()),
+        home: const Scaffold(body: AppLoader()),
       ),
     );
-    // Web's gate captions its Pikachu "Memuat..."; every mobile loader used
-    // to sit silent because the label defaulted to null.
     expect(find.text('Memuat...'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
   testWidgets('a caller can still name what is loading, or say nothing', (
@@ -25,8 +24,8 @@ void main() {
         home: const Scaffold(
           body: Column(
             children: [
-              PikachuLoader(size: 96, label: 'Memuat listing...'),
-              PikachuLoader(size: 96, label: null),
+              AppLoader(size: 96, label: 'Memuat listing...'),
+              AppLoader(size: 96, label: null),
             ],
           ),
         ),
@@ -43,10 +42,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.light,
         home: const Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: PikachuLoader(size: 96),
-          ),
+          body: Align(alignment: Alignment.topLeft, child: AppLoader(size: 96)),
         ),
       ),
     );
@@ -54,10 +50,7 @@ void main() {
     // the actual content box a fixed-height caller has to fit.
     final column = tester.getSize(
       find
-          .descendant(
-            of: find.byType(PikachuLoader),
-            matching: find.byType(Column),
-          )
+          .descendant(of: find.byType(AppLoader), matching: find.byType(Column))
           .first,
     );
     // Recently-viewed pins its loader to a fixed box; if this grows past

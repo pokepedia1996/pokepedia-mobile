@@ -7,7 +7,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/models/pack_model.dart';
-import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../../shared/widgets/app_loader.dart';
 import '../../../../shared/widgets/pokeball_icon.dart';
 import '../../usecase/home_notifier.dart';
 
@@ -49,9 +49,8 @@ class RecentlyViewedSection extends ConsumerWidget {
         );
       },
       loading: () =>
-          // 120, not 108: the caption adds a second line under Pikachu and
-          // the old box clipped it by 11.
-          const SizedBox(height: 120, child: PikachuLoader(size: 96)),
+          // Reserve space for the loading indicator and its caption.
+          const SizedBox(height: 120, child: AppLoader(size: 96)),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

@@ -11,7 +11,7 @@ import '../../../../shared/models/card_model.dart';
 import '../../../../shared/utils/card_filtering.dart';
 import '../../../../shared/widgets/card_art.dart';
 import '../../../../shared/widgets/card_language_badge.dart';
-import '../../../../shared/widgets/pikachu_loader.dart';
+import '../../../../shared/widgets/app_loader.dart';
 import '../../../portfolio/repository/portfolio_repository.dart'
     show cardPickerPageSize;
 import '../../../portfolio/usecase/portfolio_notifier.dart';
@@ -354,7 +354,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
     }
 
     return async.when(
-      loading: () => const PikachuLoader(),
+      loading: () => const AppLoader(),
       error: (_, __) => _hint(context, 'Gagal mencari kartu.'),
       data: (firstPage) {
         if (firstPage.isEmpty) {

@@ -11,8 +11,9 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../orders/repository/models/seller_order.dart';
 import '../../../proposals/usecase/proposals_notifier.dart';
 import '../../../seller/usecase/seller_notifier.dart';
+import '../../../seller/usecase/offers_notifier.dart';
 
-/// What needs answering, at the top of Beranda — eBay's "Paid · Ship Now"
+/// What needs answering, below the banner on Beranda — eBay's "Paid · Ship Now"
 /// strip, with the count in a circle and the job beside it.
 ///
 /// Only ever what is actually outstanding: a row appears when its count is
@@ -36,7 +37,23 @@ class HomeTasksSection extends ConsumerWidget {
         : null;
     final proposals = ref.watch(proposalsSummaryProvider).valueOrNull;
 
+    final incomingOffers = hasStore
+        ? ref
+              .watch(offerCountsProvider)
+              .values
+              .fold<int>(0, (sum, count) => sum + count.needsResponse)
+        : 0;
+
     final tasks = <_Task>[
+      if (incomingOffers > 0)
+        _Task(
+          count: incomingOffers,
+          title: 'Penawaran masuk',
+          subtitle: 'Pembeli menunggu jawabanmu',
+          icon: LucideIcons.handCoins,
+          tone: _Tone.warning,
+          route: Routes.sellerProductsWithOffers(),
+        ),
       if ((kpi?.toShip ?? 0) > 0)
         _Task(
           count: kpi!.toShip,
@@ -58,7 +75,7 @@ class HomeTasksSection extends ConsumerWidget {
       if ((proposals?.receivedPending ?? 0) > 0)
         _Task(
           count: proposals!.receivedPending,
-          title: 'Proposal masuk',
+          title: 'WTB-mu dipenuhi',
           subtitle: 'Penjual menawarkan kartu untuk bid kamu',
           icon: LucideIcons.handCoins,
           tone: _Tone.warning,
@@ -69,7 +86,7 @@ class HomeTasksSection extends ConsumerWidget {
     if (tasks.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(

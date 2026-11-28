@@ -18,7 +18,7 @@ import '../../../shared/models/card_model.dart';
 import '../../../shared/utils/variant_label.dart';
 import '../../../shared/widgets/card_art.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/pikachu_loader.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../../shared/widgets/quantity_selector.dart';
 import '../../../shared/widgets/transparent_app_bar.dart';
 import '../repository/models/deck_card_entry.dart';
@@ -222,7 +222,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
         ],
       ),
       body: decksAsync.isLoading && deck == null
-          ? const PikachuLoader()
+          ? const AppLoader()
           : deck == null
           ? const EmptyState(
               icon: LucideIcons.searchX,
@@ -342,7 +342,7 @@ class _DeckDetailPageState extends ConsumerState<DeckDetailPage> {
                   ],
                 );
               },
-              loading: () => const PikachuLoader(),
+              loading: () => const AppLoader(),
               error: (_, __) => const Center(child: Text('Gagal memuat deck')),
             ),
     );
@@ -595,7 +595,7 @@ class _SearchPane extends StatelessWidget {
                 },
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
-                  child: PikachuLoader(),
+                  child: AppLoader(),
                 ),
                 error: (_, __) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
